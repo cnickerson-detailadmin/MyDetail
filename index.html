@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DetailAdmin | MyDetail</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: Arial, sans-serif;
+    }
+
+    body {
+      background: #f4f6f8;
+      color: #1f2937;
+    }
+
+    header {
+      background: #111827;
+      color: white;
+      padding: 18px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    header h1 {
+      font-size: 24px;
+    }
+
+    header span {
+      font-size: 13px;
+      color: #9ca3af;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: auto;
+      padding: 20px;
+    }
+
+    .welcome {
+      margin-bottom: 20px;
+    }
+
+    .welcome h2 {
+      font-size: 25px;
+      margin-bottom: 5px;
+    }
+
+    .welcome p {
+      color: #6b7280;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 15px;
+      margin-bottom: 25px;
+    }
+
+    .card {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    .card h3 {
+      color: #6b7280;
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+
+    .card strong {
+      font-size: 28px;
+    }
+
+    .section {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    .section h2 {
+      margin-bottom: 15px;
+    }
+
+    button {
+      background: #111827;
+      color: white;
+      border: none;
+      padding: 11px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      margin: 5px;
+    }
+
+    button:hover {
+      background: #374151;
+    }
+
+    .customer {
+      border-top: 1px solid #e5e7eb;
+      padding: 15px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .customer:first-of-type {
+      border-top: none;
+    }
+
+    .customer-info strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .customer-info small {
+      color: #6b7280;
+    }
+
+    .status {
+      background: #dcfce7;
+      color: #166534;
+      padding: 5px 9px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+
+    .manager {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      padding: 15px;
+      border-radius: 10px;
+      margin-top: 10px;
+    }
+
+    footer {
+      text-align: center;
+      color: #9ca3af;
+      padding: 25px;
+      font-size: 13px;
+    }
+
+    @media (max-width: 600px) {
+      header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 5px;
+      }
+
+      .customer {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+<header>
+  <div>
+    <h1>MyDetail</h1>
+    <span>DetailAdmin Management System</span>
+  </div>
+  <span>Admin Dashboard</span>
+</header>
+
+<div class="container">
+
+  <div class="welcome">
+    <h2>Welcome to DetailAdmin 👋</h2>
+    <p>Manage customers, detailing appointments, memberships, and managers.</p>
+  </div>
+
+  <div class="cards">
+    <div class="card">
+      <h3>Customers</h3>
+      <strong>24</strong>
+    </div>
+
+    <div class="card">
+      <h3>Appointments</h3>
+      <strong>8</strong>
+    </div>
+
+    <div class="card">
+      <h3>Active Details</h3>
+      <strong>15</strong>
+    </div>
+
+    <div class="card">
+      <h3>Managers</h3>
+      <strong>2</strong>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Quick Actions</h2>
+
+    <button onclick="addCustomer()">+ Add Customer</button>
+    <button onclick="newAppointment()">+ New Appointment</button>
+    <button onclick="viewCustomers()">View Customers</button>
+    <button onclick="manageTeam()">Manage Team</button>
+  </div>
+
+  <div class="section">
+    <h2>Customers</h2>
+
+    <div class="customer">
+      <div class="customer-info">
+        <strong>John Smith</strong>
+        <small>Premium Detail Membership</small>
+      </div>
+      <span class="status">Active</span>
+    </div>
+
+    <div class="customer">
+      <div class="customer-info">
+        <strong>Sarah Johnson</strong>
+        <small>Interior Detail</small>
+      </div>
+      <span class="status">Active</span>
+    </div>
+
+    <div class="customer">
+      <div class="customer-info">
+        <strong>Mike Williams</strong>
+        <small>Exterior Detail</small>
+      </div>
+      <span class="status">Active</span>
+    </div>
+
+  </div>
+
+  <div class="section">
+    <h2>Management Team</h2>
+
+    <div class="manager">
+      <strong>Business Manager</strong>
+      <p>Full access to customers, appointments, employees, and settings.</p>
+    </div>
+
+    <div class="manager">
+      <strong>Detail Manager</strong>
+      <p>Manage appointments, customers, and detailing operations.</p>
+    </div>
+
+  </div>
+
+  <div class="section">
+    <h2>Detailing Schedule</h2>
+
+    <p><strong>Today</strong></p>
+    <br>
+
+    <p>9:00 AM — John Smith — Full Detail</p>
+    <p>11:30 AM — Sarah Johnson — Interior Detail</p>
+    <p>2:00 PM — Mike Williams — Exterior Detail</p>
+    <p>4:30 PM — Open Appointment</p>
+  </div>
+
+</div>
+
+<footer>
+  MyDetail © 2026 | DetailAdmin
+</footer>
+
+<script>
+
+function addCustomer() {
+  alert("Add Customer feature coming next!");
+}
+
+function newAppointment() {
+  alert("New Appointment feature coming next!");
+}
+
+function viewCustomers() {
+  alert("Customer management coming next!");
+}
+
+function manageTeam() {
+  alert("Manager and employee management coming next!");
+}
+
+</script>
+
+</body>
+</html>
