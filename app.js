@@ -502,48 +502,77 @@ function setupHamburger() {
       cursor:pointer;
     `;
 
-    document.body.appendChild(button);
-  }
-
-  button.addEventListener("click", () => {
-    const sidebar =
-      document.querySelector(
-        ".sidebar, #sidebar, .side-bar, aside"
-      );
-
-    if (sidebar) {
-      sidebar.classList.toggle("open");
-
-      sidebar.style.zIndex = "4000";
-
-      if (sidebar.classList.contains("open")) {
-        sidebar.style.display = "block";
-      }
-    }
-  });
-}
-
-/* =========================================================
-   NAVIGATION
+    /* =========================================================
+   MYDETAIL — WORKING NAVIGATION
    ========================================================= */
 
 function showSection(sectionName) {
-  const sections =
-    document.querySelectorAll(
-      ".page-section, section[data-section], [data-page-section]"
-    );
+
+  const pages = document.querySelectorAll(".page");
+
+  if (!pages.length) {
+    console.error("MyDetail: No .page sections found.");
+    return;
+  }
 
   let found = false;
 
-  sections.forEach(section => {
-    const id =
-      section.dataset.section ||
-      section.dataset.pageSection ||
-      section.id;
+  pages.forEach(page => {
 
-    const matches =
-      id === sectionName ||
-      id === `${sectionName}Section`;
+    const isTarget = page.id === sectionName;
+
+    page.classList.toggle("active", isTarget);
+
+    if (isTarget) {
+      found = true;
+    }
+
+  });
+
+  /* Highlight active sidebar button */
+  document.querySelectorAll("#sidebar .nav").forEach(button => {
+
+    const onclick = button.getAttribute("onclick") || "";
+
+    const match = onclick.match(
+      /showSection\(['"]([^'"]+)['"]\)/
+    );
+
+    if (match) {
+      button.classList.toggle(
+        "active",
+        match[1] === sectionName
+      );
+    }
+
+  });
+
+  /* Close mobile sidebar */
+  const sidebar = document.getElementById("sidebar");
+
+  if (sidebar) {
+    sidebar.classList.remove("open");
+  }
+
+  if (!found) {
+    console.warn(
+      "MyDetail: Section not found:",
+      sectionName
+    );
+    return;
+  }
+
+  window.scrollTo({
+    top: 0,
+    behavior: "smooth"
+  });
+
+  if (typeof renderSection === "function") {
+    renderSection(sectionName);
+  }
+}
+
+window.showSection = showSection;
 
     section.style.display = matches ? "" : "none";
 
