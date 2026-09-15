@@ -2995,3 +2995,12 @@ if (
     }
   );
 }
+
+/* =========================================================
+   MYDETAIL — APP STARTUP
+   ========================================================= */
+
+document.addEventListener("DOMContentLoaded", () => {
+  setupHamburger();
+  setupNavigation();
+});
