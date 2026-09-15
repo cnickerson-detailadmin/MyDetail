@@ -1,4 +1,11 @@
-const state = {
+const SUPABASE_URL = "https://nvgzbgcuzuzbvbcksfhq.supabase.co";
+
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_ZVRbTwG3_0zWt2FlrMn_3w_y8HlM-r-";
+
+const supabaseClient = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_PUBLISHABLE_KEY
+);const state = {
   companyName: "Five Star Detail",
 
   currentUser: {
