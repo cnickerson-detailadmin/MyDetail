@@ -2,143 +2,806 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
-  >
-  <meta
-    name="theme-color"
-    content="#050505"
-  >
-  <link
-    rel="manifest"
-    href="manifest.json"
-  >
-  <link
-    rel="stylesheet"
-    href="styles.css"
-  >
-  <title>MyDetail — Five Star Detail</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f7f8fa">
+
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="styles.css">
+
+  <title>MyDetail</title>
 </head>
+
 <body>
-  <!-- TOP BAR -->
-  <header class="topbar">
-    <div>
-      <div class="eyebrow">
-        FIVE STAR DETAIL
-      </div>
-      <h1>
-        MyDetail
-      </h1>
+
+<header class="topbar">
+
+  <button class="mobile-menu" onclick="toggleSidebar()">☰</button>
+
+  <div class="brand">
+    <div class="brand-name">MyDetail</div>
+    <div class="company-name" id="companyName">Five Star Detail</div>
+  </div>
+
+  <div class="top-right">
+    <div class="live">
+      <span></span> LIVE
     </div>
-    <span class="status">
-      LIVE
-    </span>
-  </header>
-  <!-- MAIN CONTENT -->
-  <main>
-    <!-- DASHBOARD HEADER -->
-    <section class="hero">
-      <p class="eyebrow">
-        BUSINESS MANAGEMENT
-      </p>
-      <h2>
+
+    <button class="icon-button" onclick="showSection('notifications')">
+      🔔
+    </button>
+
+    <button class="profile-button" onclick="showSection('settings')">
+      <span class="avatar">A</span>
+      <span class="profile-name">Admin</span>
+    </button>
+  </div>
+
+</header>
+
+
+<div class="app-layout">
+
+  <aside id="sidebar">
+
+    <div class="nav-section">
+
+      <div class="nav-title">WORKSPACE</div>
+
+      <button class="nav active" onclick="showSection('dashboard')">
+        <span>⌂</span>
         Dashboard
-      </h2>
-      <p>
-        Manage your detailing business from one place.
-      </p>
+      </button>
+
+      <button class="nav" onclick="showSection('jobs')">
+        <span>🚗</span>
+        Jobs
+      </button>
+
+      <button class="nav" onclick="showSection('schedule')">
+        <span>▣</span>
+        Schedule
+      </button>
+
+      <button class="nav" onclick="showSection('customers')">
+        <span>♙</span>
+        Customers
+      </button>
+
+    </div>
+
+
+    <div class="nav-section">
+
+      <div class="nav-title">TEAM</div>
+
+      <button class="nav" onclick="showSection('employees')">
+        <span>♙</span>
+        Employees
+      </button>
+
+      <button class="nav" onclick="showSection('timeclock')">
+        <span>◷</span>
+        Time Clock
+      </button>
+
+      <button class="nav" onclick="showSection('punchlog')">
+        <span>☷</span>
+        My Punch Log
+      </button>
+
+    </div>
+
+
+    <div class="nav-section">
+
+      <div class="nav-title">OPERATIONS</div>
+
+      <button class="nav" onclick="showSection('checklist')">
+        <span>✓</span>
+        Daily Checklist
+      </button>
+
+      <button class="nav" onclick="showSection('cash')">
+        <span>$</span>
+        Cash Drops
+      </button>
+
+      <button class="nav" onclick="showSection('activity')">
+        <span>⚡</span>
+        Live Activity
+      </button>
+
+    </div>
+
+
+    <div class="nav-section">
+
+      <div class="nav-title">BUSINESS</div>
+
+      <button class="nav" onclick="showSection('reports')">
+        <span>▥</span>
+        Reports
+      </button>
+
+      <button class="nav" onclick="showSection('settings')">
+        <span>⚙</span>
+        Admin Settings
+      </button>
+
+    </div>
+
+
+    <div class="sidebar-footer">
+      <strong>MyDetail</strong>
+      <span>Business Management Platform</span>
+    </div>
+
+  </aside>
+
+
+  <main class="main-content">
+
+
+    <!-- DASHBOARD -->
+
+    <section id="dashboard" class="page active">
+
+      <div class="page-header">
+
+        <div>
+          <div class="eyebrow">BUSINESS OVERVIEW</div>
+          <h1>Dashboard</h1>
+          <p id="welcomeText">
+            Here's what's happening today.
+          </p>
+        </div>
+
+        <div class="date-box">
+          <strong id="currentDate"></strong>
+          <span id="currentTime"></span>
+        </div>
+
+      </div>
+
+
+      <div class="stats-grid">
+
+        <div class="stat-card">
+          <span>Today's Revenue</span>
+          <strong id="todayRevenue">$0.00</strong>
+          <small>Today</small>
+        </div>
+
+        <div class="stat-card">
+          <span>Jobs Completed</span>
+          <strong id="jobsCompleted">0</strong>
+          <small>Today</small>
+        </div>
+
+        <div class="stat-card">
+          <span>Jobs Remaining</span>
+          <strong id="jobsRemaining">0</strong>
+          <small>Scheduled today</small>
+        </div>
+
+        <div class="stat-card">
+          <span>Employees Working</span>
+          <strong id="employeesWorking">0</strong>
+          <small>Currently clocked in</small>
+        </div>
+
+      </div>
+
+
+      <div class="dashboard-grid">
+
+        <div class="panel">
+
+          <div class="panel-header">
+            <div>
+              <h2>Cash Reconciliation</h2>
+              <p>Expected vs actual deposits</p>
+            </div>
+
+            <button class="outline-button"
+                    onclick="showSection('cash')">
+              View
+            </button>
+          </div>
+
+          <div class="money-lines">
+
+            <div>
+              <span>Expected Cash</span>
+              <strong id="expectedCash">$0.00</strong>
+            </div>
+
+            <div>
+              <span>Actual Deposits</span>
+              <strong id="actualCash">$0.00</strong>
+            </div>
+
+          </div>
+
+          <div id="cashDifference"
+               class="difference balanced">
+            $0.00 — BALANCED
+          </div>
+
+        </div>
+
+
+        <div class="panel">
+
+          <div class="panel-header">
+            <div>
+              <h2>Employees Working</h2>
+              <p>Current clock status</p>
+            </div>
+
+            <button class="outline-button"
+                    onclick="showSection('employees')">
+              Manage
+            </button>
+          </div>
+
+          <div id="employeeStatus"></div>
+
+        </div>
+
+      </div>
+
+
+      <div class="panel">
+
+        <div class="panel-header">
+
+          <div>
+            <h2>Weekly Revenue</h2>
+            <p>Business performance</p>
+          </div>
+
+          <span class="pill">THIS WEEK</span>
+
+        </div>
+
+        <div class="chart" id="weeklyChart"></div>
+
+      </div>
+
+
+      <div class="panel">
+
+        <div class="panel-header">
+          <div>
+            <h2>Live Activity</h2>
+            <p>Latest business events</p>
+          </div>
+
+          <button class="outline-button"
+                  onclick="showSection('activity')">
+            View All
+          </button>
+        </div>
+
+        <div id="dashboardActivity"></div>
+
+      </div>
+
     </section>
-    <!-- BUSINESS STATS -->
-    <section class="stats">
-      <div class="card">
-        <span>
-          EMPLOYEES ONLINE
-        </span>
-        <strong id="employeesOnline">
-          0
-        </strong>
+
+
+    <!-- JOBS -->
+
+    <section id="jobs" class="page">
+
+      <div class="page-header">
+
+        <div>
+          <div class="eyebrow">OPERATIONS</div>
+          <h1>Jobs</h1>
+          <p>Manage customers, vehicles and detailing jobs.</p>
+        </div>
+
+        <button class="primary-button" onclick="addJob()">
+          + New Job
+        </button>
+
       </div>
-      <div class="card">
-        <span>
-          OPEN JOBS
-        </span>
-        <strong id="openJobs">
-          0
-        </strong>
+
+      <div class="filter-row">
+
+        <button class="filter active">Today</button>
+        <button class="filter">Upcoming</button>
+        <button class="filter">Completed</button>
       </div>
-      <div class="card">
-        <span>
-          REVENUE
-        </span>
-        <strong id="revenue">
-          $0
-        </strong>
-      </div>
-      <div class="card">
-        <span>
-          LIVE UPDATES
-        </span>
-        <strong id="updates">
-          0
-        </strong>
-      </div>
+
+      <div id="jobList"></div>
+
     </section>
+
+
+    <!-- SCHEDULE -->
+
+    <section id="schedule" class="page">
+
+      <div class="page-header">
+
+        <div>
+          <div class="eyebrow">SCHEDULING</div>
+          <h1>Schedule</h1>
+          <p>Manage appointments and employee assignments.</p>
+        </div>
+
+        <button class="primary-button" onclick="addJob()">
+          + Schedule Job
+        </button>
+
+      </div>
+
+      <div class="schedule-grid" id="scheduleGrid"></div>
+
+    </section>
+
+
+    <!-- CUSTOMERS -->
+
+    <section id="customers" class="page">
+
+      <div class="page-header">
+
+        <div>
+          <div class="eyebrow">CUSTOMER MANAGEMENT</div>
+          <h1>Customers</h1>
+          <p>Customer and vehicle information.</p>
+        </div>
+
+        <button class="primary-button" onclick="addCustomer()">
+          + Add Customer
+        </button>
+
+      </div>
+
+      <div class="panel">
+
+        <div class="search-row">
+          <input
+            id="customerSearch"
+            placeholder="Search customers..."
+            oninput="renderCustomers()"
+          >
+        </div>
+
+        <div id="customerList"></div>
+
+      </div>
+
+    </section>
+
+
     <!-- EMPLOYEES -->
-    <section class="card">
-      <h3>
-        Employee Status
-      </h3>
-      <div id="employeeList">
+
+    <section id="employees" class="page">
+
+      <div class="page-header">
+
+        <div>
+          <div class="eyebrow">TEAM MANAGEMENT</div>
+          <h1>Employees</h1>
+          <p>Create accounts, manage roles, schedules and permissions.</p>
+        </div>
+
+        <button class="primary-button"
+                onclick="createAccount()">
+          + Create Account
+        </button>
+
       </div>
+
+
+      <div class="permission-banner">
+        <strong>Admin Controls</strong>
+        <span>
+          Admins can create Employee, Manager and Admin accounts.
+        </span>
+      </div>
+
+
+      <div class="employee-grid" id="employeeGrid"></div>
+
     </section>
-    <!-- WEEKLY REPORT -->
-    <section class="card">
-      <h3>
-        Weekly Business Performance
-      </h3>
-      <div class="chart">
-        <div
-          class="bar"
-          style="height:40%"
-        ></div>
-        <div
-          class="bar"
-          style="height:60%"
-        ></div>
-        <div
-          class="bar"
-          style="height:45%"
-        ></div>
-        <div
-          class="bar"
-          style="height:75%"
-        ></div>
-        <div
-          class="bar"
-          style="height:65%"
-        ></div>
-        <div
-          class="bar"
-          style="height:90%"
-        ></div>
-        <div
-          class="bar"
-          style="height:70%"
-        ></div>
+
+
+    <!-- TIME CLOCK -->
+
+    <section id="timeclock" class="page">
+
+      <div class="page-header">
+
+        <div>
+          <div class="eyebrow">TIME & ATTENDANCE</div>
+          <h1>Time Clock</h1>
+          <p>Record accurate employee work time.</p>
+        </div>
+
       </div>
-      <div class="days">
-        <span>MON</span>
-        <span>TUE</span>
-        <span>WED</span>
-        <span>THU</span>
-        <span>FRI</span>
-        <span>SAT</span>
-        <span>SUN</span>
+
+
+      <div class="clock-card">
+
+        <div id="clockStatus"
+             class="clock-status off">
+          OFF CLOCK
+        </div>
+
+        <div id="liveClock"
+             class="big-clock">
+          00:00:00
+        </div>
+
+        <button id="clockButton"
+                class="clock-button"
+                onclick="toggleClock()">
+          CLOCK IN
+        </button>
+
+        <p id="clockMessage">
+          Your exact punch time will be recorded.
+        </p>
+
       </div>
+
+
+      <div class="panel">
+
+        <div class="panel-header">
+
+          <div>
+            <h2>Today's Punches</h2>
+            <p>Admin view of employee attendance.</p>
+          </div>
+
+        </div>
+
+        <div class="table-wrapper">
+
+          <table>
+
+            <thead>
+              <tr>
+                <th>Employee</th>
+                <th>Status</th>
+                <th>Clock In</th>
+                <th>Clock Out</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+
+            <tbody id="punchTable"></tbody>
+
+          </table>
+
+        </div>
+
+      </div>
+
     </section>
+
+
+    <!-- PUNCH LOG -->
+
+    <section id="punchlog" class="page">
+
+      <div class="page-header">
+
+        <div>
+          <div class="eyebrow">MY TIME</div>
+          <h1>My Punch Log</h1>
+          <p>Review your time and correction history.</p>
+        </div>
+
+      </div>
+
+      <div class="stats-grid">
+
+        <div class="stat-card">
+          <span>This Week</span>
+          <strong>0.0 hrs</strong>
+          <small>Total hours</small>
+        </div>
+
+        <div class="stat-card">
+          <span>Today's Hours</span>
+          <strong id="todayHours">0.0</strong>
+          <small>Current day</small>
+        </div>
+
+      </div>
+
+      <div class="panel">
+
+        <div class="table-wrapper">
+
+          <table>
+
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Clock In</th>
+                <th>Clock Out</th>
+                <th>Breaks</th>
+                <th>Total</th>
+                <th>Correction</th>
+              </tr>
+            </thead>
+
+            <tbody id="myPunchLog"></tbody>
+
+          </table>
+
+        </div>
+
+      </div>
+
+    </section>
+
+
+    <!-- CHECKLIST -->
+
+    <section id="checklist" class="page">
+
+      <div class="page-header">
+
+        <div>
+          <div class="eyebrow">QUALITY CONTROL</div>
+          <h1>Today's Checklist</h1>
+          <p>Interior detailing checklist for scheduled vehicles.</p>
+        </div>
+
+      </div>
+
+      <div id="checklistJobs"></div>
+
+    </section>
+
+
+    <!-- CASH DROPS -->
+
+    <section id="cash" class="page">
+
+      <div class="page-header">
+
+        <div>
+          <div class="eyebrow">FINANCIAL CONTROL</div>
+          <h1>Cash Drops</h1>
+          <p>Track deposits and reconcile expected cash.</p>
+        </div>
+
+        <button class="primary-button"
+                onclick="newCashDrop()">
+          + New Cash Drop
+        </button>
+
+      </div>
+
+
+      <div class="stats-grid">
+
+        <div class="stat-card">
+          <span>Expected Cash</span>
+          <strong id="cashExpected">$0.00</strong>
+        </div>
+
+        <div class="stat-card">
+          <span>Deposited</span>
+          <strong id="cashDeposited">$0.00</strong>
+        </div>
+
+        <div class="stat-card">
+          <span>Over / Under</span>
+          <strong id="cashOverUnder">$0.00</strong>
+        </div>
+
+      </div>
+
+
+      <div class="panel">
+
+        <div class="panel-header">
+
+          <div>
+            <h2>Deposit History</h2>
+            <p>Required documentation is attached to each deposit.</p>
+          </div>
+
+        </div>
+
+        <div id="cashDropList"></div>
+
+      </div>
+
+    </section>
+
+
+    <!-- REPORTS -->
+
+    <section id="reports" class="page">
+
+      <div class="page-header">
+
+        <div>
+          <div class="eyebrow">BUSINESS INTELLIGENCE</div>
+          <h1>Reports</h1>
+          <p>Measure the performance of your business.</p>
+        </div>
+
+      </div>
+
+      <div class="stats-grid">
+
+        <div class="stat-card">
+          <span>Weekly Revenue</span>
+          <strong>$0.00</strong>
+        </div>
+
+        <div class="stat-card">
+          <span>Jobs This Week</span>
+          <strong>0</strong>
+        </div>
+
+        <div class="stat-card">
+          <span>Employee Hours</span>
+          <strong>0.0</strong>
+        </div>
+
+        <div class="stat-card">
+          <span>Cash Difference</span>
+          <strong>$0.00</strong>
+        </div>
+
+      </div>
+
+      <div class="panel">
+
+        <h2>Weekly Business Performance</h2>
+
+        <div class="chart large"
+             id="reportChart"></div>
+
+      </div>
+
+    </section>
+
+
+    <!-- ACTIVITY -->
+
+    <section id="activity" class="page">
+
+      <div class="page-header">
+
+        <div>
+          <div class="eyebrow">REAL-TIME</div>
+          <h1>Live Activity</h1>
+          <p>Business events as they happen.</p>
+        </div>
+
+      </div>
+
+      <div class="panel">
+
+        <div id="activityList"></div>
+
+      </div>
+
+    </section>
+
+
+    <!-- NOTIFICATIONS -->
+
+    <section id="notifications" class="page">
+
+      <div class="page-header">
+
+        <div>
+          <div class="eyebrow">ALERTS</div>
+          <h1>Notifications</h1>
+          <p>Important MyDetail alerts and reports.</p>
+        </div>
+
+      </div>
+
+      <div class="notification-card">
+        <strong>Weekly Business Report</strong>
+        <p>Your weekly performance report will appear here.</p>
+      </div>
+
+    </section>
+
+
+    <!-- SETTINGS -->
+
+    <section id="settings" class="page">
+
+      <div class="page-header">
+
+        <div>
+          <div class="eyebrow">ADMINISTRATION</div>
+          <h1>Admin Settings</h1>
+          <p>Manage your MyDetail company workspace.</p>
+        </div>
+
+      </div>
+
+
+      <div class="settings-grid">
+
+        <button class="setting-card"
+                onclick="createAccount()">
+          <span>👤</span>
+          <strong>Accounts</strong>
+          <small>Create Admin, Manager and Employee accounts.</small>
+        </button>
+
+        <button class="setting-card"
+                onclick="alert('Role and permission management will be connected to the secure backend.')">
+          <span>🛡</span>
+          <strong>Roles & Permissions</strong>
+          <small>Control exactly what each role can access.</small>
+        </button>
+
+        <button class="setting-card"
+                onclick="alert('Location access is restricted to Admin and Manager roles.')">
+          <span>📍</span>
+          <strong>Location Access</strong>
+          <small>Only authorized Admins and Managers can view locations.</small>
+        </button>
+
+        <button class="setting-card"
+                onclick="alert('Two-factor authentication will be configured through the secure account system.')">
+          <span>🔐</span>
+          <strong>Security & 2FA</strong>
+          <small>Protect every company account.</small>
+        </button>
+
+        <button class="setting-card"
+                onclick="alert('Company profile')">
+          <span>🏢</span>
+          <strong>Company Profile</strong>
+          <small>Your company name and business information.</small>
+        </button>
+
+        <button class="setting-card"
+                onclick="alert('Services and pricing')">
+          <span>💰</span>
+          <strong>Services & Pricing</strong>
+          <small>Manage your company's services and prices.</small>
+        </button>
+
+        <button class="setting-card"
+                onclick="alert('Audit logs')">
+          <span>📋</span>
+          <strong>Audit Logs</strong>
+          <small>Track important administrative actions.</small>
+        </button>
+
+        <button class="setting-card"
+                onclick="alert('Notification settings')">
+          <span>🔔</span>
+          <strong>Notifications</strong>
+          <small>Manage business alerts and weekly reports.</small>
+        </button>
+
+      </div>
+
+    </section>
+
   </main>
-  <!-- JAVASCRIPT -->
-  <script src="app.js"></script>
+
+</div>
+
+
+<script src="app.js"></script>
+
 </body>
 </html>
