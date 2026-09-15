@@ -447,30 +447,7 @@ function login(event) {
 
   document.getElementById("mydetail-login")?.remove();
 
-  addActivity(
-    `${user.name} signed in`,
-    `${user.role} account signed into MyDetail.`,
-    "→"
-  );
-
-  notify(
-    "Welcome to MyDetail",
-    `Signed in as ${user.role}.`
-  );
-
-  renderEverything();
-}
-
-function logout() {
-  if (!confirm("Sign out of MyDetail?")) return;
-
-  state.currentUser = null;
-  saveState();
-
-  location.reload();
-}
-
-/* =========================================================
+  /* =========================================================
    HAMBURGER / MOBILE SIDEBAR
    ========================================================= */
 
@@ -482,9 +459,7 @@ function setupHamburger() {
 
   if (!button) {
     button = document.createElement("button");
-
     button.id = "mydetail-hamburger";
-
     button.innerHTML = "☰";
 
     button.style.cssText = `
@@ -502,53 +477,71 @@ function setupHamburger() {
       cursor:pointer;
     `;
 
-    /* =========================================================
-   MYDETAIL — WORKING NAVIGATION
+    document.body.appendChild(button);
+  }
+
+  if (button.dataset.myDetailBound === "1") return;
+  button.dataset.myDetailBound = "1";
+
+  button.addEventListener("click", () => {
+    const sidebar =
+      document.querySelector(
+        ".sidebar, #sidebar, .side-bar, aside"
+      );
+
+    if (!sidebar) return;
+
+    sidebar.classList.toggle("open");
+    sidebar.style.zIndex = "4000";
+
+    if (sidebar.classList.contains("open")) {
+      sidebar.style.display = "block";
+    }
+  });
+}
+
+
+/* =========================================================
+   NAVIGATION
    ========================================================= */
 
 function showSection(sectionName) {
-
-  const pages = document.querySelectorAll(".page");
-
-  if (!pages.length) {
-    console.error("MyDetail: No .page sections found.");
-    return;
-  }
+  const sections =
+    document.querySelectorAll(
+      ".page-section, section[data-section], [data-page-section], .page"
+    );
 
   let found = false;
 
-  pages.forEach(page => {
+  sections.forEach(section => {
+    const id =
+      section.dataset.section ||
+      section.dataset.pageSection ||
+      section.id;
 
-    const isTarget = page.id === sectionName;
+    const matches =
+      id === sectionName ||
+      id === `${sectionName}Section`;
 
-    page.classList.toggle("active", isTarget);
+    section.style.display = matches ? "" : "none";
 
-    if (isTarget) {
-      found = true;
-    }
+    section.classList.toggle("active", matches);
 
+    if (matches) found = true;
   });
 
-  /* Highlight active sidebar button */
-  document.querySelectorAll("#sidebar .nav").forEach(button => {
-
-    const onclick = button.getAttribute("onclick") || "";
-
-    const match = onclick.match(
-      /showSection\(['"]([^'"]+)['"]\)/
-    );
-
-    if (match) {
+  document
+    .querySelectorAll("[data-section]")
+    .forEach(button => {
       button.classList.toggle(
         "active",
-        match[1] === sectionName
+        button.dataset.section === sectionName
       );
-    }
+    });
 
-  });
-
-  /* Close mobile sidebar */
-  const sidebar = document.getElementById("sidebar");
+  const sidebar =
+    document.getElementById("sidebar") ||
+    document.querySelector(".sidebar");
 
   if (sidebar) {
     sidebar.classList.remove("open");
@@ -556,6 +549,45 @@ function showSection(sectionName) {
 
   if (!found) {
     console.warn(
+      "MyDetail: Section not found:",
+      sectionName
+    );
+  }
+
+  window.scrollTo({
+    top: 0,
+    behavior: "smooth"
+  });
+
+  if (typeof renderSection === "function") {
+    renderSection(sectionName);
+  }
+}
+
+window.showSection = showSection;
+
+
+/* =========================================================
+   NAVIGATION CLICK HANDLER
+   ========================================================= */
+
+function setupNavigation() {
+  document.addEventListener("click", event => {
+    const button =
+      event.target.closest("[data-section]");
+
+    if (!button) return;
+
+    const section =
+      button.dataset.section;
+
+    if (!section) return;
+
+    event.preventDefault();
+
+    showSection(section);
+  });
+}
       "MyDetail: Section not found:",
       sectionName
     );
