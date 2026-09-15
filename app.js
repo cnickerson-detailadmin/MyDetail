@@ -445,8 +445,8 @@ function login(event) {
 
   saveState();
 
-  document.getElementById("mydetail-login")?.
-    } remove();
+  document.getElementById("mydetail-login")?.remove();
+}
 
   /* =========================================================
    HAMBURGER / MOBILE SIDEBAR
@@ -550,102 +550,7 @@ function showSection(sectionName) {
 
   if (!found) {
     console.warn(
-      "MyDetail: Section not found:",
-      sectionName
-    );
-  }
-
-  window.scrollTo({
-    top: 0,
-    behavior: "smooth"
-  });
-
-  if (typeof renderSection === "function") {
-    renderSection(sectionName);
-  }
-}
-
-window.showSection = showSection;
-
-
-/* =========================================================
-   NAVIGATION CLICK HANDLER
-   ========================================================= */
-
-function setupNavigation() {
-  document.addEventListener("click", event => {
-    const button =
-      event.target.closest("[data-section]");
-
-    if (!button) return;
-
-    const section =
-      button.dataset.section;
-
-    if (!section) return;
-
-    event.preventDefault();
-
-    showSection(section);
-  });
-}
-      "MyDetail: Section not found:",
-      sectionName
-    );
-    return;
-  }
-
-  window.scrollTo({
-    top: 0,
-    behavior: "smooth"
-  });
-
-  if (typeof renderSection === "function") {
-    renderSection(sectionName);
-  }
-}
-
-window.showSection = showSection;
-
-    section.style.display = matches ? "" : "none";
-
-    if (matches) found = true;
-  });
-
-  document
-    .querySelectorAll("[data-section]")
-    .forEach(button => {
-      button.classList.toggle(
-        "active",
-        button.dataset.section === sectionName
-      );
-    });
-
-  if (!found) {
-    console.log("Section not found:", sectionName);
-  }
-
-  window.scrollTo({
-    top: 0,
-    behavior: "smooth"
-  });
-
-  renderSection(sectionName);
-}
-
-window.showSection = showSection;
-
-function setupNavigation() {
-  document.addEventListener("click", event => {
-    const button = event.target.closest("[data-section]");
-
-    if (!button) return;
-
-    const section = button.dataset.section;
-
-    showSection(section);
-  });
-}
+      
 
 /* =========================================================
    COMPANY NAME
@@ -2996,11 +2901,4 @@ if (
   );
 }
 
-/* =========================================================
-   MYDETAIL — APP STARTUP
-   ========================================================= */
 
-document.addEventListener("DOMContentLoaded", () => {
-  setupHamburger();
-  setupNavigation();
-});
