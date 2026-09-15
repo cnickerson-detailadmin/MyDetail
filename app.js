@@ -445,7 +445,8 @@ function login(event) {
 
   saveState();
 
-  document.getElementById("mydetail-login")?.remove();
+  document.getElementById("mydetail-login")?.
+    } remove();
 
   /* =========================================================
    HAMBURGER / MOBILE SIDEBAR
