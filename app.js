@@ -1581,4 +1581,457 @@ function renderCash() {
       </div>
     </div>
   `).join("");
+}/* =========================================================
+   MYSERVICE — COMPLETE EMPLOYEE SCHEDULE FIX
+   ========================================================= */
+
+const ACTIVE_PAGE_KEY = "myservice_active_page";
+
+function scheduleTimeToMinutes(value) {
+  if (!value) return 0;
+
+  const match = String(value)
+    .trim()
+    .match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+
+  if (!match) return 0;
+
+  let hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const period = match[3].toUpperCase();
+
+  if (period === "PM" && hour !== 12) {
+    hour += 12;
+  }
+
+  if (period === "AM" && hour === 12) {
+    hour = 0;
+  }
+
+  return hour * 60 + minute;
+}
+
+function calculateScheduledHours(shift) {
+  const start = scheduleTimeToMinutes(shift.start);
+  let end = scheduleTimeToMinutes(shift.end);
+
+  if (!start && start !== 0) return 0;
+  if (!end && end !== 0) return 0;
+
+  if (end < start) {
+    end += 24 * 60;
+  }
+
+  const grossMinutes = end - start;
+  const breakMinutes = Number(shift.breakMinutes || 0);
+
+  return Math.max(
+    0,
+    (grossMinutes - breakMinutes) / 60
+  );
+}
+
+function formatScheduleHours(value) {
+  const hours = Math.max(0, Number(value || 0));
+  const whole = Math.floor(hours);
+  const minutes = Math.round((hours - whole) * 60);
+
+  return `${whole}h ${minutes}m`;
+}
+
+function getWeekStartFromDate(dateValue) {
+  const date = new Date(`${dateValue}T12:00:00`);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const day = date.getDay();
+  const difference = day === 0 ? -6 : 1 - day;
+
+  date.setDate(date.getDate() + difference);
+
+  return dateKey(date);
+}
+
+function getEmployeeWeekHours(employeeId, dateValue) {
+  const weekStart = getWeekStartFromDate(dateValue);
+
+  if (!weekStart) return 0;
+
+  return state.schedule
+    .filter(shift => {
+      return (
+        shift.employeeId === employeeId &&
+        getWeekStartFromDate(shift.date) === weekStart
+      );
+    })
+    .reduce(
+      (total, shift) =>
+        total + calculateScheduledHours(shift),
+      0
+    );
+}
+
+function addScheduleItem() {
+  if (!Array.isArray(state.schedule)) {
+    state.schedule = [];
+  }
+
+  if (!state.employees.length) {
+    alert("Create an employee first.");
+    return;
+  }
+
+  const employeeChoices = state.employees
+    .map(
+      (employee, index) =>
+        `${index + 1}. ${employee.name} (${employee.role})`
+    )
+    .join("\n");
+
+  const employeeInput = prompt(
+    `Which employee are you scheduling?\n\n${employeeChoices}\n\nEnter employee number or name:`
+  );
+
+  if (!employeeInput) return;
+
+  let employee = null;
+
+  const employeeNumber = Number(employeeInput);
+
+  if (
+    Number.isInteger(employeeNumber) &&
+    employeeNumber >= 1 &&
+    employeeNumber <= state.employees.length
+  ) {
+    employee = state.employees[employeeNumber - 1];
+  } else {
+    employee = state.employees.find(
+      item =>
+        item.name.toLowerCase() ===
+        employeeInput.trim().toLowerCase()
+    );
+  }
+
+  if (!employee) {
+    alert("Employee not found.");
+    return;
+  }
+
+  const shiftDate = prompt(
+    "Scheduled date (YYYY-MM-DD):",
+    dateKey()
+  );
+
+  if (!shiftDate) return;
+
+  const startTime = prompt(
+    "Scheduled start time:",
+    "9:00 AM"
+  );
+
+  if (!startTime) return;
+
+  const endTime = prompt(
+    "Scheduled end time:",
+    "5:00 PM"
+  );
+
+  if (!endTime) return;
+
+  const breakInput = prompt(
+    "Scheduled unpaid break in minutes:",
+    "30"
+  );
+
+  if (breakInput === null) return;
+
+  const breakMinutes = Number(breakInput);
+
+  if (
+    !Number.isFinite(breakMinutes) ||
+    breakMinutes < 0
+  ) {
+    alert("Enter a valid break length.");
+    return;
+  }
+
+  const shift = {
+    id: uid("shift"),
+    employeeId: employee.id,
+    employee: employee.name,
+    date: shiftDate,
+    start: startTime.trim(),
+    end: endTime.trim(),
+    breakMinutes,
+    createdAt: new Date().toISOString()
+  };
+
+  shift.totalHours =
+    calculateScheduledHours(shift);
+
+  state.schedule.push(shift);
+
+  saveState();
+
+  addActivity(
+    "Employee scheduled",
+    `${employee.name} • ${shiftDate} • ${startTime} - ${endTime}`,
+    "▣"
+  );
+
+  saveState();
+  renderSchedule();
+
+  alert(
+    `${employee.name} scheduled successfully.\n\n` +
+    `Date: ${shiftDate}\n` +
+    `Hours: ${startTime} - ${endTime}\n` +
+    `Break: ${breakMinutes} minutes\n` +
+    `Paid scheduled time: ${formatScheduleHours(
+      shift.totalHours
+    )}\n` +
+    `Week total: ${formatScheduleHours(
+      getEmployeeWeekHours(employee.id, shiftDate)
+    )}`
+  );
+}
+
+function deleteScheduleItem(shiftId) {
+  const shift = state.schedule.find(
+    item => item.id === shiftId
+  );
+
+  if (!shift) return;
+
+  if (
+    !confirm(
+      `Delete ${shift.employee}'s shift on ${shift.date}?`
+    )
+  ) {
+    return;
+  }
+
+  state.schedule = state.schedule.filter(
+    item => item.id !== shiftId
+  );
+
+  saveState();
+  renderSchedule();
+}
+
+function renderSchedule() {
+  const grid = $("scheduleGrid");
+
+  if (!grid) return;
+
+  if (!Array.isArray(state.schedule)) {
+    state.schedule = [];
+  }
+
+  const user = getCurrentUser();
+
+  let shifts = [...state.schedule];
+
+  if (user && user.role === "Employee") {
+    shifts = shifts.filter(
+      shift => shift.employeeId === user.id
+    );
+  }
+
+  shifts.sort((a, b) => {
+    const dateCompare =
+      String(a.date).localeCompare(String(b.date));
+
+    if (dateCompare !== 0) {
+      return dateCompare;
+    }
+
+    return (
+      scheduleTimeToMinutes(a.start) -
+      scheduleTimeToMinutes(b.start)
+    );
+  });
+
+  if (!shifts.length) {
+    grid.innerHTML = `
+      <div class="empty-state">
+        <strong>No employee schedules saved yet.</strong>
+        <div style="margin-top:8px;">
+          Tap + Add Schedule Item to create a shift.
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  const employeeWeekTotals = {};
+
+  shifts.forEach(shift => {
+    const weekStart =
+      getWeekStartFromDate(shift.date);
+
+    const key =
+      `${shift.employeeId}-${weekStart}`;
+
+    employeeWeekTotals[key] =
+      getEmployeeWeekHours(
+        shift.employeeId,
+        shift.date
+      );
+  });
+
+  grid.innerHTML = shifts.map(shift => {
+    const dailyHours =
+      calculateScheduledHours(shift);
+
+    const weekStart =
+      getWeekStartFromDate(shift.date);
+
+    const weekKey =
+      `${shift.employeeId}-${weekStart}`;
+
+    const weeklyHours =
+      employeeWeekTotals[weekKey] || 0;
+
+    const canManage =
+      !user ||
+      user.role === "Admin" ||
+      user.role === "Manager";
+
+    return `
+      <div class="list-card"
+           style="margin-bottom:12px;">
+        <div style="width:100%;">
+          <div style="
+            display:flex;
+            justify-content:space-between;
+            gap:12px;
+            align-items:flex-start;
+          ">
+            <div>
+              <strong style="font-size:17px;">
+                ${escapeHTML(shift.employee)}
+              </strong>
+
+              <div style="margin-top:5px;">
+                ${escapeHTML(shift.date)}
+              </div>
+            </div>
+
+            ${
+              canManage
+                ? `
+                  <button
+                    type="button"
+                    class="outline-button"
+                    onclick="deleteScheduleItem('${shift.id}')"
+                  >
+                    Delete
+                  </button>
+                `
+                : ""
+            }
+          </div>
+
+          <div style="margin-top:12px;">
+            <strong>Scheduled Hours</strong>
+            <div>
+              ${escapeHTML(shift.start)}
+              –
+              ${escapeHTML(shift.end)}
+            </div>
+          </div>
+
+          <div style="margin-top:10px;">
+            <strong>Scheduled Break</strong>
+            <div>
+              ${Number(shift.breakMinutes || 0)}
+              minutes
+            </div>
+          </div>
+
+          <div style="
+            margin-top:12px;
+            padding-top:12px;
+            border-top:1px solid rgba(128,128,128,.25);
+          ">
+            <div>
+              <strong>Day Total:</strong>
+              ${formatScheduleHours(dailyHours)}
+            </div>
+
+            <div style="margin-top:5px;">
+              <strong>Week Total:</strong>
+              ${formatScheduleHours(weeklyHours)}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function installScheduleFix() {
+  const scheduleSection = $("schedule");
+
+  if (!scheduleSection) return;
+
+  const addButton =
+    scheduleSection.querySelector(".primary-button");
+
+  if (addButton) {
+    addButton.removeAttribute("onclick");
+
+    addButton.onclick = function(event) {
+      event.preventDefault();
+      addScheduleItem();
+    };
+
+    addButton.textContent = "+ Add Employee Schedule";
+  }
+
+  renderSchedule();
+}
+
+const originalShowSection = showSection;
+
+showSection = function(sectionId) {
+  localStorage.setItem(
+    ACTIVE_PAGE_KEY,
+    sectionId
+  );
+
+  originalShowSection(sectionId);
+
+  if (sectionId === "schedule") {
+    installScheduleFix();
+    renderSchedule();
+  }
+};
+
+function restoreLastMyServicePage() {
+  installScheduleFix();
+
+  const savedPage =
+    localStorage.getItem(ACTIVE_PAGE_KEY);
+
+  if (
+    savedPage &&
+    document.getElementById(savedPage)
+  ) {
+    showSection(savedPage);
+  }
+
+  renderSchedule();
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener(
+    "DOMContentLoaded",
+    restoreLastMyServicePage
+  );
+} else {
+  restoreLastMyServicePage();
 }
