@@ -1,9 +1,9 @@
 {
-  "name": "MyDetail — Five Star Detail",
-  "short_name": "MyDetail",
+  "name": "MyService — 5 Star Restaurant",
+  "short_name": "MyService",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#050505",
-  "theme_color": "#050505",
-  "description": "Five Star Detail business management system"
+  "background_color": "#f3f7fc",
+  "theme_color": "#f7f8fa",
+  "description": "MyService business management system for 5 Star Restaurant"
 }
