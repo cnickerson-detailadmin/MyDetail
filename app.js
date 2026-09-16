@@ -1465,7 +1465,7 @@ function renderAll() {
   updateClockMessage();
 installHomeTimeClock();
    
-
+}
    /* =========================================================
    HOMEPAGE EMPLOYEE TIME CLOCK
    ========================================================= */
@@ -1609,4 +1609,4 @@ function updateHomeClockDisplay() {
   zoneEl.textContent = zone;
 }
 
-}
+
