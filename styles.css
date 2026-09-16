@@ -1064,5 +1064,224 @@ label {
 }
 
 /* END MYDETAIL STYLES */
+/* =========================================================
+   MYDETAIL — MOBILE READABILITY UPGRADE
+   iPhone + Android
+   ========================================================= */
+
+@media (max-width: 900px) {
+
+  /* Main page text */
+  body {
+    font-size: 16px;
+  }
+
+  .main-content {
+    padding: 22px 16px 115px;
+  }
+
+  /* Header */
+  .topbar {
+    min-height: 68px;
+  }
+
+  .brand-name {
+    font-size: 23px;
+  }
+
+  h1 {
+    font-size: 32px;
+    line-height: 1.1;
+  }
+
+  h2 {
+    font-size: 21px;
+  }
+
+  h3 {
+    font-size: 18px;
+  }
+
+  .eyebrow {
+    font-size: 12px;
+  }
+
+  .page-header p {
+    font-size: 15px;
+  }
+
+  /* Dashboard stat tiles */
+  .stat-card {
+    min-height: 145px;
+    padding: 18px;
+  }
+
+  .stat-card span {
+    font-size: 13px;
+    line-height: 1.3;
+  }
+
+  .stat-card strong {
+    margin-top: 15px;
+    font-size: 31px;
+  }
+
+  .stat-card small {
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  /* Panels */
+  .panel {
+    padding: 20px;
+  }
+
+  .panel-header p {
+    font-size: 14px;
+  }
+
+  /* Bottom navigation */
+  #sidebar {
+    height: calc(94px + env(safe-area-inset-bottom));
+    padding: 8px 7px env(safe-area-inset-bottom);
+  }
+
+  .nav {
+    min-width: 84px;
+    height: 72px;
+    padding: 7px 10px;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .nav span {
+    font-size: 24px;
+  }
+
+  /* Money / cash panel */
+  .money-lines span {
+    font-size: 13px;
+  }
+
+  .money-lines strong {
+    font-size: 19px;
+  }
+
+  .difference {
+    font-size: 14px;
+  }
+
+  /* Employees */
+  .employee-name {
+    font-size: 16px;
+  }
+
+  .employee-role {
+    font-size: 13px;
+  }
+
+  .status-working,
+  .status-off {
+    font-size: 13px;
+  }
+
+  /* Jobs */
+  .job-title {
+    font-size: 16px;
+  }
+
+  .job-meta {
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  /* Activity */
+  .activity-item strong {
+    font-size: 15px;
+  }
+
+  .activity-item span,
+  .activity-item small {
+    font-size: 13px;
+  }
+
+  /* Customers */
+  .customer-row strong {
+    font-size: 16px;
+  }
+
+  .customer-row p {
+    font-size: 13px;
+  }
+
+  /* Forms */
+  label {
+    font-size: 14px;
+  }
+
+  input,
+  select,
+  textarea {
+    min-height: 52px;
+    font-size: 16px;
+  }
+
+  /* Buttons */
+  .primary-button,
+  .outline-button,
+  .small-btn,
+  .filter {
+    min-height: 48px;
+    font-size: 15px;
+  }
+
+  /* Tables */
+  th {
+    font-size: 12px;
+  }
+
+  td {
+    font-size: 14px;
+  }
+
+  /* Status pills */
+  .pill {
+    padding: 7px 11px;
+    font-size: 12px;
+  }
+
+  /* Date card */
+  .date-box strong,
+  .date-box span {
+    font-size: 14px;
+  }
+}
+
+/* Small phones — keep readable instead of shrinking text */
+
+@media (max-width: 500px) {
+
+  .main-content {
+    padding: 20px 14px 120px;
+  }
+
+  .stats-grid {
+    gap: 12px;
+  }
+
+  .stat-card {
+    min-height: 140px;
+    padding: 17px;
+  }
+
+  .stat-card strong {
+    font-size: 29px;
+  }
+
+  .employee-status {
+    padding: 15px;
+  }
+}
 
  
