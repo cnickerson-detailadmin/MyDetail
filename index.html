@@ -2,21 +2,29 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+
   <meta
     name="viewport"
     content="width=device-width, initial-scale=1.0, viewport-fit=cover"
   >
+
   <meta name="theme-color" content="#f7f8fa">
+
   <meta
     name="description"
     content="MyService business management platform"
   >
+
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="styles.css">
+
   <title>MyService</title>
 </head>
+
 <body>
+
 <header class="topbar">
+
   <button
     class="mobile-menu"
     type="button"
@@ -25,8 +33,10 @@
   >
     ☰
   </button>
+
   <div class="brand">
     <div class="brand-name">MyService</div>
+
     <div
       class="company-name"
       id="companyName"
@@ -34,11 +44,14 @@
       5 Star Restaurant
     </div>
   </div>
+
   <div class="top-right">
+
     <div class="live">
       <span></span>
       LIVE
     </div>
+
     <button
       class="icon-button"
       type="button"
@@ -47,6 +60,7 @@
     >
       🔔
     </button>
+
     <button
       class="profile-button"
       type="button"
@@ -55,15 +69,26 @@
       <span class="avatar">A</span>
       <span class="profile-name">Admin</span>
     </button>
+
   </div>
+
 </header>
+
+
 <div class="app-layout">
-  <!-- SIDEBAR -->
+
+  <!-- =====================================================
+       SIDEBAR
+       ===================================================== -->
+
   <aside id="sidebar">
+
     <div class="nav-section">
+
       <div class="nav-title">
         WORKSPACE
       </div>
+
       <button
         class="nav active"
         type="button"
@@ -72,6 +97,7 @@
         <span>⌂</span>
         Dashboard
       </button>
+
       <button
         class="nav"
         type="button"
@@ -80,6 +106,7 @@
         <span>🍽️🍔🍟</span>
         Orders
       </button>
+
       <button
         class="nav"
         type="button"
@@ -88,6 +115,7 @@
         <span>▣</span>
         Schedule
       </button>
+
       <button
         class="nav"
         type="button"
@@ -96,11 +124,16 @@
         <span>♙</span>
         Customers
       </button>
+
     </div>
+
+
     <div class="nav-section">
+
       <div class="nav-title">
         TEAM
       </div>
+
       <button
         class="nav"
         type="button"
@@ -109,6 +142,7 @@
         <span>♙</span>
         Employees
       </button>
+
       <button
         class="nav"
         type="button"
@@ -117,6 +151,7 @@
         <span>◷</span>
         Time Clock
       </button>
+
       <button
         class="nav"
         type="button"
@@ -125,11 +160,16 @@
         <span>☷</span>
         My Punch Log
       </button>
+
     </div>
+
+
     <div class="nav-section">
+
       <div class="nav-title">
         OPERATIONS
       </div>
+
       <button
         class="nav"
         type="button"
@@ -138,6 +178,7 @@
         <span>✓</span>
         Daily Checklist
       </button>
+
       <button
         class="nav"
         type="button"
@@ -146,6 +187,16 @@
         <span>$</span>
         Cash Drops
       </button>
+
+      <button
+        class="nav"
+        type="button"
+        onclick="showSection('tips')"
+      >
+        <span>💵</span>
+        Tips & Payouts
+      </button>
+
       <button
         class="nav"
         type="button"
@@ -154,11 +205,16 @@
         <span>⚡</span>
         Live Activity
       </button>
+
     </div>
+
+
     <div class="nav-section">
+
       <div class="nav-title">
         BUSINESS
       </div>
+
       <button
         class="nav"
         type="button"
@@ -167,6 +223,16 @@
         <span>▥</span>
         Reports
       </button>
+
+      <button
+        class="nav"
+        type="button"
+        onclick="showSection('feedback')"
+      >
+        <span>💬</span>
+        Feedback
+      </button>
+
       <button
         class="nav"
         type="button"
@@ -175,63 +241,98 @@
         <span>⚙</span>
         Admin Settings
       </button>
+
     </div>
+
+
     <div class="sidebar-footer">
       <strong>MyService</strong>
       <span>Business Management Platform</span>
     </div>
+
   </aside>
-  <!-- MAIN CONTENT -->
+
+
+  <!-- =====================================================
+       MAIN CONTENT
+       ===================================================== -->
+
   <main class="main-content">
-    <!-- DASHBOARD -->
+
+
+    <!-- ===================================================
+         DASHBOARD
+         =================================================== -->
+
     <section
       id="dashboard"
       class="page active"
     >
+
       <div class="page-header">
+
         <div>
+
           <div class="eyebrow">
             BUSINESS OVERVIEW
           </div>
+
           <h1>Dashboard</h1>
+
           <p id="welcomeText">
             Here's what's happening today.
           </p>
+
         </div>
+
         <div class="date-box">
           <strong id="currentDate"></strong>
           <span id="currentTime"></span>
         </div>
+
       </div>
+
+
       <div class="stats-grid">
+
         <div class="stat-card">
           <span>Today's Revenue</span>
           <strong id="todayRevenue">$0.00</strong>
           <small>Today</small>
         </div>
+
         <div class="stat-card">
           <span>Orders Completed</span>
           <strong id="jobsCompleted">0</strong>
           <small>Today</small>
         </div>
+
         <div class="stat-card">
           <span>Orders Remaining</span>
           <strong id="jobsRemaining">0</strong>
           <small>Open today</small>
         </div>
+
         <div class="stat-card">
           <span>Employees Working</span>
           <strong id="employeesWorking">0</strong>
           <small>Currently clocked in</small>
         </div>
+
       </div>
+
+
       <div class="dashboard-grid">
+
         <div class="panel">
+
           <div class="panel-header">
+
             <div>
               <h2>Cash Reconciliation</h2>
               <p>Expected cash vs actual deposits</p>
             </div>
+
             <button
               class="outline-button"
               type="button"
@@ -239,34 +340,44 @@
             >
               View
             </button>
+
           </div>
+
+
           <div class="money-lines">
+
             <div>
               <span>Expected Cash</span>
-              <strong id="expectedCash">
-                $0.00
-              </strong>
+              <strong id="expectedCash">$0.00</strong>
             </div>
+
             <div>
               <span>Actual Deposits</span>
-              <strong id="actualCash">
-                $0.00
-              </strong>
+              <strong id="actualCash">$0.00</strong>
             </div>
+
           </div>
+
+
           <div
             id="cashDifference"
             class="difference balanced"
           >
             $0.00 — BALANCED
           </div>
+
         </div>
+
+
         <div class="panel">
+
           <div class="panel-header">
+
             <div>
               <h2>Employees Working</h2>
               <p>Current clock status</p>
             </div>
+
             <button
               class="outline-button"
               type="button"
@@ -274,31 +385,48 @@
             >
               Manage
             </button>
+
           </div>
+
           <div id="employeeStatus"></div>
+
         </div>
+
       </div>
+
+
       <div class="panel">
+
         <div class="panel-header">
+
           <div>
             <h2>Weekly Revenue</h2>
             <p>Business performance</p>
           </div>
+
           <span class="pill">
             THIS WEEK
           </span>
+
         </div>
+
         <div
           class="chart"
           id="weeklyChart"
         ></div>
+
       </div>
+
+
       <div class="panel">
+
         <div class="panel-header">
+
           <div>
             <h2>Live Activity</h2>
             <p>Latest business events</p>
           </div>
+
           <button
             class="outline-button"
             type="button"
@@ -306,25 +434,41 @@
           >
             View All
           </button>
+
         </div>
+
         <div id="dashboardActivity"></div>
+
       </div>
+
     </section>
-    <!-- ORDERS -->
+
+
+    <!-- ===================================================
+         ORDERS
+         =================================================== -->
+
     <section
       id="jobs"
       class="page"
     >
+
       <div class="page-header">
+
         <div>
+
           <div class="eyebrow">
             RESTAURANT OPERATIONS
           </div>
+
           <h1>Orders</h1>
+
           <p>
             Manage dine-in, takeout and customer orders.
           </p>
+
         </div>
+
         <button
           class="primary-button"
           type="button"
@@ -332,44 +476,65 @@
         >
           + New Order
         </button>
+
       </div>
+
+
       <div class="filter-row">
+
         <button
           class="filter active"
           type="button"
         >
           Open
         </button>
+
         <button
           class="filter"
           type="button"
         >
           Upcoming
         </button>
+
         <button
           class="filter"
           type="button"
         >
           Completed
         </button>
+
       </div>
+
       <div id="jobList"></div>
+
     </section>
-    <!-- SCHEDULE -->
+
+
+    <!-- ===================================================
+         SCHEDULE
+         =================================================== -->
+
     <section
       id="schedule"
       class="page"
     >
+
       <div class="page-header">
+
         <div>
+
           <div class="eyebrow">
             SCHEDULING
           </div>
+
           <h1>Schedule</h1>
+
           <p>
             Manage employee shifts, assignments and business scheduling.
           </p>
+
         </div>
+
         <button
           class="primary-button"
           type="button"
@@ -377,27 +542,42 @@
         >
           + Add Schedule Item
         </button>
+
       </div>
+
       <div
         class="schedule-grid"
         id="scheduleGrid"
       ></div>
+
     </section>
-    <!-- CUSTOMERS -->
+
+
+    <!-- ===================================================
+         CUSTOMERS
+         =================================================== -->
+
     <section
       id="customers"
       class="page"
     >
+
       <div class="page-header">
+
         <div>
+
           <div class="eyebrow">
             CUSTOMER MANAGEMENT
           </div>
+
           <h1>Customers</h1>
+
           <p>
             Customer profiles, contact information and order history.
           </p>
+
         </div>
+
         <button
           class="primary-button"
           type="button"
@@ -405,34 +585,55 @@
         >
           + Add Customer
         </button>
+
       </div>
+
+
       <div class="panel">
+
         <div class="search-row">
+
           <input
             id="customerSearch"
             type="search"
             placeholder="Search customers..."
             oninput="renderCustomers()"
           >
+
         </div>
+
         <div id="customerList"></div>
+
       </div>
+
     </section>
-    <!-- EMPLOYEES -->
+
+
+    <!-- ===================================================
+         EMPLOYEES
+         =================================================== -->
+
     <section
       id="employees"
       class="page"
     >
+
       <div class="page-header">
+
         <div>
+
           <div class="eyebrow">
             TEAM MANAGEMENT
           </div>
+
           <h1>Employees</h1>
+
           <p>
             Create accounts, manage roles, schedules and permissions.
           </p>
+
         </div>
+
         <button
           class="primary-button"
           type="button"
@@ -440,49 +641,75 @@
         >
           + Create Account
         </button>
+
       </div>
+
+
       <div class="permission-banner">
+
         <strong>
           Admin Controls
         </strong>
+
         <span>
           Manage employee accounts, roles and authorized permissions.
         </span>
+
       </div>
+
+
       <div
         class="employee-grid"
         id="employeeGrid"
       ></div>
+
     </section>
-    <!-- TIME CLOCK -->
+
+
+    <!-- ===================================================
+         TIME CLOCK
+         =================================================== -->
+
     <section
       id="timeclock"
       class="page"
     >
+
       <div class="page-header">
+
         <div>
+
           <div class="eyebrow">
             TIME & ATTENDANCE
           </div>
+
           <h1>Time Clock</h1>
+
           <p>
             Record employee work time and attendance.
           </p>
+
         </div>
+
       </div>
+
+
       <div class="clock-card">
+
         <div
           id="clockStatus"
           class="clock-status off"
         >
           OFF CLOCK
         </div>
+
         <div
           id="liveClock"
           class="big-clock"
         >
           00:00:00
         </div>
+
         <button
           id="clockButton"
           class="clock-button"
@@ -491,20 +718,32 @@
         >
           CLOCK IN
         </button>
+
         <p id="clockMessage">
           Your exact punch time will be recorded.
         </p>
+
       </div>
+
+
       <div class="panel">
+
         <div class="panel-header">
+
           <div>
             <h2>Today's Punches</h2>
             <p>Authorized attendance overview.</p>
           </div>
+
         </div>
+
+
         <div class="table-wrapper">
+
           <table>
+
             <thead>
+
               <tr>
                 <th>Employee</th>
                 <th>Status</th>
@@ -512,56 +751,82 @@
                 <th>Clock Out</th>
                 <th>Total</th>
               </tr>
+
             </thead>
+
             <tbody id="punchTable"></tbody>
+
           </table>
+
         </div>
+
       </div>
+
     </section>
-    <!-- MY PUNCH LOG -->
+
+
+    <!-- ===================================================
+         MY PUNCH LOG
+         =================================================== -->
+
     <section
       id="punchlog"
       class="page"
     >
+
       <div class="page-header">
+
         <div>
+
           <div class="eyebrow">
             MY TIME
           </div>
+
           <h1>My Punch Log</h1>
+
           <p>
             Review your work time and correction history.
           </p>
+
         </div>
+
       </div>
+
+
       <div class="stats-grid">
+
         <div class="stat-card">
-          <span>
-            This Week
-          </span>
+          <span>This Week</span>
+
           <strong id="weekHours">
             0.0 hrs
           </strong>
-          <small>
-            Total hours
-          </small>
+
+          <small>Total hours</small>
         </div>
+
+
         <div class="stat-card">
-          <span>
-            Today's Hours
-          </span>
+          <span>Today's Hours</span>
+
           <strong id="todayHours">
             0.0
           </strong>
-          <small>
-            Current day
-          </small>
+
+          <small>Current day</small>
         </div>
+
       </div>
+
+
       <div class="panel">
+
         <div class="table-wrapper">
+
           <table>
+
             <thead>
+
               <tr>
                 <th>Date</th>
                 <th>Clock In</th>
@@ -570,45 +835,77 @@
                 <th>Total</th>
                 <th>Correction</th>
               </tr>
+
             </thead>
+
             <tbody id="myPunchLog"></tbody>
+
           </table>
+
         </div>
+
       </div>
+
     </section>
-    <!-- DAILY CHECKLIST -->
+
+
+    <!-- ===================================================
+         DAILY CHECKLIST
+         =================================================== -->
+
     <section
       id="checklist"
       class="page"
     >
+
       <div class="page-header">
+
         <div>
+
           <div class="eyebrow">
             RESTAURANT OPERATIONS
           </div>
+
           <h1>Today's Checklist</h1>
+
           <p>
             Track opening, food-safety, cleaning, shift and closing tasks.
           </p>
+
         </div>
+
       </div>
+
       <div id="checklistJobs"></div>
+
     </section>
-    <!-- CASH DROPS -->
+
+
+    <!-- ===================================================
+         CASH DROPS
+         =================================================== -->
+
     <section
       id="cash"
       class="page"
     >
+
       <div class="page-header">
+
         <div>
+
           <div class="eyebrow">
             FINANCIAL CONTROL
           </div>
+
           <h1>Cash Drops</h1>
+
           <p>
             Track cash deposits and reconcile expected drawer totals.
           </p>
+
         </div>
+
         <button
           class="primary-button"
           type="button"
@@ -616,210 +913,878 @@
         >
           + New Cash Drop
         </button>
+
       </div>
+
+
       <div class="stats-grid">
+
         <div class="stat-card">
-          <span>
-            Expected Cash
-          </span>
-          <strong id="cashExpected">
-            $0.00
-          </strong>
+          <span>Expected Cash</span>
+          <strong id="cashExpected">$0.00</strong>
         </div>
+
         <div class="stat-card">
-          <span>
-            Deposited
-          </span>
-          <strong id="cashDeposited">
-            $0.00
-          </strong>
+          <span>Deposited</span>
+          <strong id="cashDeposited">$0.00</strong>
         </div>
+
         <div class="stat-card">
-          <span>
-            Over / Under
-          </span>
-          <strong id="cashOverUnder">
-            $0.00
-          </strong>
+          <span>Over / Under</span>
+          <strong id="cashOverUnder">$0.00</strong>
         </div>
+
       </div>
+
+
       <div class="panel">
+
         <div class="panel-header">
+
           <div>
-            <h2>
-              Deposit History
-            </h2>
+
+            <h2>Deposit History</h2>
+
             <p>
               Review completed cash drops and deposit documentation.
             </p>
+
           </div>
+
         </div>
+
         <div id="cashDropList"></div>
+
       </div>
+
     </section>
-    <!-- REPORTS -->
+
+
+    <!-- ===================================================
+         TIPS & PAYOUTS
+         =================================================== -->
+
+    <section
+      id="tips"
+      class="page"
+    >
+
+      <div class="page-header">
+
+        <div>
+
+          <div class="eyebrow">
+            TIP MANAGEMENT
+          </div>
+
+          <h1>Tips & Payouts</h1>
+
+          <p>
+            Track tips, deductions, employee allocations and payouts.
+          </p>
+
+        </div>
+
+        <button
+          class="primary-button"
+          type="button"
+          onclick="openTipPayoutReview()"
+        >
+          💵 Withdraw Today's Tips
+        </button>
+
+      </div>
+
+
+      <div class="stats-grid">
+
+        <div class="stat-card">
+
+          <span>Gross Tips</span>
+
+          <strong id="grossTips">
+            $0.00
+          </strong>
+
+          <small>
+            Before deductions
+          </small>
+
+        </div>
+
+
+        <div class="stat-card">
+
+          <span>Card Fees</span>
+
+          <strong id="tipCardFees">
+            $0.00
+          </strong>
+
+          <small>
+            Processing fees
+          </small>
+
+        </div>
+
+
+        <div class="stat-card">
+
+          <span>Estimated Taxes</span>
+
+          <strong id="tipEstimatedTaxes">
+            $0.00
+          </strong>
+
+          <small>
+            Estimated withholding
+          </small>
+
+        </div>
+
+
+        <div class="stat-card">
+
+          <span>Estimated Net Tips</span>
+
+          <strong id="netTips">
+            $0.00
+          </strong>
+
+          <small>
+            Estimated payout balance
+          </small>
+
+        </div>
+
+      </div>
+
+
+      <div class="notification-card">
+
+        <strong>
+          Estimate Notice
+        </strong>
+
+        <p>
+          Tip balances shown before finalized payroll are estimates.
+          Actual payroll withholding, taxes and final employee
+          take-home amounts may differ.
+        </p>
+
+      </div>
+
+
+      <div class="dashboard-grid">
+
+        <div class="panel">
+
+          <div class="panel-header">
+
+            <div>
+              <h2>Tip Distribution</h2>
+              <p>Choose how employee tips are tracked.</p>
+            </div>
+
+          </div>
+
+
+          <label for="tipMode">
+            Tip Mode
+          </label>
+
+          <select
+            id="tipMode"
+            onchange="changeTipMode()"
+          >
+
+            <option value="pool">
+              Tip Pool
+            </option>
+
+            <option value="individual">
+              Individual Employee Tips
+            </option>
+
+          </select>
+
+
+          <p id="tipModeDescription">
+            Tips are automatically divided between eligible employees.
+          </p>
+
+        </div>
+
+
+        <div class="panel">
+
+          <div class="panel-header">
+
+            <div>
+              <h2>Sales Source</h2>
+              <p>Use connected POS data or manual entry.</p>
+            </div>
+
+          </div>
+
+
+          <label for="salesMode">
+            Sales Tracking Mode
+          </label>
+
+          <select
+            id="salesMode"
+            onchange="changeSalesMode()"
+          >
+
+            <option value="manual">
+              Manual
+            </option>
+
+            <option value="pos">
+              Connected POS
+            </option>
+
+          </select>
+
+
+          <p id="salesModeDescription">
+            Sales and tips are currently entered manually.
+          </p>
+
+
+          <button
+            class="outline-button"
+            type="button"
+            onclick="openPosSettings()"
+          >
+            Configure POS
+          </button>
+
+        </div>
+
+      </div>
+
+
+      <div class="panel">
+
+        <div class="panel-header">
+
+          <div>
+            <h2>Today's Employee Tip Balances</h2>
+            <p>Current tip allocations before payout.</p>
+          </div>
+
+          <button
+            class="outline-button"
+            type="button"
+            onclick="addManualTip()"
+          >
+            + Add Manual Tip
+          </button>
+
+        </div>
+
+        <div id="employeeTipList"></div>
+
+      </div>
+
+
+      <div class="panel">
+
+        <div class="panel-header">
+
+          <div>
+            <h2>Payout Review</h2>
+            <p>
+              Review deductions and employee allocations before payout.
+            </p>
+          </div>
+
+        </div>
+
+        <div id="tipPayoutReview">
+
+          <div class="list-row">
+            <div>
+              <strong>Gross Tips</strong>
+              <small>All recorded tips today</small>
+            </div>
+
+            <strong id="reviewGrossTips">
+              $0.00
+            </strong>
+          </div>
+
+          <div class="list-row">
+            <div>
+              <strong>Card Processing Fees</strong>
+              <small>Excluded from employee tip balance</small>
+            </div>
+
+            <strong id="reviewCardFees">
+              $0.00
+            </strong>
+          </div>
+
+          <div class="list-row">
+            <div>
+              <strong>Estimated Taxes</strong>
+              <small>Estimated until payroll finalizes</small>
+            </div>
+
+            <strong id="reviewTaxes">
+              $0.00
+            </strong>
+          </div>
+
+          <div class="list-row">
+            <div>
+              <strong>Estimated Net Payout</strong>
+              <small>Current distributable estimate</small>
+            </div>
+
+            <strong id="reviewNetTips">
+              $0.00
+            </strong>
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <div class="panel">
+
+        <div class="panel-header">
+
+          <div>
+            <h2>Payout History</h2>
+            <p>
+              Completed tip distributions and approvals.
+            </p>
+          </div>
+
+        </div>
+
+        <div id="tipPayoutHistory"></div>
+
+      </div>
+
+    </section>
+
+
+    <!-- ===================================================
+         REPORTS
+         =================================================== -->
+
     <section
       id="reports"
       class="page"
     >
+
       <div class="page-header">
+
         <div>
+
           <div class="eyebrow">
             BUSINESS INTELLIGENCE
           </div>
+
           <h1>Reports</h1>
+
           <p>
             Measure revenue, operations and business performance.
           </p>
+
         </div>
+
       </div>
+
+
       <div class="stats-grid">
+
         <div class="stat-card">
-          <span>
-            Weekly Revenue
-          </span>
-          <strong id="reportWeeklyRevenue">
-            $0.00
-          </strong>
+          <span>Weekly Revenue</span>
+          <strong id="reportWeeklyRevenue">$0.00</strong>
         </div>
+
         <div class="stat-card">
-          <span>
-            Orders This Week
-          </span>
-          <strong id="reportJobs">
-            0
-          </strong>
+          <span>Orders This Week</span>
+          <strong id="reportJobs">0</strong>
         </div>
+
         <div class="stat-card">
-          <span>
-            Employee Hours
-          </span>
-          <strong id="reportEmployeeHours">
-            0.0
-          </strong>
+          <span>Employee Hours</span>
+          <strong id="reportEmployeeHours">0.0</strong>
         </div>
+
         <div class="stat-card">
-          <span>
-            Cash Difference
-          </span>
-          <strong id="reportCashDifference">
-            $0.00
-          </strong>
+          <span>Cash Difference</span>
+          <strong id="reportCashDifference">$0.00</strong>
         </div>
+
       </div>
+
+
       <div class="panel">
+
         <h2>
           Weekly Business Performance
         </h2>
+
         <div
           class="chart large"
           id="reportChart"
         ></div>
+
       </div>
+
     </section>
-    <!-- LIVE ACTIVITY -->
+
+
+    <!-- ===================================================
+         LIVE ACTIVITY
+         =================================================== -->
+
     <section
       id="activity"
       class="page"
     >
+
       <div class="page-header">
+
         <div>
+
           <div class="eyebrow">
             REAL-TIME
           </div>
-          <h1>
-            Live Activity
-          </h1>
+
+          <h1>Live Activity</h1>
+
           <p>
             Business events as they happen.
           </p>
+
         </div>
+
       </div>
+
+
       <div class="panel">
         <div id="activityList"></div>
       </div>
+
     </section>
-    <!-- NOTIFICATIONS -->
+
+
+    <!-- ===================================================
+         NOTIFICATIONS
+         =================================================== -->
+
     <section
       id="notifications"
       class="page"
     >
+
       <div class="page-header">
+
         <div>
+
           <div class="eyebrow">
             ALERTS
           </div>
-          <h1>
-            Notifications
-          </h1>
+
+          <h1>Notifications</h1>
+
           <p>
             Important MyService alerts and reports.
           </p>
+
         </div>
+
       </div>
+
+
       <div class="notification-card">
+
         <strong>
           Weekly Business Report
         </strong>
+
         <p>
           Your weekly performance report will appear here.
         </p>
+
       </div>
+
     </section>
-    <!-- ADMIN SETTINGS -->
+
+
+    <!-- ===================================================
+         FEEDBACK
+         =================================================== -->
+
+    <section
+      id="feedback"
+      class="page"
+    >
+
+      <div class="page-header">
+
+        <div>
+
+          <div class="eyebrow">
+            SUPPORT & FEEDBACK
+          </div>
+
+          <h1>Feedback</h1>
+
+          <p>
+            Send ideas, report issues or suggest improvements to MyService.
+          </p>
+
+        </div>
+
+      </div>
+
+
+      <div class="panel">
+
+        <div class="panel-header">
+
+          <div>
+
+            <h2>
+              Send Feedback
+            </h2>
+
+            <p>
+              Your message will be routed securely to the MyService team.
+            </p>
+
+          </div>
+
+        </div>
+
+
+        <form
+          id="feedbackForm"
+          onsubmit="submitFeedback(event)"
+        >
+
+          <label for="feedbackType">
+            Feedback Type
+          </label>
+
+          <select id="feedbackType">
+
+            <option value="suggestion">
+              Suggestion
+            </option>
+
+            <option value="bug">
+              Report a Problem
+            </option>
+
+            <option value="feature">
+              Feature Request
+            </option>
+
+            <option value="other">
+              Other
+            </option>
+
+          </select>
+
+
+          <label for="feedbackSubject">
+            Subject
+          </label>
+
+          <input
+            id="feedbackSubject"
+            type="text"
+            placeholder="Short description"
+            maxlength="120"
+          >
+
+
+          <label for="feedbackMessage">
+            Message
+          </label>
+
+          <textarea
+            id="feedbackMessage"
+            placeholder="Tell us what happened or what you'd like to see..."
+            maxlength="3000"
+            required
+          ></textarea>
+
+
+          <button
+            class="primary-button"
+            type="submit"
+          >
+            Send Feedback
+          </button>
+
+        </form>
+
+      </div>
+
+
+      <div class="notification-card">
+
+        <strong>
+          MyService Feedback
+        </strong>
+
+        <p>
+          feedback@MyService.com
+        </p>
+
+        <small>
+          Your private destination email is not displayed or stored in this page.
+        </small>
+
+      </div>
+
+    </section>
+
+
+    <!-- ===================================================
+         ADMIN SETTINGS
+         =================================================== -->
+
     <section
       id="settings"
       class="page"
     >
+
       <div class="page-header">
+
         <div>
+
           <div class="eyebrow">
             ADMINISTRATION
           </div>
+
           <h1>
             Admin Settings
           </h1>
+
           <p>
             Manage your MyService company workspace.
           </p>
+
         </div>
+
       </div>
+
+
       <div class="settings-grid">
+
+
         <button
           class="setting-card"
           type="button"
           onclick="createAccount()"
         >
+
           <span>👤</span>
+
           <strong>
             Accounts
           </strong>
+
           <small>
             Create and manage Admin, Manager and Employee accounts.
           </small>
+
         </button>
+
+
         <button
           class="setting-card"
           type="button"
           onclick="alert('Role and permission management will be connected to the secure backend.')"
         >
+
           <span>🛡️</span>
+
           <strong>
             Roles & Permissions
           </strong>
+
           <small>
             Control what each authorized role can access.
           </small>
+
         </button>
+
+
         <button
           class="setting-card"
           type="button"
           onclick="alert('Location access is restricted to authorized Admin and Manager accounts.')"
         >
+
           <span>📍</span>
+
           <strong>
             Location Access
           </strong>
+
           <small>
             Manage authorized employee location visibility.
           </small>
+
+        </button>
+
+
+        <button
+          class="setting-card"
+          type="button"
+          onclick="alert('Security settings will be connected to the secure account system.')"
+        >
+
+          <span>🔐</span>
+
+          <strong>
+            Security & 2FA
+          </strong>
+
+          <small>
+            Protect company accounts and administrative actions.
+          </small>
+
+        </button>
+
+
+        <button
+          class="setting-card"
+          type="button"
+          onclick="alert('Company profile settings will be connected here.')"
+        >
+
+          <span>🏢</span>
+
+          <strong>
+            Company Profile
+          </strong>
+
+          <small>
+            Company name, business information and restaurant details.
+          </small>
+
+        </button>
+
+
+        <button
+          class="setting-card"
+          type="button"
+          onclick="showSection('tips')"
+        >
+
+          <span>💵</span>
+
+          <strong>
+            Tips & Payouts
+          </strong>
+
+          <small>
+            Configure tip pools, individual tips, deductions and payouts.
+          </small>
+
+        </button>
+
+
+        <button
+          class="setting-card"
+          type="button"
+          onclick="openPosSettings()"
+        >
+
+          <span>🧾</span>
+
+          <strong>
+            POS Integration
+          </strong>
+
+          <small>
+            Connect a supported POS or use manual sales tracking.
+          </small>
+
+        </button>
+
+
+        <button
+          class="setting-card"
+          type="button"
+          onclick="alert('Audit logs will be connected to the secure backend.')"
+        >
+
+          <span>📋</span>
+
+          <strong>
+            Audit Logs
+          </strong>
+
+          <small>
+            Track important administrative and financial actions.
+          </small>
+
+        </button>
+
+
+        <button
+          class="setting-card"
+          type="button"
+          onclick="showSection('notifications')"
+        >
+
+          <span>🔔</span>
+
+          <strong>
+            Notifications
+          </strong>
+
+          <small>
+            Manage business alerts and weekly reports.
+          </small>
+
+        </button>
+
+
+        <button
+          class="setting-card"
+          type="button"
+          onclick="showSection('feedback')"
+        >
+
+          <span>💬</span>
+
+          <strong>
+            Feedback
+          </strong>
+
+          <small>
+            Send product feedback directly to the MyService team.
+          </small>
+
+        </button>
+
+      </div>
+
+    </section>
+
+  </main>
+
+</div>
+
+
+<script src="app.js"></script>
+
+</body>
+</html>
