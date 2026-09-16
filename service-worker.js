@@ -1,39 +1,22 @@
-const CACHE_NAME = "mydetail-v1";
+const CACHE_NAME = "myservice-cache-v2";
 
-const FILES = [
-  "./",
-  "./index.html",
-  "./styles.css",
-  "./app.js",
-  "./manifest.json"
-];
-
-
-self.addEventListener("install", event => {
-
-  event.waitUntil(
-
-    caches.open(CACHE_NAME)
-      .then(cache => {
-        return cache.addAll(FILES);
-      })
-
-  );
-
+self.addEventListener("install", () => {
+  self.skipWaiting();
 });
 
-
-self.addEventListener("fetch", event => {
-
-  event.respondWith(
-
-    caches.match(event.request)
-      .then(cachedFile => {
-
-        return cachedFile || fetch(event.request);
-
-      })
-
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches
+      .keys()
+      .then((cacheNames) =>
+        Promise.all(
+          cacheNames.map((cacheName) => caches.delete(cacheName))
+        )
+      )
+      .then(() => self.clients.claim())
   );
+});
 
+self.addEventListener("fetch", (event) => {
+  event.respondWith(fetch(event.request));
 });
