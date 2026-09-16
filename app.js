@@ -1456,11 +1456,157 @@ function installScheduleButton() {
    MINIMUM RENDER
    ========================================================= */
 
-function renderAll() {) {
+function renderAll() {
   renderClock();
   renderPunchTable();
   renderMyPunchLog();
   renderSchedule();
   installScheduleButton();
   updateClockMessage();
+installHomeTimeClock();
+   
+
+   /* =========================================================
+   HOMEPAGE EMPLOYEE TIME CLOCK
+   ========================================================= */
+
+function installHomeTimeClock() {
+  const dashboard = document.getElementById("dashboard");
+  if (!dashboard) return;
+
+  let box = document.getElementById("home-time-clock");
+
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "home-time-clock";
+    box.className = "card";
+
+    box.style.cssText = `
+      margin-bottom: 18px;
+      padding: 20px;
+      text-align: center;
+    `;
+
+    dashboard.insertBefore(box, dashboard.firstChild);
+  }
+
+  box.innerHTML = `
+    <div style="font-size:13px;font-weight:700;letter-spacing:1.5px;">
+      TIME CLOCK
+    </div>
+
+    <div id="home-live-date"
+         style="margin-top:10px;font-size:16px;font-weight:600;">
+    </div>
+
+    <div id="home-live-time"
+         style="font-size:28px;font-weight:800;margin-top:3px;">
+    </div>
+
+    <div id="home-time-zone"
+         style="font-size:13px;opacity:.7;margin-top:2px;">
+    </div>
+
+    <div style="
+      margin-top:18px;
+      padding:14px;
+      border-radius:16px;
+      background:rgba(128,128,128,.08);
+    ">
+      <div style="font-size:12px;font-weight:800;opacity:.6;">
+        TODAY'S SCHEDULE
+      </div>
+
+      <div id="home-scheduled-hours"
+           style="font-size:18px;font-weight:750;margin-top:5px;">
+        No schedule found
+      </div>
+    </div>
+
+    <div style="margin-top:18px;">
+      <div style="font-size:12px;font-weight:800;opacity:.6;">
+        TIME WORKED
+      </div>
+
+      <div id="home-work-timer"
+           style="font-size:34px;font-weight:850;margin-top:3px;">
+        00:00:00
+      </div>
+
+      <div style="font-size:12px;opacity:.6;">
+        Meal periods excluded
+      </div>
+    </div>
+
+    <div style="
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px;
+      margin-top:18px;
+    ">
+      <button
+        type="button"
+        class="primary-button"
+        id="home-clock-button"
+        style="min-height:58px;font-size:16px;font-weight:800;"
+      >
+        CLOCK IN
+      </button>
+
+      <button
+        type="button"
+        class="outline-button"
+        id="home-lunch-button"
+        style="min-height:58px;font-size:16px;font-weight:800;"
+      >
+        START LUNCH
+      </button>
+    </div>
+
+    <div id="home-clock-status"
+         style="margin-top:12px;font-size:13px;opacity:.7;">
+      Not clocked in
+    </div>
+  `;
+
+  updateHomeClockDisplay();
+
+  if (!window.homeClockDisplayTimer) {
+    window.homeClockDisplayTimer =
+      setInterval(updateHomeClockDisplay, 1000);
+  }
+}
+
+function updateHomeClockDisplay() {
+  const dateEl = document.getElementById("home-live-date");
+  const timeEl = document.getElementById("home-live-time");
+  const zoneEl = document.getElementById("home-time-zone");
+
+  if (!dateEl || !timeEl || !zoneEl) return;
+
+  const now = new Date();
+
+  dateEl.textContent = now.toLocaleDateString([], {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric"
+  });
+
+  timeEl.textContent = now.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit"
+  });
+
+  const parts = new Intl.DateTimeFormat([], {
+    timeZoneName: "short"
+  }).formatToParts(now);
+
+  const zone =
+    parts.find(part => part.type === "timeZoneName")?.value || "";
+
+  zoneEl.textContent = zone;
+}
+
 }
