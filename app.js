@@ -1,11 +1,16 @@
 /* =========================================================
    MYSERVICE — FRONTEND APPLICATION
-   PART 1 OF 2
+   COMPLETE CLEAN BUILD
    ========================================================= */
 
 "use strict";
 
 const STORAGE_KEY = "myservice_restaurant_v4";
+const ACTIVE_PAGE_KEY = "myservice_active_page";
+
+/* =========================================================
+   DEFAULT DATA
+   ========================================================= */
 
 const defaultState = {
   companyName: "5 Star Restaurant",
@@ -119,16 +124,12 @@ const defaultState = {
   ],
 
   schedule: [],
-
   punches: [],
-
   cashDrops: [],
-
   tips: [],
-
   tipPayouts: [],
-
   feedbackQueue: [],
+  notifications: [],
 
   checklist: [
     {
@@ -176,9 +177,7 @@ const defaultState = {
       time: new Date().toISOString(),
       icon: "✓"
     }
-  ],
-
-  notifications: []
+  ]
 };
 
 
@@ -249,6 +248,10 @@ function loadState() {
         ? parsed.feedbackQueue
         : [],
 
+      notifications: Array.isArray(parsed.notifications)
+        ? parsed.notifications
+        : [],
+
       checklist: Array.isArray(parsed.checklist)
         ? parsed.checklist
         : clone(defaultState.checklist),
@@ -257,6 +260,7 @@ function loadState() {
         ? parsed.activity
         : clone(defaultState.activity)
     };
+
   } catch (error) {
     console.error("Storage error:", error);
     return clone(defaultState);
@@ -337,9 +341,7 @@ function hoursBetween(start, end) {
 
   return Math.max(
     0,
-    (new Date(end).getTime() -
-      new Date(start).getTime()) /
-      3600000
+    (new Date(end).getTime() - new Date(start).getTime()) / 3600000
   );
 }
 
@@ -347,7 +349,7 @@ function minutesBetween(start, end) {
   if (!start || !end) return 0;
 
   return Math.max(
-        0,
+    0,
     Math.round(
       (new Date(end).getTime() -
         new Date(start).getTime()) /
@@ -358,8 +360,9 @@ function minutesBetween(start, end) {
 
 function formatDuration(hours) {
   const value = Math.max(0, Number(hours || 0));
-  const h = Math.floor(value);
-  const m = Math.round((value - h) * 60);
+  const totalMinutes = Math.round(value * 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
 
   return `${h}h ${m}m`;
 }
@@ -369,7 +372,9 @@ function getCurrentUser() {
 }
 
 function getEmployee(id) {
-  return state.employees.find(employee => employee.id === id);
+  return state.employees.find(
+    employee => employee.id === id
+  );
 }
 
 function getCurrentEmployee() {
@@ -386,7 +391,7 @@ function getCurrentEmployee() {
       clockIn: null,
       breakStart: null,
       totalHours: 0,
-      tipEligible: false
+      tipEligible: user.role !== "Admin"
     };
 
     state.employees.push(employee);
@@ -394,6 +399,16 @@ function getCurrentEmployee() {
   }
 
   return employee;
+}
+
+function canManageEmployees() {
+  const user = getCurrentUser();
+
+  return (
+    user &&
+    (user.role === "Admin" ||
+      user.role === "Manager")
+  );
 }
 
 
@@ -428,8 +443,14 @@ function showSection(sectionId) {
     return;
   }
 
+  localStorage.setItem(
+    ACTIVE_PAGE_KEY,
+    sectionId
+  );
+
   document.querySelectorAll(".page").forEach(page => {
-    page.classList.remove("active");  });
+    page.classList.remove("active");
+  });
 
   target.classList.add("active");
 
@@ -474,35 +495,29 @@ function updateDateTime() {
   const now = new Date();
 
   if ($("currentDate")) {
-    $("currentDate").textContent = now.toLocaleDateString(
-      "en-US",
-      {
+    $("currentDate").textContent =
+      now.toLocaleDateString("en-US", {
         weekday: "long",
         month: "short",
         day: "numeric"
-      }
-    );
+      });
   }
 
   if ($("currentTime")) {
-    $("currentTime").textContent = now.toLocaleTimeString(
-      "en-US",
-      {
+    $("currentTime").textContent =
+      now.toLocaleTimeString("en-US", {
         hour: "numeric",
         minute: "2-digit"
-      }
-    );
+      });
   }
 
   if ($("liveClock")) {
-    $("liveClock").textContent = now.toLocaleTimeString(
-      "en-US",
-      {
+    $("liveClock").textContent =
+      now.toLocaleTimeString("en-US", {
         hour: "2-digit",
         minute: "2-digit",
         second: "2-digit"
-      }
-    );
+      });
   }
 
   updateClockMessage();
@@ -530,16 +545,16 @@ function getBreakMinutes(punch, includeOpen = true) {
     if (!item.start) return total;
 
     if (item.end) {
-      return total + minutesBetween(item.start, item.end);
+      return total + minutesBetween(
+        item.start,
+        item.end
+      );
     }
 
     if (includeOpen) {
-      return (
-        total +
-        minutesBetween(
-          item.start,
-          new Date().toISOString()
-        )
+      return total + minutesBetween(
+        item.start,
+        new Date().toISOString()
       );
     }
 
@@ -547,16 +562,25 @@ function getBreakMinutes(punch, includeOpen = true) {
   }, 0);
 }
 
-function calculatePunchHours(punch, includeOpen = true) {
+function calculatePunchHours(
+  punch,
+  includeOpen = true
+) {
   if (!punch || !punch.clockIn) return 0;
 
   const end =
     punch.clockOut ||
-    (includeOpen ? new Date().toISOString() : null);
+    (includeOpen
+      ? new Date().toISOString()
+      : null);
 
   if (!end) return 0;
 
-  const gross = hoursBetween(punch.clockIn, end);
+  const gross = hoursBetween(
+    punch.clockIn,
+    end
+  );
+
   const breakHours =
     getBreakMinutes(punch, includeOpen) / 60;
 
@@ -651,7 +675,6 @@ function endBreak() {
   const now = new Date().toISOString();
 
   openBreak.end = now;
-
   employee.status = "Working";
   employee.breakStart = null;
 
@@ -682,11 +705,13 @@ function clockOut() {
   }
 
   punch.clockOut = now;
-  punch.totalHours = calculatePunchHours(punch, false);
+  punch.totalHours =
+    calculatePunchHours(punch, false);
 
   employee.status = "Off Clock";
   employee.clockIn = null;
   employee.breakStart = null;
+
   employee.totalHours =
     Number(employee.totalHours || 0) +
     Number(punch.totalHours || 0);
@@ -729,7 +754,6 @@ function ensureBreakButton() {
     breakButton.className = "outline-button";
     breakButton.style.marginTop = "12px";
     breakButton.style.width = "100%";
-    breakButton.textContent = "START BREAK";
 
     clockButton.insertAdjacentElement(
       "afterend",
@@ -832,7 +856,7 @@ function renderClock() {
 
 
 /* =========================================================
-   PUNCH TABLE / MY PUNCH LOG
+   PUNCH LOG
    ========================================================= */
 
 function renderPunchTable() {
@@ -841,15 +865,24 @@ function renderPunchTable() {
   if (!table) return;
 
   const today = dateKey();
+  const user = getCurrentUser();
 
-  const punches = state.punches.filter(
+  let punches = state.punches.filter(
     punch => punch.date === today
   );
+
+  if (user && user.role === "Employee") {
+    punches = punches.filter(
+      punch => punch.employeeId === user.id
+    );
+  }
 
   if (!punches.length) {
     table.innerHTML = `
       <tr>
-        <td colspan="5">No punches recorded today.</td>
+        <td colspan="5">
+          No punches recorded today.
+        </td>
       </tr>
     `;
     return;
@@ -872,12 +905,13 @@ function renderPunchTable() {
         <td>${escapeHTML(status)}</td>
         <td>${formatTime(punch.clockIn)}</td>
         <td>${formatTime(punch.clockOut)}</td>
-        <td>${formatDuration(calculatePunchHours(punch))}</td>
+        <td>${formatDuration(
+          calculatePunchHours(punch)
+        )}</td>
       </tr>
     `;
   }).join("");
 }
-
 function renderMyPunchLog() {
   const container = $("myPunchLog");
   const weekHours = $("weekHours");
@@ -908,6 +942,7 @@ function renderMyPunchLog() {
   weekStart.setDate(
     weekStart.getDate() + difference
   );
+
   weekStart.setHours(0, 0, 0, 0);
 
   const weekTotal = myPunches
@@ -923,13 +958,11 @@ function renderMyPunchLog() {
     );
 
   if (weekHours) {
-    weekHours.textContent =
-      formatDuration(weekTotal);
+    weekHours.textContent = formatDuration(weekTotal);
   }
 
   if (todayHours) {
-    todayHours.textContent =
-      formatDuration(todayTotal);
+    todayHours.textContent = formatDuration(todayTotal);
   }
 
   if (!myPunches.length) {
@@ -943,34 +976,25 @@ function renderMyPunchLog() {
 
   container.innerHTML = myPunches.map(punch => {
     const breaks = (punch.breaks || [])
-      .map(item => {
-        return `
-          <div>
-            Break:
-            ${formatTime(item.start)}
-            –
-            ${item.end
-              ? formatTime(item.end)
-              : "Active"}
-          </div>
-        `;
-      })
+      .map(item => `
+        <div>
+          Break: ${formatTime(item.start)} –
+          ${item.end ? formatTime(item.end) : "Active"}
+        </div>
+      `)
       .join("");
 
     return `
       <div class="list-card">
         <div>
           <strong>${formatDate(punch.clockIn)}</strong>
-          <div>
-            Clock In: ${formatTime(punch.clockIn)}
-          </div>
-          <div>
-            Clock Out: ${formatTime(punch.clockOut)}
-          </div>
+          <div>Clock In: ${formatTime(punch.clockIn)}</div>
+          <div>Clock Out: ${formatTime(punch.clockOut)}</div>
           ${breaks}
           <div>
-            Total:
-            ${formatDuration(calculatePunchHours(punch))}
+            Total: ${formatDuration(
+              calculatePunchHours(punch)
+            )}
           </div>
         </div>
 
@@ -1015,590 +1039,31 @@ function requestPunchCorrection(punchId) {
 
   alert("Correction request submitted.");
 }
-
-
 /* =========================================================
-   SCHEDULE
+   EMPLOYEE SCHEDULE
    ========================================================= */
-
-function addScheduleItem() {
-  const employeeName = prompt(
-    "Employee name:",
-    getCurrentEmployee().name
-  );
-
-  if (!employeeName) return;
-
-  const date = prompt(
-    "Shift date (YYYY-MM-DD):",
-    dateKey()
-  );
-
-  if (!date) return;
-
-  const start = prompt(
-    "Start time:",
-    "9:00 AM"
-  );
-
-  if (!start) return;
-
-  const end = prompt(
-    "End time:",
-    "5:00 PM"
-  );
-
-  if (!end) return;
-
-  const employee =
-    state.employees.find(
-      item =>
-        item.name.toLowerCase() ===
-        employeeName.trim().toLowerCase()
-    ) || getCurrentEmployee();
-
-  state.schedule.push({
-    id: uid("shift"),
-    employeeId: employee.id,
-    employee: employee.name,
-    date,
-    start,
-    end
-  });
-
-  addActivity(
-    "Schedule updated",
-    `${employee.name} • ${date} • ${start} – ${end}`,
-    "▣"
-  );
-
-  saveState();
-  renderAll();
-}
-
-function renderSchedule() {
-  const grid = $("scheduleGrid");
-
-  if (!grid) return;
-
-  const user = getCurrentUser();
-
-  let shifts = [...state.schedule];
-
-  if (user.role === "Employee") {
-    shifts = shifts.filter(
-      shift => shift.employeeId === user.id
-    );
-  }
-
-  shifts.sort((a, b) =>
-    String(a.date).localeCompare(String(b.date))
-  );
-
-  if (!shifts.length) {
-    grid.innerHTML = `
-      <div class="empty-state">
-        No scheduled shifts yet.
-      </div>
-    `;
-    return;
-  }
-
-  grid.innerHTML = shifts.map(shift => `
-    <div class="list-card">
-      <div>
-        <strong>${escapeHTML(shift.employee)}</strong>
-        <div>${escapeHTML(shift.date)}</div>
-        <div>
-          ${escapeHTML(shift.start)}
-          –
-          ${escapeHTML(shift.end)}
-        </div>
-      </div>
-    </div>
-  `).join("");
-}
-
-
-/* =========================================================
-   ORDERS
-   ========================================================= */
-
-let jobFilter = "all";
-
-function addJob() {
-  const customer = prompt("Customer name:");
-
-  if (!customer) return;
-
-  const order = prompt(
-    "Order / items:"
-  );
-
-  if (!order) return;
-
-  const priceInput = prompt(
-    "Order total:",
-    "0.00"
-  );
-
-  const price = Number(priceInput);
-
-  if (!Number.isFinite(price) || price < 0) {
-    alert("Enter a valid order total.");
-    return;
-  }
-
-  const employee = getCurrentEmployee();
-
-  state.jobs.unshift({
-    id: uid("job"),
-    customer: customer.trim(),
-    orderType: "Dine-In",
-    order: order.trim(),
-    employee: employee.name,
-    employeeId: employee.id,
-    time: new Date().toLocaleTimeString(
-      "en-US",
-      {
-        hour: "numeric",
-        minute: "2-digit"
-      }
-    ),
-    status: "Open",
-    price,
-    paymentMethod: "Card",
-    createdAt: new Date().toISOString()
-  });
-
-  addActivity(
-    "New order created",
-    `${customer.trim()} • ${money(price)}`,
-    "+"
-  );
-
-  saveState();
-  renderAll();
-}
-
-function toggleJobStatus(jobId) {
-  const job = state.jobs.find(
-    item => item.id === jobId
-  );
-
-  if (!job) return;
-
-  job.status =
-    job.status === "Completed"
-      ? "Open"
-      : "Completed";
-
-  if (job.status === "Completed") {
-    job.completedAt = new Date().toISOString();
-  } else {
-    job.completedAt = null;
-  }
-
-  addActivity(
-    `Order ${job.status.toLowerCase()}`,
-    `${job.customer} • ${money(job.price)}`,
-    "✓"
-  );
-
-  saveState();
-  renderAll();
-}
-
-function renderJobs() {
-  const list = $("jobList");
-
-  if (!list) return;
-
-  let jobs = [...state.jobs];
-
-  if (jobFilter === "open") {
-    jobs = jobs.filter(
-      job => job.status !== "Completed"
-    );
-  }
-
-  if (jobFilter === "completed") {
-    jobs = jobs.filter(
-      job => job.status === "Completed"
-    );
-  }
-
-  if (!jobs.length) {
-    list.innerHTML = `
-      <div class="empty-state">
-        No orders found.
-      </div>
-    `;
-    return;
-  }
-
-  list.innerHTML = jobs.map(job => `
-    <div class="list-card">
-      <div>
-        <strong>${escapeHTML(job.customer)}</strong>
-        <div>${escapeHTML(job.order)}</div>
-        <div>
-          ${escapeHTML(job.orderType || "Order")}
-          • ${money(job.price)}
-          • ${escapeHTML(job.paymentMethod || "—")}
-        </div>
-        <div>
-          ${escapeHTML(job.employee || "Unassigned")}
-          • ${escapeHTML(job.time || "")}
-        </div>
-      </div>
-
-      <button
-        type="button"
-        class="outline-button"
-        onclick="toggleJobStatus('${job.id}')"
-      >
-        ${job.status === "Completed"
-          ? "Reopen"
-          : "Complete"}
-      </button>
-    </div>
-  `).join("");
-}/* =========================================================
-   CUSTOMERS
-   ========================================================= */
-
-function renderCustomers() {
-  const list = $("customerList");
-
-  if (!list) return;
-
-  const search = (
-    $("customerSearch")?.value || ""
-  ).trim().toLowerCase();
-
-  const customers = state.customers.filter(customer => {
-    const text = [
-      customer.name,
-      customer.phone,
-      customer.email,
-      customer.notes
-    ].join(" ").toLowerCase();
-
-    return text.includes(search);
-  });
-
-  if (!customers.length) {
-    list.innerHTML = `
-      <div class="empty-state">
-        No customers found.
-      </div>
-    `;
-    return;
-  }
-
-  list.innerHTML = customers.map(customer => `
-    <div class="list-card">
-      <div>
-        <strong>${escapeHTML(customer.name)}</strong>
-        <div>${escapeHTML(customer.phone || "—")}</div>
-        <div>${escapeHTML(customer.email || "—")}</div>
-        <div>${escapeHTML(customer.notes || "")}</div>
-      </div>
-    </div>
-  `).join("");
-}
-
-
-/* =========================================================
-   EMPLOYEES
-   ========================================================= */
-
-function renderEmployees() {
-  const grid = $("employeeGrid");
-
-  if (!grid) return;
-
-  if (!state.employees.length) {
-    grid.innerHTML = `
-      <div class="empty-state">
-        No employees yet.
-      </div>
-    `;
-    return;
-  }
-
-  grid.innerHTML = state.employees.map(employee => `
-    <div class="list-card">
-      <div>
-        <strong>${escapeHTML(employee.name)}</strong>
-        <div>${escapeHTML(employee.role)}</div>
-        <div>${escapeHTML(employee.status || "Off Clock")}</div>
-        <div>
-          Recorded Hours:
-          ${formatDuration(employee.totalHours || 0)}
-        </div>
-      </div>
-
-      <button
-        type="button"
-        class="outline-button"
-        onclick="viewEmployee('${employee.id}')"
-      >
-        View
-      </button>
-    </div>
-  `).join("");
-}
-
-function createAccount() {
-  const name = prompt("Employee name:");
-
-  if (!name || !name.trim()) return;
-
-  const email = prompt("Employee email:");
-
-  if (!email || !email.trim()) return;
-
-  const roleInput = prompt(
-    "Role: Admin, Manager, or Employee",
-    "Employee"
-  );
-
-  if (!roleInput) return;
-
-  const normalizedRole =
-    roleInput.trim().toLowerCase();
-
-  let role = "Employee";
-
-  if (normalizedRole === "admin") {
-    role = "Admin";
-  }
-
-  if (normalizedRole === "manager") {
-    role = "Manager";
-  }
-
-  const id = uid("employee");
-
-  state.users.push({
-    id,
-    name: name.trim(),
-    email: email.trim(),
-    role,
-    active: true
-  });
-
-  state.employees.push({
-    id,
-    name: name.trim(),
-    role,
-    status: "Off Clock",
-    clockIn: null,
-    breakStart: null,
-    totalHours: 0,
-    tipEligible: role !== "Admin"
-  });
-
-  addActivity(
-    "Employee account created",
-    `${name.trim()} • ${role}`,
-    "+"
-  );
-
-  saveState();
-  renderAll();
-}
-
-function viewEmployee(employeeId) {
-  const employee = getEmployee(employeeId);
-
-  if (!employee) return;
-
-  const punches = state.punches.filter(
-    punch => punch.employeeId === employeeId
-  );
-
-  const hours = punches.reduce(
-    (total, punch) =>
-      total + calculatePunchHours(punch),
-    0
-  );
-
-  alert(
-    `${employee.name}\n` +
-    `Role: ${employee.role}\n` +
-    `Status: ${employee.status}\n` +
-    `Recorded Hours: ${formatDuration(hours)}`
-  );
-}
-
-
-/* =========================================================
-   CHECKLIST
-   ========================================================= */
-
-function toggleChecklistItem(itemId) {
-  const item = state.checklist.find(
-    entry => entry.id === itemId
-  );
-
-  if (!item) return;
-
-  item.completed = !item.completed;
-
-  addActivity(
-    item.completed
-      ? "Checklist item completed"
-      : "Checklist item reopened",
-    item.title,
-    item.completed ? "✓" : "•"
-  );
-
-  saveState();
-  renderAll();
-}
-
-function renderChecklist() {
-  const container = $("checklistJobs");
-
-  if (!container) return;
-
-  container.innerHTML = state.checklist.map(item => `
-    <div class="list-card">
-      <label>
-        <input
-          type="checkbox"
-          ${item.completed ? "checked" : ""}
-          onchange="toggleChecklistItem('${item.id}')"
-        >
-        <strong>${escapeHTML(item.title)}</strong>
-      </label>
-    </div>
-  `).join("");
-}
-
-
-/* =========================================================
-   CASH DROPS
-   ========================================================= */
-
-function newCashDrop() {
-  const amountInput = prompt(
-    "Cash drop amount:",
-    "0.00"
-  );
-
-  if (amountInput === null) return;
-
-  const amount = Number(amountInput);
-
-  if (!Number.isFinite(amount) || amount < 0) {
-    alert("Enter a valid cash amount.");
-    return;
-  }
-
-  const employee = getCurrentEmployee();
-
-  state.cashDrops.unshift({
-    id: uid("cash"),
-    employeeId: employee.id,
-    employee: employee.name,
-    amount,
-    time: new Date().toISOString()
-  });
-
-  addActivity(
-    "Cash drop recorded",
-    `${employee.name} • ${money(amount)}`,
-    "$"
-  );
-
-  saveState();
-  renderAll();
-}
-
-function renderCash() {
-  const expectedElement = $("cashExpected");
-  const depositedElement = $("cashDeposited");
-  const differenceElement = $("cashOverUnder");
-  const list = $("cashDropList");
-
-  const expected = state.jobs
-    .filter(
-      job =>
-        job.status === "Completed" &&
-        String(job.paymentMethod).toLowerCase() === "cash"
-    )
-    .reduce(
-      (total, job) =>
-        total + Number(job.price || 0),
-      0
-    );
-
-  const deposited = state.cashDrops.reduce(
-    (total, drop) =>
-      total + Number(drop.amount || 0),
-    0
-  );
-
-  const difference = deposited - expected;
-
-  if (expectedElement) {
-    expectedElement.textContent = money(expected);
-  }
-
-  if (depositedElement) {
-    depositedElement.textContent = money(deposited);
-  }
-
-  if (differenceElement) {
-    differenceElement.textContent = money(difference);
-  }
-
-  if (!list) return;
-
-  if (!state.cashDrops.length) {
-    list.innerHTML = `
-      <div class="empty-state">
-        No cash drops recorded.
-      </div>
-    `;
-    return;
-  }
-
-  list.innerHTML = state.cashDrops.map(drop => `
-    <div class="list-card">
-      <div>
-        <strong>${money(drop.amount)}</strong>
-        <div>${escapeHTML(drop.employee)}</div>
-        <div>
-          ${formatDate(drop.time)}
-          •
-          ${formatTime(drop.time)}
-        </div>
-      </div>
-    </div>
-  `).join("");
-}/* =========================================================
-   MYSERVICE — COMPLETE EMPLOYEE SCHEDULE FIX
-   ========================================================= */
-
-const ACTIVE_PAGE_KEY = "myservice_active_page";
 
 function scheduleTimeToMinutes(value) {
-  if (!value) return 0;
+  if (!value) return null;
 
   const match = String(value)
     .trim()
     .match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
 
-  if (!match) return 0;
+  if (!match) return null;
 
   let hour = Number(match[1]);
   const minute = Number(match[2]);
   const period = match[3].toUpperCase();
+
+  if (
+    hour < 1 ||
+    hour > 12 ||
+    minute < 0 ||
+    minute > 59
+  ) {
+    return null;
+  }
 
   if (period === "PM" && hour !== 12) {
     hour += 12;
@@ -1615,28 +1080,25 @@ function calculateScheduledHours(shift) {
   const start = scheduleTimeToMinutes(shift.start);
   let end = scheduleTimeToMinutes(shift.end);
 
-  if (!start && start !== 0) return 0;
-  if (!end && end !== 0) return 0;
+  if (start === null || end === null) {
+    return 0;
+  }
 
   if (end < start) {
-    end += 24 * 60;
+    end += 1440;
   }
 
   const grossMinutes = end - start;
-  const breakMinutes = Number(shift.breakMinutes || 0);
+
+  const breakMinutes = Math.max(
+    0,
+    Number(shift.breakMinutes || 0)
+  );
 
   return Math.max(
     0,
     (grossMinutes - breakMinutes) / 60
   );
-}
-
-function formatScheduleHours(value) {
-  const hours = Math.max(0, Number(value || 0));
-  const whole = Math.floor(hours);
-  const minutes = Math.round((hours - whole) * 60);
-
-  return `${whole}h ${minutes}m`;
 }
 
 function getWeekStartFromDate(dateValue) {
@@ -1660,12 +1122,11 @@ function getEmployeeWeekHours(employeeId, dateValue) {
   if (!weekStart) return 0;
 
   return state.schedule
-    .filter(shift => {
-      return (
+    .filter(
+      shift =>
         shift.employeeId === employeeId &&
         getWeekStartFromDate(shift.date) === weekStart
-      );
-    })
+    )
     .reduce(
       (total, shift) =>
         total + calculateScheduledHours(shift),
@@ -1674,8 +1135,11 @@ function getEmployeeWeekHours(employeeId, dateValue) {
 }
 
 function addScheduleItem() {
-  if (!Array.isArray(state.schedule)) {
-    state.schedule = [];
+  if (!canManageEmployees()) {
+    alert(
+      "Only Admin or Manager accounts can create schedules."
+    );
+    return;
   }
 
   if (!state.employees.length) {
@@ -1731,14 +1195,26 @@ function addScheduleItem() {
     "9:00 AM"
   );
 
-  if (!startTime) return;
+  if (
+    !startTime ||
+    scheduleTimeToMinutes(startTime) === null
+  ) {
+    alert("Use a time like 9:00 AM.");
+    return;
+  }
 
   const endTime = prompt(
     "Scheduled end time:",
     "5:00 PM"
   );
 
-  if (!endTime) return;
+  if (
+    !endTime ||
+    scheduleTimeToMinutes(endTime) === null
+  ) {
+    alert("Use a time like 5:00 PM.");
+    return;
+  }
 
   const breakInput = prompt(
     "Scheduled unpaid break in minutes:",
@@ -1773,8 +1249,6 @@ function addScheduleItem() {
 
   state.schedule.push(shift);
 
-  saveState();
-
   addActivity(
     "Employee scheduled",
     `${employee.name} • ${shiftDate} • ${startTime} - ${endTime}`,
@@ -1782,23 +1256,24 @@ function addScheduleItem() {
   );
 
   saveState();
-  renderSchedule();
-
-  alert(
+  renderAll();
+     alert(
     `${employee.name} scheduled successfully.\n\n` +
     `Date: ${shiftDate}\n` +
     `Hours: ${startTime} - ${endTime}\n` +
     `Break: ${breakMinutes} minutes\n` +
-    `Paid scheduled time: ${formatScheduleHours(
+    `Day total: ${formatDuration(
       shift.totalHours
     )}\n` +
-    `Week total: ${formatScheduleHours(
+    `Week total: ${formatDuration(
       getEmployeeWeekHours(employee.id, shiftDate)
     )}`
   );
 }
 
 function deleteScheduleItem(shiftId) {
+  if (!canManageEmployees()) return;
+
   const shift = state.schedule.find(
     item => item.id === shiftId
   );
@@ -1817,18 +1292,20 @@ function deleteScheduleItem(shiftId) {
     item => item.id !== shiftId
   );
 
+  addActivity(
+    "Scheduled shift deleted",
+    `${shift.employee} • ${shift.date}`,
+    "−"
+  );
+
   saveState();
-  renderSchedule();
+  renderAll();
 }
 
 function renderSchedule() {
   const grid = $("scheduleGrid");
 
   if (!grid) return;
-
-  if (!Array.isArray(state.schedule)) {
-    state.schedule = [];
-  }
 
   const user = getCurrentUser();
 
@@ -1841,16 +1318,15 @@ function renderSchedule() {
   }
 
   shifts.sort((a, b) => {
-    const dateCompare =
-      String(a.date).localeCompare(String(b.date));
+    const dateCompare = String(a.date).localeCompare(
+      String(b.date)
+    );
 
-    if (dateCompare !== 0) {
-      return dateCompare;
-    }
+    if (dateCompare !== 0) return dateCompare;
 
     return (
-      scheduleTimeToMinutes(a.start) -
-      scheduleTimeToMinutes(b.start)
+      (scheduleTimeToMinutes(a.start) || 0) -
+      (scheduleTimeToMinutes(b.start) || 0)
     );
   });
 
@@ -1859,50 +1335,29 @@ function renderSchedule() {
       <div class="empty-state">
         <strong>No employee schedules saved yet.</strong>
         <div style="margin-top:8px;">
-          Tap + Add Schedule Item to create a shift.
+          ${
+            canManageEmployees()
+              ? "Tap + Add Employee Schedule to create a shift."
+              : "You do not have any scheduled shifts yet."
+          }
         </div>
       </div>
     `;
     return;
   }
 
-  const employeeWeekTotals = {};
-
-  shifts.forEach(shift => {
-    const weekStart =
-      getWeekStartFromDate(shift.date);
-
-    const key =
-      `${shift.employeeId}-${weekStart}`;
-
-    employeeWeekTotals[key] =
-      getEmployeeWeekHours(
-        shift.employeeId,
-        shift.date
-      );
-  });
-
   grid.innerHTML = shifts.map(shift => {
     const dailyHours =
       calculateScheduledHours(shift);
 
-    const weekStart =
-      getWeekStartFromDate(shift.date);
-
-    const weekKey =
-      `${shift.employeeId}-${weekStart}`;
-
     const weeklyHours =
-      employeeWeekTotals[weekKey] || 0;
-
-    const canManage =
-      !user ||
-      user.role === "Admin" ||
-      user.role === "Manager";
+      getEmployeeWeekHours(
+        shift.employeeId,
+        shift.date
+      );
 
     return `
-      <div class="list-card"
-           style="margin-bottom:12px;">
+      <div class="list-card" style="margin-bottom:12px;">
         <div style="width:100%;">
           <div style="
             display:flex;
@@ -1921,7 +1376,7 @@ function renderSchedule() {
             </div>
 
             ${
-              canManage
+              canManageEmployees()
                 ? `
                   <button
                     type="button"
@@ -1947,8 +1402,7 @@ function renderSchedule() {
           <div style="margin-top:10px;">
             <strong>Scheduled Break</strong>
             <div>
-              ${Number(shift.breakMinutes || 0)}
-              minutes
+              ${Number(shift.breakMinutes || 0)} minutes
             </div>
           </div>
 
@@ -1959,12 +1413,12 @@ function renderSchedule() {
           ">
             <div>
               <strong>Day Total:</strong>
-              ${formatScheduleHours(dailyHours)}
+              ${formatDuration(dailyHours)}
             </div>
 
             <div style="margin-top:5px;">
               <strong>Week Total:</strong>
-              ${formatScheduleHours(weeklyHours)}
+              ${formatDuration(weeklyHours)}
             </div>
           </div>
         </div>
@@ -1973,7 +1427,7 @@ function renderSchedule() {
   }).join("");
 }
 
-function installScheduleFix() {
+function installScheduleButton() {
   const scheduleSection = $("schedule");
 
   if (!scheduleSection) return;
@@ -1981,57 +1435,32 @@ function installScheduleFix() {
   const addButton =
     scheduleSection.querySelector(".primary-button");
 
-  if (addButton) {
-    addButton.removeAttribute("onclick");
+  if (!addButton) return;
 
-    addButton.onclick = function(event) {
-      event.preventDefault();
-      addScheduleItem();
-    };
-
-    addButton.textContent = "+ Add Employee Schedule";
+  if (!canManageEmployees()) {
+    addButton.style.display = "none";
+    return;
   }
 
-  renderSchedule();
+  addButton.style.display = "";
+  addButton.removeAttribute("onclick");
+
+  addButton.onclick = function(event) {
+    event.preventDefault();
+    addScheduleItem();
+  }
+
+  addButton.textContent = "+ Add Employee Schedule";
 }
+/* =========================================================
+   MINIMUM RENDER
+   ========================================================= */
 
-const originalShowSection = showSection;
-
-showSection = function(sectionId) {
-  localStorage.setItem(
-    ACTIVE_PAGE_KEY,
-    sectionId
-  );
-
-  originalShowSection(sectionId);
-
-  if (sectionId === "schedule") {
-    installScheduleFix();
-    renderSchedule();
-  }
-};
-
-function restoreLastMyServicePage() {
-  installScheduleFix();
-
-  const savedPage =
-    localStorage.getItem(ACTIVE_PAGE_KEY);
-
-  if (
-    savedPage &&
-    document.getElementById(savedPage)
-  ) {
-    showSection(savedPage);
-  }
-
+function renderAll() {) {
+  renderClock();
+  renderPunchTable();
+  renderMyPunchLog();
   renderSchedule();
-}
-
-if (document.readyState === "loading") {
-  document.addEventListener(
-    "DOMContentLoaded",
-    restoreLastMyServicePage
-  );
-} else {
-  restoreLastMyServicePage();
+  installScheduleButton();
+  updateClockMessage();
 }
