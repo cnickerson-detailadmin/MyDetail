@@ -1464,6 +1464,7 @@ function renderAll() {
   installScheduleButton();
   updateClockMessage();
 installHomeTimeClock();
+   installLogoutButton();
    
 }
    /* =========================================================
@@ -1608,5 +1609,126 @@ function updateHomeClockDisplay() {
 
   zoneEl.textContent = zone;
 }
+
+/* =========================================================
+   MYSERVICE — TEST LOGIN / LOGOUT
+   ========================================================= */
+
+const TEST_ACCOUNTS = {
+  "developer@admin.myservice.test": { role: "Developer", name: "Developer" },
+
+  "testadmin1@admin.myservice.test": { role: "Admin", name: "Test Admin 1" },
+  "testadmin2@admin.myservice.test": { role: "Admin", name: "Test Admin 2" },
+  "testadmin3@admin.myservice.test": { role: "Admin", name: "Test Admin 3" },
+
+  "testemployee1@employee.myservice.test": { role: "Employee", name: "Test Employee 1" },
+  "testemployee2@employee.myservice.test": { role: "Employee", name: "Test Employee 2" },
+  "testemployee3@employee.myservice.test": { role: "Employee", name: "Test Employee 3" }
+};
+
+const LOGIN_KEY = "myservice_test_login";
+
+function loginTestUser(email, password) {
+  email = email.trim().toLowerCase();
+
+  const account = TEST_ACCOUNTS[email];
+
+  if (!account || password !== "123") {
+    alert("Incorrect email or password.");
+    return false;
+  }
+
+  localStorage.setItem(LOGIN_KEY, email);
+
+  state.currentUser = {
+    id: email,
+    name: account.name,
+    email: email,
+    role: account.role
+  };
+
+  saveState();
+  return true;
+}
+
+function logoutTestUser() {
+  localStorage.removeItem(LOGIN_KEY);
+  location.reload();
+}
+
+function getLoggedInTestUser() {
+  const email = localStorage.getItem(LOGIN_KEY);
+  return email ? TEST_ACCOUNTS[email] || null : null;
+}
+
+function showLoginScreen() {
+  document.body.innerHTML = `
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:#f3f7fc;">
+      <div style="width:100%;max-width:420px;background:white;padding:28px;border-radius:20px;">
+        <h1 style="margin:0 0 6px;">MyService</h1>
+        <p style="margin:0 0 24px;">TEST • Sign in</p>
+
+        <input id="testLoginEmail" type="email" placeholder="Email" style="width:100%;padding:15px;margin-bottom:12px;">
+
+        <input id="testLoginPassword" type="password" placeholder="Password" style="width:100%;padding:15px;margin-bottom:16px;">
+
+        <button id="testLoginButton" class="primary-button" style="width:100%;min-height:52px;">
+          LOGIN
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function activateLoginScreen() {
+  const button = document.getElementById("testLoginButton");
+
+  if (!button) return;
+
+  button.onclick = function () {
+    const email = document.getElementById("testLoginEmail").value;
+    const password = document.getElementById("testLoginPassword").value;
+
+    if (loginTestUser(email, password)) {
+      location.reload();
+    }
+  };
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  const loggedIn = getLoggedInTestUser();
+
+  if (!loggedIn) {
+    showLoginScreen();
+    activateLoginScreen();
+  }
+});
+
+function installLogoutButton() {
+  if (!getLoggedInTestUser()) return;
+
+  const sidebar = document.getElementById("sidebar");
+  if (!sidebar || document.getElementById("testLogoutButton")) return;
+
+  const button = document.createElement("button");
+  button.id = "testLogoutButton";
+  button.type = "button";
+  button.textContent = "LOGOUT";
+  button.className = "outline-button";
+  button.onclick = logoutTestUser;
+
+  sidebar.appendChild(button);
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  if (getLoggedInTestUser()) {
+    installLogoutButton();
+  }
+});
+
+
+
+
+
 
 
