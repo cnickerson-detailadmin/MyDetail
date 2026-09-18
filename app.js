@@ -7,6 +7,7 @@
 
 const STORAGE_KEY = "myservice_restaurant_v4";
 const ACTIVE_PAGE_KEY = "myservice_active_page";
+const TEST_HOURLY_RATE = 17.50;
 
 /* =========================================================
    DEFAULT DATA
@@ -133,45 +134,17 @@ const defaultState = {
   notifications: [],
 
   checklist: [
-    {
-      id: "check-1",
-      title: "Opening equipment check",
-      completed: false
-    },
-    {
-      id: "check-2",
-      title: "Verify refrigerator temperatures",
-      completed: false
-    },
-    {
-      id: "check-3",
-      title: "Sanitize food preparation surfaces",
-      completed: false
-    },
-    {
-      id: "check-4",
-      title: "Restock service stations",
-      completed: false
-    },
-    {
-      id: "check-5",
-      title: "Dining room cleanliness check",
-      completed: false
-    },
-    {
-      id: "check-6",
-      title: "Closing cash reconciliation",
-      completed: false
-    },
-    {
-      id: "check-7",
-      title: "Closing cleaning checklist",
-      completed: false
-    }
-  ],
+    { id: "check-1", title: "Opening equipment check", completed: false },
+    { id: "check-2", title: "Verify refrigerator temperatures", completed: false },
+    { id: "check-3", title: "Sanitize food preparation surfaces", completed: false },
+    { id: "check-4", title: "Restock service stations", completed: false },
+    { id: "check-5", title: "Dining room cleanliness check", completed: false },
+    { id: "check-6", title: "Closing cash reconciliation", completed: false },
+    { id: "check-7", title: "Closing cleaning checklist", completed: false }
+    
+      ],
 
-  activity: [
-    {
+  activity: [    {
       id: "welcome",
       title: "MyService workspace loaded",
       description: "5 Star Restaurant dashboard is ready.",
@@ -180,7 +153,6 @@ const defaultState = {
     }
   ]
 };
-
 
 /* =========================================================
    STORAGE
@@ -275,9 +247,6 @@ function saveState() {
     STORAGE_KEY,
     JSON.stringify(state)
   );
-}
-
-
 /* =========================================================
    HELPERS
    ========================================================= */
@@ -368,6 +337,21 @@ function formatDuration(hours) {
   return `${h}h ${m}m`;
 }
 
+function formatTimer(totalSeconds) {
+  const seconds = Math.max(
+    0,
+    Math.floor(Number(totalSeconds || 0))
+  );
+
+  return [
+    Math.floor(seconds / 3600),
+    Math.floor((seconds % 3600) / 60),
+    seconds % 60
+  ]
+    .map(value => String(value).padStart(2, "0"))
+    .join(":");
+}
+
 function getCurrentUser() {
   return state.currentUser || state.users[0];
 }
@@ -407,125 +391,13 @@ function canManageEmployees() {
 
   return (
     user &&
-    (user.role === "Developer" ||
+    (
+      user.role === "Developer" ||
       user.role === "Admin" ||
-      user.role === "Manager")
+      user.role === "Manager"
+    )
   );
 }
-
-
-/* =========================================================
-   ACTIVITY
-   ========================================================= */
-
-function addActivity(title, description = "", icon = "•") {
-  state.activity.unshift({
-    id: uid("activity"),
-    title,
-    description,
-    time: new Date().toISOString(),
-    icon
-  });
-
-  state.activity = state.activity.slice(0, 100);
-
-  saveState();
-}
-
-
-/* =========================================================
-   NAVIGATION
-   ========================================================= */
-
-function showSection(sectionId) {
-  const target = $(sectionId);
-
-  if (!target) {
-    console.warn("Missing section:", sectionId);
-    return;
-  }
-
-  localStorage.setItem(
-    ACTIVE_PAGE_KEY,
-    sectionId
-  );
-
-  document.querySelectorAll(".page").forEach(page => {
-    page.classList.remove("active");
-  });
-
-  target.classList.add("active");
-
-  document.querySelectorAll(".nav").forEach(button => {
-    button.classList.remove("active");
-
-    const action = button.getAttribute("onclick") || "";
-
-    if (
-      action.includes(`showSection('${sectionId}')`) ||
-      action.includes(`showSection("${sectionId}")`)
-    ) {
-      button.classList.add("active");
-    }
-  });
-
-  const sidebar = $("sidebar");
-
-  if (sidebar && window.innerWidth <= 900) {
-    sidebar.classList.remove("open");
-  }
-
-  window.scrollTo(0, 0);
-
-  renderAll();
-}
-
-function toggleSidebar() {
-  const sidebar = $("sidebar");
-
-  if (sidebar) {
-    sidebar.classList.toggle("open");
-  }
-}
-
-
-/* =========================================================
-   DATE / TIME
-   ========================================================= */
-
-function updateDateTime() {
-  const now = new Date();
-
-  if ($("currentDate")) {
-    $("currentDate").textContent =
-      now.toLocaleDateString("en-US", {
-        weekday: "long",
-        month: "short",
-        day: "numeric"
-      });
-  }
-
-  if ($("currentTime")) {
-    $("currentTime").textContent =
-      now.toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit"
-      });
-  }
-
-  if ($("liveClock")) {
-    $("liveClock").textContent =
-      now.toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit"
-      });
-  }
-
-  updateClockMessage();
-}
-
-
 /* =========================================================
    TIME CLOCK
    ========================================================= */
@@ -583,11 +455,24 @@ function calculatePunchHours(
     end
   );
 
-  const breakHours = (punch.breaks || []).reduce((total, item) => {
-    if (!item.start) return total;
-    const breakEnd = item.end || (includeOpen ? end : null);
-    return total + (breakEnd ? hoursBetween(item.start, breakEnd) : 0);
-  }, 0);
+  const breakHours =
+    (punch.breaks || []).reduce(
+      (total, item) => {
+        if (!item.start) return total;
+
+        const breakEnd =
+          item.end ||
+          (includeOpen ? end : null);
+
+        return total +
+          (
+            breakEnd
+              ? hoursBetween(item.start, breakEnd)
+              : 0
+          );
+      },
+      0
+    );
 
   return Math.max(0, gross - breakHours);
 }
@@ -608,6 +493,8 @@ function clockIn() {
     clockOut: null,
     breaks: [],
     totalHours: null,
+    hourlyRate: TEST_HOURLY_RATE,
+    estimatedGrossPay: null,
     correctionRequested: false
   });
 
@@ -630,13 +517,14 @@ function startBreak() {
   const punch = getOpenPunch(employee.id);
 
   if (!punch) {
-    alert("Clock in before starting a break.");
+    alert("Clock in before starting lunch.");
     return;
   }
 
-  const existing = (punch.breaks || []).find(
-    item => item.start && !item.end
-  );
+  const existing =
+    (punch.breaks || []).find(
+      item => item.start && !item.end
+    );
 
   if (existing) return;
 
@@ -657,8 +545,8 @@ function startBreak() {
   employee.breakStart = now;
 
   addActivity(
-    `${employee.name} started break`,
-    formatTime(now),
+    `${employee.name} started lunch`,
+    `${getLunchMinutes()} minute lunch`,
     "☕"
   );
 
@@ -672,20 +560,22 @@ function endBreak() {
 
   if (!punch) return;
 
-  const openBreak = (punch.breaks || []).find(
-    item => item.start && !item.end
-  );
+  const openBreak =
+    (punch.breaks || []).find(
+      item => item.start && !item.end
+    );
 
   if (!openBreak) return;
 
   const now = new Date().toISOString();
 
   openBreak.end = now;
+
   employee.status = "Working";
   employee.breakStart = null;
 
   addActivity(
-    `${employee.name} ended break`,
+    `${employee.name} ended lunch`,
     formatTime(now),
     "✓"
   );
@@ -702,9 +592,10 @@ function clockOut() {
 
   const now = new Date().toISOString();
 
-  const openBreak = (punch.breaks || []).find(
-    item => item.start && !item.end
-  );
+  const openBreak =
+    (punch.breaks || []).find(
+      item => item.start && !item.end
+    );
 
   if (openBreak) {
     openBreak.end = now;
@@ -713,6 +604,11 @@ function clockOut() {
   punch.clockOut = now;
   punch.totalHours =
     calculatePunchHours(punch, false);
+
+  punch.hourlyRate = TEST_HOURLY_RATE;
+  punch.estimatedGrossPay =
+    Number(punch.totalHours || 0) *
+    TEST_HOURLY_RATE;
 
   employee.status = "Off Clock";
   employee.clockIn = null;
@@ -732,8 +628,20 @@ function clockOut() {
 
   saveState();
   renderAll();
-}
 
+  setTimeout(() => {
+    alert(
+      `SHIFT COMPLETE\n\n` +
+      `Hours worked today: ${formatDuration(
+        punch.totalHours
+      )}\n` +
+      `Hourly rate: ${money(TEST_HOURLY_RATE)}/hr\n` +
+      `Estimated gross pay today: ${money(
+        punch.estimatedGrossPay
+      )}`
+    );
+  }, 100);
+}
 function toggleClock() {
   const employee = getCurrentEmployee();
   const punch = getOpenPunch(employee.id);
@@ -773,9 +681,10 @@ function ensureBreakButton() {
 
     if (!punch) return;
 
-    const openBreak = (punch.breaks || []).find(
-      item => item.start && !item.end
-    );
+    const openBreak =
+      (punch.breaks || []).find(
+        item => item.start && !item.end
+      );
 
     if (openBreak) {
       endBreak();
@@ -784,7 +693,6 @@ function ensureBreakButton() {
     }
   };
 }
-
 function updateClockMessage() {
   const message = $("clockMessage");
 
@@ -799,15 +707,17 @@ function updateClockMessage() {
     return;
   }
 
-  const openBreak = (punch.breaks || []).find(
-    item => item.start && !item.end
-  );
+  const openBreak =
+    (punch.breaks || []).find(
+      item => item.start && !item.end
+    );
 
-  const worked = calculatePunchHours(punch);
+  const worked =
+    calculatePunchHours(punch);
 
   if (openBreak) {
     message.textContent =
-      `On break • ${formatDuration(worked)} worked`;
+      `On lunch • ${formatDuration(worked)} worked`;
   } else {
     message.textContent =
       `Clocked in at ${formatTime(
@@ -841,22 +751,25 @@ function renderClock() {
     return;
   }
 
-  const openBreak = (punch.breaks || []).find(
-    item => item.start && !item.end
-  );
+  const openBreak =
+    (punch.breaks || []).find(
+      item => item.start && !item.end
+    );
 
-  status.textContent = openBreak
-    ? "ON BREAK"
-    : "CLOCKED IN";
+  status.textContent =
+    openBreak
+      ? "ON LUNCH"
+      : "CLOCKED IN";
 
   clockButton.textContent = "CLOCK OUT";
 
   if (breakButton) {
     breakButton.disabled = false;
     breakButton.style.opacity = "1";
-    breakButton.textContent = openBreak
-      ? "END LUNCH"
-      : "START LUNCH";
+    breakButton.textContent =
+      openBreak
+        ? "END LUNCH"
+        : "START LUNCH";
   }
 }
 
@@ -873,14 +786,16 @@ function renderPunchTable() {
   const today = dateKey();
   const user = getCurrentUser();
 
-  let punches = state.punches.filter(
-    punch => punch.date === today
-  );
+  let punches =
+    state.punches.filter(
+      punch => punch.date === today
+    );
 
   if (user && user.role === "Employee") {
-    punches = punches.filter(
-      punch => punch.employeeId === user.id
-    );
+    punches =
+      punches.filter(
+        punch => punch.employeeId === user.id
+      );
   }
 
   if (!punches.length) {
@@ -894,30 +809,34 @@ function renderPunchTable() {
     return;
   }
 
-  table.innerHTML = punches.map(punch => {
-    const openBreak = (punch.breaks || []).some(
-      item => item.start && !item.end
-    );
+  table.innerHTML =
+    punches.map(punch => {
+      const openBreak =
+        (punch.breaks || []).some(
+          item => item.start && !item.end
+        );
 
-    const status = punch.clockOut
-      ? "Completed"
-      : openBreak
-        ? "On Break"
-        : "Working";
+      const status =
+        punch.clockOut
+          ? "Completed"
+          : openBreak
+            ? "On Lunch"
+            : "Working";
 
-    return `
-      <tr>
-        <td>${escapeHTML(punch.employee)}</td>
-        <td>${escapeHTML(status)}</td>
-        <td>${formatTime(punch.clockIn)}</td>
-        <td>${formatTime(punch.clockOut)}</td>
-        <td>${formatDuration(
-          calculatePunchHours(punch)
-        )}</td>
-      </tr>
-    `;
-  }).join("");
+      return `
+        <tr>
+          <td>${escapeHTML(punch.employee)}</td>
+          <td>${escapeHTML(status)}</td>
+          <td>${formatTime(punch.clockIn)}</td>
+          <td>${formatTime(punch.clockOut)}</td>
+          <td>${formatDuration(
+            calculatePunchHours(punch)
+          )}</td>
+        </tr>
+      `;
+    }).join("");
 }
+
 function renderMyPunchLog() {
   const container = $("myPunchLog");
   const weekHours = $("weekHours");
@@ -928,17 +847,24 @@ function renderMyPunchLog() {
   const employee = getCurrentEmployee();
   const today = dateKey();
 
-  const myPunches = state.punches.filter(
-    punch => punch.employeeId === employee.id
-  );
-
-  const todayTotal = myPunches
-    .filter(punch => punch.date === today)
-    .reduce(
-      (total, punch) =>
-        total + calculatePunchHours(punch),
-      0
+  const myPunches =
+    state.punches.filter(
+      punch =>
+        punch.employeeId === employee.id
     );
+
+  const todayTotal =
+    myPunches
+      .filter(
+        punch =>
+          punch.date === today
+      )
+      .reduce(
+        (total, punch) =>
+          total +
+          calculatePunchHours(punch),
+        0
+      );
 
   const now = new Date();
   const weekStart = new Date(now);
@@ -984,11 +910,22 @@ function renderMyPunchLog() {
     const breaks = (punch.breaks || [])
       .map(item => `
         <div>
-          Break: ${formatTime(item.start)} –
+          Lunch: ${formatTime(item.start)} –
           ${item.end ? formatTime(item.end) : "Active"}
         </div>
       `)
       .join("");
+
+    const pay =
+      punch.clockOut &&
+      Number.isFinite(Number(punch.estimatedGrossPay))
+        ? `
+          <div>
+            Estimated gross pay:
+            ${money(punch.estimatedGrossPay)}
+          </div>
+        `
+        : "";
 
     return `
       <div class="list-card">
@@ -1002,6 +939,7 @@ function renderMyPunchLog() {
               calculatePunchHours(punch)
             )}
           </div>
+          ${pay}
         </div>
 
         <button
@@ -1133,8 +1071,7 @@ function getEmployeeWeekHours(employeeId, dateValue) {
         shift.employeeId === employeeId &&
         getWeekStartFromDate(shift.date) === weekStart
     )
-    .reduce(
-      (total, shift) =>
+    .reduce(      (total, shift) =>
         total + calculateScheduledHours(shift),
       0
     );
@@ -1224,7 +1161,7 @@ function addScheduleItem() {
 
   const breakInput = prompt(
     "Scheduled unpaid break in minutes:",
-    "30"
+    String(getLunchMinutes())
   );
 
   if (breakInput === null) return;
@@ -1263,7 +1200,8 @@ function addScheduleItem() {
 
   saveState();
   renderAll();
-     alert(
+
+  alert(
     `${employee.name} scheduled successfully.\n\n` +
     `Date: ${shiftDate}\n` +
     `Hours: ${startTime} - ${endTime}\n` +
@@ -1307,7 +1245,6 @@ function deleteScheduleItem(shiftId) {
   saveState();
   renderAll();
 }
-
 function renderSchedule() {
   const grid = $("scheduleGrid");
 
@@ -1406,7 +1343,7 @@ function renderSchedule() {
           </div>
 
           <div style="margin-top:10px;">
-            <strong>Scheduled Break</strong>
+            <strong>Scheduled Lunch</strong>
             <div>
               ${Number(shift.breakMinutes || 0)} minutes
             </div>
@@ -1454,65 +1391,137 @@ function installScheduleButton() {
   addButton.onclick = function(event) {
     event.preventDefault();
     addScheduleItem();
-  }
+  };
 
   addButton.textContent = "+ Add Employee Schedule";
 }
+
+
 /* =========================================================
-   MINIMUM RENDER
+   LUNCH SETTINGS + RENDER
    ========================================================= */
 
 function getLunchMinutes() {
   const value = Number(state.settings.lunchMinutes);
-  return [30, 40, 45, 60].includes(value) ? value : 30;
+
+  return [30, 40, 45, 60].includes(value)
+    ? value
+    : 30;
 }
 
 function countdownText(seconds) {
-  seconds = Math.max(0, Math.ceil(seconds));
-  const minutes = Math.floor(seconds / 60);
-  return `${String(minutes).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+  return formatTimer(seconds);
 }
 
 function shiftBounds(shift) {
-  const startMinutes = scheduleTimeToMinutes(shift.start);
-  const endMinutes = scheduleTimeToMinutes(shift.end);
-  if (startMinutes === null || endMinutes === null) return { start: NaN, end: NaN };
-  const start = new Date(`${shift.date}T00:00:00`);
-  const end = new Date(`${shift.date}T00:00:00`);
+  const startMinutes =
+    scheduleTimeToMinutes(shift.start);
+
+  const endMinutes =
+    scheduleTimeToMinutes(shift.end);
+
+  if (
+    startMinutes === null ||
+    endMinutes === null
+  ) {
+    return {
+      start: NaN,
+      end: NaN
+    };
+  }
+
+  const start =
+    new Date(`${shift.date}T00:00:00`);
+
+  const end =
+    new Date(`${shift.date}T00:00:00`);
+
   start.setMinutes(startMinutes);
   end.setMinutes(endMinutes);
-  if (end <= start) end.setDate(end.getDate() + 1);
-  return { start: start.getTime(), end: end.getTime() };
+
+  if (end <= start) {
+    end.setDate(end.getDate() + 1);
+  }
+
+  return {
+    start: start.getTime(),
+    end: end.getTime()
+  };
 }
 
 function installLunchSettings() {
   const section = $("settings");
+
   if (!section) return;
+
   let panel = $("lunch-settings");
-  const allowed = ["Admin", "Developer"].includes(getCurrentUser().role);
-  if (!allowed) { if (panel) panel.hidden = true; return; }
+
+  const allowed =
+    ["Admin", "Developer"].includes(
+      getCurrentUser().role
+    );
+
+  if (!allowed) {
+    if (panel) panel.hidden = true;
+    return;
+  }
+
   if (!panel) {
     panel = document.createElement("div");
     panel.id = "lunch-settings";
     panel.className = "panel";
-    panel.innerHTML = `<h2>Company Setup — Lunch Duration</h2>
-      <label for="company-lunch-minutes">Standard lunch countdown</label>
-      <select id="company-lunch-minutes">${[30,40,45,60].map(minutes =>
-        `<option value="${minutes}">${minutes} minutes</option>`).join("")}</select>
-      <p>Applies to new lunches. Active lunches keep their original duration. Employees must tap End Lunch themselves.</p>
-      <p>Test setup: saved in this browser only.</p>`;
+
+    panel.innerHTML = `
+      <h2>Company Setup — Lunch Duration</h2>
+
+      <label for="company-lunch-minutes">
+        Standard lunch countdown
+      </label>
+
+      <select id="company-lunch-minutes">
+        ${[30, 40, 45, 60]
+          .map(
+            minutes =>
+              `<option value="${minutes}">
+                ${minutes} minutes
+              </option>`
+          )
+          .join("")}
+      </select>
+
+      <p>
+        30 minutes is the standard default.
+        Active lunches keep their original duration.
+      </p>
+
+      <p>
+        Employees must tap End Lunch themselves.
+      </p>
+    `;
+
     section.appendChild(panel);
-    $("company-lunch-minutes").onchange = function () {
-      if (!["Admin", "Developer"].includes(getCurrentUser().role)) return;
-      const minutes = Number(this.value);
-      if (![30,40,45,60].includes(minutes)) return;
-      state.settings.lunchMinutes = minutes;
-      saveState();
-      updateHomeClockDisplay();
-    };
+
+    $("company-lunch-minutes").onchange =
+      function () {
+        const minutes = Number(this.value);
+
+        if (
+          ![30, 40, 45, 60].includes(minutes)
+        ) {
+          return;
+        }
+
+        state.settings.lunchMinutes = minutes;
+
+        saveState();
+        updateHomeClockDisplay();
+      };
   }
+
   panel.hidden = false;
-  $("company-lunch-minutes").value = String(getLunchMinutes());
+
+  $("company-lunch-minutes").value =
+    String(getLunchMinutes());
 }
 
 function renderAll() {
@@ -1525,53 +1534,71 @@ function renderAll() {
   updateClockMessage();
   installHomeTimeClock();
   installLogoutButton();
-   
-}
-   /* =========================================================
+}/* =========================================================
    HOMEPAGE EMPLOYEE TIME CLOCK
    ========================================================= */
 
 function installHomeTimeClock() {
-  const dashboard = document.getElementById("dashboard");
+  const dashboard = $("dashboard");
+
   if (!dashboard) return;
 
-  let box = document.getElementById("home-time-clock");
+  let box = $("home-time-clock");
 
   if (box) {
     updateHomeClockDisplay();
     return;
   }
 
-  if (!box) {
-    box = document.createElement("div");
-    box.id = "home-time-clock";
-    box.className = "card";
+  box = document.createElement("div");
+  box.id = "home-time-clock";
+  box.className = "card";
 
-    box.style.cssText = `
-      margin-bottom: 18px;
-      padding: 20px;
-      text-align: center;
-    `;
+  box.style.cssText = `
+    margin-bottom:18px;
+    padding:20px;
+    text-align:center;
+  `;
 
-    dashboard.insertBefore(box, dashboard.firstChild);
-  }
+  dashboard.insertBefore(
+    box,
+    dashboard.firstChild
+  );
 
   box.innerHTML = `
-    <div style="font-size:13px;font-weight:700;letter-spacing:1.5px;">
+    <div style="
+      font-size:13px;
+      font-weight:700;
+      letter-spacing:1.5px;
+    ">
       TIME CLOCK
     </div>
 
-    <div id="home-live-date"
-         style="margin-top:10px;font-size:16px;font-weight:600;">
-    </div>
+    <div
+      id="home-live-date"
+      style="
+        margin-top:10px;
+        font-size:16px;
+        font-weight:600;
+      "
+    ></div>
 
-    <div id="home-live-time"
-         style="font-size:28px;font-weight:800;margin-top:3px;">
-    </div>
+    <div
+      id="home-live-time"
+      style="
+        font-size:28px;
+        font-weight:800;
+        margin-top:3px;
+      "
+    ></div>
 
-    <div id="home-time-zone"
-         style="font-size:13px;opacity:.7;margin-top:2px;">
-    </div>
+    <div
+      id="home-time-zone"
+      style="
+        font-size:13px;
+        opacity:.7;
+        margin-top:2px;      "
+    ></div>
 
     <div style="
       margin-top:18px;
@@ -1579,28 +1606,106 @@ function installHomeTimeClock() {
       border-radius:16px;
       background:rgba(128,128,128,.08);
     ">
-      <div style="font-size:12px;font-weight:800;opacity:.6;">
+      <div style="
+        font-size:12px;
+        font-weight:800;
+        opacity:.6;
+      ">
         TODAY'S SCHEDULE
       </div>
 
-      <div id="home-scheduled-hours"
-           style="font-size:18px;font-weight:750;margin-top:5px;">
+      <div
+        id="home-scheduled-hours"
+        style="
+          font-size:18px;
+          font-weight:750;
+          margin-top:5px;
+        "
+      >
         No schedule found
       </div>
     </div>
 
-    <div style="margin-top:18px;">
-      <div style="font-size:12px;font-weight:800;opacity:.6;">
-        TIME WORKED
+    <div style="
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px;
+      margin-top:18px;
+    ">
+      <div style="
+        padding:14px;
+        border-radius:16px;
+        background:rgba(128,128,128,.08);
+      ">
+        <div style="
+          font-size:12px;
+          font-weight:800;
+          opacity:.6;
+        ">
+          SHIFT ELAPSED
+        </div>
+
+        <div
+          id="home-work-timer"
+          style="
+            font-size:30px;
+            font-weight:850;
+            margin-top:4px;
+          "
+        >
+          00:00:00
+        </div>
       </div>
 
-      <div id="home-work-timer"
-           style="font-size:34px;font-weight:850;margin-top:3px;">
+      <div style="
+        padding:14px;
+        border-radius:16px;
+        background:rgba(128,128,128,.08);
+      ">
+        <div style="
+          font-size:12px;
+          font-weight:800;
+          opacity:.6;
+        ">
+          SHIFT REMAINING
+        </div>
+
+        <div
+          id="home-shift-timer"
+          style="
+            font-size:30px;
+            font-weight:850;
+            margin-top:4px;
+          "
+        >
+          00:00:00
+        </div>
+      </div>
+    </div>
+
+    <div style="
+      margin-top:10px;
+      padding:14px;
+      border-radius:16px;
+      background:rgba(128,128,128,.08);
+    ">
+      <div style="
+        font-size:12px;
+        font-weight:800;
+        opacity:.6;
+      ">
+        LUNCH REMAINING
+      </div>
+
+      <div
+        id="home-lunch-timer"
+        style="
+          font-size:30px;
+          font-weight:850;
+          margin-top:4px;
+        "
+      >
         00:00:00
-      </div>
-
-      <div style="font-size:12px;opacity:.6;">
-        Meal periods excluded
       </div>
     </div>
 
@@ -1614,7 +1719,11 @@ function installHomeTimeClock() {
         type="button"
         class="primary-button"
         id="home-clock-button"
-        style="min-height:58px;font-size:16px;font-weight:800;"
+        style="
+          min-height:58px;
+          font-size:16px;
+          font-weight:800;
+        "
       >
         CLOCK IN
       </button>
@@ -1623,29 +1732,42 @@ function installHomeTimeClock() {
         type="button"
         class="outline-button"
         id="home-lunch-button"
-        style="min-height:58px;font-size:16px;font-weight:800;"
+        style="
+          min-height:58px;
+          font-size:16px;
+          font-weight:800;
+        "
       >
         START LUNCH
       </button>
     </div>
 
-    <div id="home-clock-status"
-         style="margin-top:12px;font-size:13px;opacity:.7;">
+    <div
+      id="home-clock-status"
+      style="
+        margin-top:12px;
+        font-size:13px;
+        opacity:.7;
+      "
+    >
       Not clocked in
-    </div>
-    <div style="margin-top:16px;" aria-live="off">
-      <strong>Lunch remaining</strong>
-      <div id="home-lunch-timer" style="font-size:26px;">30:00</div>
-      <strong>Shift remaining</strong>
-      <div id="home-shift-timer" style="font-size:26px;">No scheduled shift</div>
     </div>
   `;
 
   $("home-clock-button").onclick = toggleClock;
+
   $("home-lunch-button").onclick = function () {
-    const punch = getOpenPunch(getCurrentEmployee().id);
+    const employee = getCurrentEmployee();
+    const punch = getOpenPunch(employee.id);
+
     if (!punch) return;
-    if ((punch.breaks || []).some(item => item.start && !item.end)) {
+
+    const openLunch =
+      (punch.breaks || []).some(
+        item => item.start && !item.end
+      );
+
+    if (openLunch) {
       endBreak();
     } else {
       startBreak();
@@ -1664,136 +1786,392 @@ function installHomeTimeClock() {
 }
 
 function updateHomeClockDisplay() {
-  const dateEl = document.getElementById("home-live-date");
-  const timeEl = document.getElementById("home-live-time");
-  const zoneEl = document.getElementById("home-time-zone");
+  const dateEl = $("home-live-date");
+  const timeEl = $("home-live-time");
+  const zoneEl = $("home-time-zone");
 
-  if (!dateEl || !timeEl || !zoneEl) return;
+  if (
+    !dateEl ||
+    !timeEl ||
+    !zoneEl
+  ) {
+    return;
+  }
 
   const now = new Date();
 
-  dateEl.textContent = now.toLocaleDateString([], {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric"
-  });
+  dateEl.textContent =
+    now.toLocaleDateString([], {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric"
+    });
 
-  timeEl.textContent = now.toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit"
-  });
+  timeEl.textContent =
+    now.toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit"
+    });
 
-  const parts = new Intl.DateTimeFormat([], {
-    timeZoneName: "short"
-  }).formatToParts(now);
+  const parts =
+    new Intl.DateTimeFormat([], {
+      timeZoneName: "short"
+    }).formatToParts(now);
 
-  const zone =
-    parts.find(part => part.type === "timeZoneName")?.value || "";
+  zoneEl.textContent =
+    parts.find(
+      part =>
+        part.type === "timeZoneName"
+    )?.value || "";
 
-  zoneEl.textContent = zone;
+  const employee =
+    getCurrentEmployee();
 
-  const employee = getCurrentEmployee();
-  const punch = getOpenPunch(employee.id);
-  const onLunch = punch && (punch.breaks || []).some(item => item.start && !item.end);
-  const lunch = punch && (punch.breaks || []).find(item => item.start && !item.end);
-  const lunchSeconds = lunch ? Math.ceil((new Date(lunch.start).getTime() +
-    (lunch.durationMinutes || getLunchMinutes()) * 60000 - now.getTime()) / 1000) : getLunchMinutes() * 60;
-  $("home-lunch-timer").textContent = lunchSeconds <= 0 ?
-    "00:00 — Lunch time reached; tap End Lunch" : countdownText(lunchSeconds);
-  const activeShift = state.schedule.map(shift => ({ shift, ...shiftBounds(shift) }))
-    .filter(item => item.shift.employeeId === employee.id && item.start <= now.getTime() && item.end > now.getTime())
-    .sort((a, b) => a.end - b.end)[0];
-  const endedShift = punch && state.schedule.map(shift => ({ shift, ...shiftBounds(shift) }))
-    .some(item => item.shift.employeeId === employee.id && item.end <= now.getTime() &&
-      item.end > new Date(punch.clockIn).getTime());
-  $("home-shift-timer").textContent = activeShift ?
-    countdownText(Math.ceil((activeShift.end - now.getTime()) / 1000)) :
-    endedShift ? "00:00 — Scheduled shift ended; still clocked in" : "No active scheduled shift";
-  const worked = state.punches
-    .filter(item => item.employeeId === employee.id &&
-      (item.date === dateKey() || item === punch))
-    .reduce((total, item) => total + calculatePunchHours(item), 0);
-  const seconds = Math.floor(worked * 3600);
-  $("home-work-timer").textContent = [
-    Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60
-  ].map(value => String(value).padStart(2, "0")).join(":");
-  $("home-clock-button").textContent = punch ? "CLOCK OUT" : "CLOCK IN";
-  $("home-lunch-button").textContent = onLunch ? "END LUNCH" : "START LUNCH";
-  $("home-lunch-button").disabled = !punch;
-  $("home-clock-status").textContent = onLunch ? "On lunch — timer paused" :
-    punch ? "Clocked in" : "Not clocked in";
-  const shifts = state.schedule.filter(item =>
-    item.employeeId === employee.id && item.date === dateKey());
-  $("home-scheduled-hours").textContent = shifts.length ? shifts.map(item =>
-    `${item.start} – ${item.end} • ${item.breakMinutes || 0} minute lunch`
-  ).join(" | ") : "No shift scheduled today";
+  const punch =
+    getOpenPunch(employee.id);
+
+  const workTimer =
+    $("home-work-timer");
+
+  const shiftTimer =
+    $("home-shift-timer");
+
+  const lunchTimer =
+    $("home-lunch-timer");
+
+  if (!punch) {
+    if (workTimer) {
+      workTimer.textContent = "00:00:00";
+    }
+
+    if (shiftTimer) {
+      shiftTimer.textContent = "00:00:00";
+    }
+
+    if (lunchTimer) {
+      lunchTimer.textContent = "00:00:00";
+    }
+
+    $("home-clock-button").textContent =
+      "CLOCK IN";
+
+    $("home-lunch-button").textContent =
+      "START LUNCH";
+
+    $("home-lunch-button").disabled = true;
+
+    $("home-clock-status").textContent =
+      "Not clocked in";
+
+    const shifts = state.schedule.filter(
+      item =>
+        item.employeeId === employee.id &&
+        item.date === dateKey()
+    );
+
+    $("home-scheduled-hours").textContent =
+      shifts.length
+        ? shifts
+            .map(
+              item =>
+                `${item.start} – ${item.end} • ${item.breakMinutes || 0} minute lunch`
+            )
+            .join(" | ")
+        : "No shift scheduled today";
+
+    return;
+  }
+
+  const openLunch =
+    (punch.breaks || []).find(
+      item => item.start && !item.end
+    );
+
+  const workedSeconds =
+    Math.floor(
+      calculatePunchHours(punch) * 3600
+    );
+
+  if (workTimer) {
+    workTimer.textContent =
+      formatTimer(workedSeconds);
+  }
+
+  if (openLunch) {
+    const lunchEnd =
+      new Date(openLunch.start).getTime() +
+      Number(
+        openLunch.durationMinutes ||
+        getLunchMinutes()
+      ) * 60000;
+
+    const lunchSeconds =
+      Math.ceil(
+        (lunchEnd - now.getTime()) / 1000
+      );
+
+    if (lunchTimer) {
+      lunchTimer.textContent =
+        formatTimer(lunchSeconds);
+    }
+  } else {
+    if (lunchTimer) {
+      lunchTimer.textContent =
+        "00:00:00";
+    }
+  }
+
+  const todayShifts =
+    state.schedule
+      .filter(
+        shift =>
+          shift.employeeId === employee.id &&
+          shift.date === dateKey()
+      )
+      .map(
+        shift => ({
+          shift,
+          ...shiftBounds(shift)
+        })
+      )
+      .filter(
+        item =>
+          Number.isFinite(item.start) &&
+          Number.isFinite(item.end)
+      )
+      .sort(
+        (a, b) =>
+          a.start - b.start
+      );
+
+  let relevantShift =
+    todayShifts.find(
+      item =>
+        now.getTime() >= item.start &&
+        now.getTime() <= item.end
+    );
+
+  if (!relevantShift) {
+    relevantShift =
+      todayShifts.find(
+        item =>
+          new Date(
+            punch.clockIn
+          ).getTime() <= item.end
+      );
+  }
+
+  if (
+    relevantShift &&
+    shiftTimer
+  ) {
+    const remainingSeconds =
+      Math.ceil(
+        (
+          relevantShift.end -
+          now.getTime()
+        ) / 1000
+      );
+
+    shiftTimer.textContent =
+      formatTimer(
+        remainingSeconds
+      );
+  } else if (shiftTimer) {
+    shiftTimer.textContent =
+      "00:00:00";
+  }
+
+  $("home-clock-button").textContent =
+    "CLOCK OUT";
+
+  $("home-lunch-button").textContent =
+    openLunch
+      ? "END LUNCH"
+      : "START LUNCH";
+
+  $("home-lunch-button").disabled = false;
+
+  $("home-clock-status").textContent =
+    openLunch
+      ? "On lunch — shift timer paused for meal period"
+      : "Clocked in";
+
+  const shifts =
+    state.schedule.filter(
+      item =>
+        item.employeeId === employee.id &&
+        item.date === dateKey()
+    );
+
+  $("home-scheduled-hours").textContent =
+    shifts.length
+      ? shifts
+          .map(
+            item =>
+              `${item.start} – ${item.end} • ${item.breakMinutes || 0} minute lunch`
+          )
+          .join(" | ")
+      : "No shift scheduled today";
 }
+
 
 /* =========================================================
    MYSERVICE — TEST LOGIN / LOGOUT
    ========================================================= */
 
 const TEST_ACCOUNTS = {
-  "developer@admin.myservice.test": { role: "Developer", name: "Developer" },
+  "developer@admin.myservice.test": {
+    role: "Developer",
+    name: "Developer"
+  },
 
-  "testadmin1@admin.myservice.test": { role: "Admin", name: "Test Admin 1" },
-  "testadmin2@admin.myservice.test": { role: "Admin", name: "Test Admin 2" },
-  "testadmin3@admin.myservice.test": { role: "Admin", name: "Test Admin 3" },
+  "testadmin1@admin.myservice.test": {
+    role: "Admin",
+    name: "Test Admin 1"
+  },
 
-  "testemployee1@employee.myservice.test": { role: "Employee", name: "Test Employee 1" },
-  "testemployee2@employee.myservice.test": { role: "Employee", name: "Test Employee 2" },
-  "testemployee3@employee.myservice.test": { role: "Employee", name: "Test Employee 3" }
+  "testadmin2@admin.myservice.test": {
+    role: "Admin",
+    name: "Test Admin 2"
+  },
+
+  "testadmin3@admin.myservice.test": {
+    role: "Admin",
+    name: "Test Admin 3"
+  },
+
+  "testemployee1@employee.myservice.test": {
+    role: "Employee",
+    name: "Test Employee 1"
+  },
+
+  "testemployee2@employee.myservice.test": {
+    role: "Employee",
+    name: "Test Employee 2"
+  },
+
+  "testemployee3@employee.myservice.test": {
+    role: "Employee",
+    name: "Test Employee 3"
+  }
 };
 
 const LOGIN_KEY = "myservice_test_login";
 
 function loginTestUser(email, password) {
-  email = email.trim().toLowerCase();
+  email = email
+    .trim()
+    .toLowerCase();
 
-  const account = TEST_ACCOUNTS[email];
+  const account =
+    TEST_ACCOUNTS[email];
 
-  if (!account || password !== "123") {
-    alert("Incorrect email or password.");
+  if (
+    !account ||
+    password !== "123"
+  ) {
+    alert(
+      "Incorrect email or password."
+    );
     return false;
   }
 
-  localStorage.setItem(LOGIN_KEY, email);
+  localStorage.setItem(
+    LOGIN_KEY,
+    email
+  );
 
   state.currentUser = {
     id: email,
     name: account.name,
-    email: email,
+    email,
     role: account.role
   };
 
   saveState();
+
   return true;
 }
 
 function logoutTestUser() {
-  localStorage.removeItem(LOGIN_KEY);
+  localStorage.removeItem(
+    LOGIN_KEY
+  );
+
   location.reload();
 }
 
 function getLoggedInTestUser() {
-  const email = localStorage.getItem(LOGIN_KEY);
-  return email ? TEST_ACCOUNTS[email] || null : null;
+  const email =
+    localStorage.getItem(
+      LOGIN_KEY
+    );
+
+  return email
+    ? TEST_ACCOUNTS[email] || null
+    : null;
 }
 
 function showLoginScreen() {
   document.body.innerHTML = `
-    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:#f3f7fc;">
-      <div style="width:100%;max-width:420px;background:white;padding:28px;border-radius:20px;">
-        <h1 style="margin:0 0 6px;">MyService</h1>
-        <p style="margin:0 0 24px;">TEST • Sign in</p>
+    <div style="
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:20px;
+      background:#f3f7fc;
+    ">
+      <div style="
+        width:100%;
+        max-width:420px;
+        background:white;
+        padding:28px;
+        border-radius:20px;
+      ">
+        <h1 style="margin:0 0 6px;">
+          MyService
+        </h1>
 
-        <input id="testLoginEmail" type="email" autocomplete="username" aria-label="Email" placeholder="example@example.com" style="width:100%;padding:15px;margin-bottom:12px;">
+        <p style="margin:0 0 24px;">
+          TEST • Sign in
+        </p>
 
-        <input id="testLoginPassword" type="password" placeholder="Password" style="width:100%;padding:15px;margin-bottom:16px;">
+        <input
+          id="testLoginEmail"
+          type="email"
+          autocomplete="username"
+          aria-label="Email"
+          placeholder="example@example.com"
+          style="
+            width:100%;
+            padding:15px;
+            margin-bottom:12px;
+          "
+        >
 
-        <button id="testLoginButton" class="primary-button" style="width:100%;min-height:52px;">
+        <input
+          id="testLoginPassword"
+          type="password"
+          placeholder="Password"
+          style="
+            width:100%;
+            padding:15px;
+            margin-bottom:16px;
+          "
+        >
+
+        <button
+          id="testLoginButton"
+          class="primary-button"
+          style="
+            width:100%;
+            min-height:52px;
+          "
+        >
           LOGIN
         </button>
       </div>
@@ -1802,60 +2180,118 @@ function showLoginScreen() {
 }
 
 function activateLoginScreen() {
-  const button = document.getElementById("testLoginButton");
+  const button =
+    $("testLoginButton");
 
   if (!button) return;
 
   button.onclick = function () {
-    const email = document.getElementById("testLoginEmail").value;
-    const password = document.getElementById("testLoginPassword").value;
+    const email =
+      $("testLoginEmail").value;
 
-    if (loginTestUser(email, password)) {
+    const password =
+      $("testLoginPassword").value;
+
+    if (
+      loginTestUser(
+        email,
+        password
+      )
+    ) {
       location.reload();
     }
   };
 }
 
-document.addEventListener("DOMContentLoaded", function () {
-  const loggedIn = getLoggedInTestUser();
+document.addEventListener(
+  "DOMContentLoaded",
+  function () {
+    const loggedIn =
+      getLoggedInTestUser();
 
-  if (!loggedIn) {
-    showLoginScreen();
-    activateLoginScreen();
+    if (!loggedIn) {
+      showLoginScreen();
+      activateLoginScreen();
+      return;
+    }
+
+    const email =
+      localStorage.getItem(
+        LOGIN_KEY
+      );
+
+    state.currentUser = {
+      id: email,
+      email,
+      name: loggedIn.name,
+      role: loggedIn.role
+    };
+
+    getCurrentEmployee();
+    saveState();
+    updateDateTime();
+
+    const savedPage =
+      localStorage.getItem(
+        ACTIVE_PAGE_KEY
+      );
+
+    showSection(
+      savedPage &&
+      $(savedPage)?.classList.contains("page")
+        ? savedPage
+        : "dashboard"
+    );
+  }
+);
+
+function installLogoutButton() {
+  if (!getLoggedInTestUser()) {
     return;
   }
 
-  const email = localStorage.getItem(LOGIN_KEY);
-  state.currentUser = { id: email, email, name: loggedIn.name, role: loggedIn.role };
-  getCurrentEmployee();
-  saveState();
-  updateDateTime();
-  const savedPage = localStorage.getItem(ACTIVE_PAGE_KEY);
-  showSection(savedPage && $(savedPage)?.classList.contains("page") ? savedPage : "dashboard");
-});
+  const sidebar =
+    $("sidebar");
 
-function installLogoutButton() {
-  if (!getLoggedInTestUser()) return;
+  if (
+    !sidebar ||
+    $("testLogoutButton")
+  ) {
+    return;
+  }
 
-  const sidebar = document.getElementById("sidebar");
-  if (!sidebar || document.getElementById("testLogoutButton")) return;
+  const button =
+    document.createElement(
+      "button"
+    );
 
-  const button = document.createElement("button");
-  button.id = "testLogoutButton";
-  button.type = "button";
-  button.textContent = "LOGOUT";
-  button.className = "outline-button";
-  button.onclick = logoutTestUser;
+  button.id =
+    "testLogoutButton";
 
-  sidebar.appendChild(button);
+  button.type =
+    "button";
+
+  button.textContent =
+    "LOGOUT";
+
+  button.className =
+    "outline-button";
+
+  button.onclick =
+    logoutTestUser;
+
+  sidebar.appendChild(
+    button
+  );
 }
 
-document.addEventListener("DOMContentLoaded", function () {
-  if (getLoggedInTestUser()) {
-    installLogoutButton();
+document.addEventListener(
+  "DOMContentLoaded",
+  function () {
+    if (
+      getLoggedInTestUser()
+    ) {
+      installLogoutButton();
+    }
   }
-});
-
-
-
-
+);
