@@ -406,7 +406,8 @@ function canManageEmployees() {
 
   return (
     user &&
-    (user.role === "Admin" ||
+    (user.role === "Developer" ||
+      user.role === "Admin" ||
       user.role === "Manager")
   );
 }
@@ -581,8 +582,11 @@ function calculatePunchHours(
     end
   );
 
-  const breakHours =
-    getBreakMinutes(punch, includeOpen) / 60;
+  const breakHours = (punch.breaks || []).reduce((total, item) => {
+    if (!item.start) return total;
+    const breakEnd = item.end || (includeOpen ? end : null);
+    return total + (breakEnd ? hoursBetween(item.start, breakEnd) : 0);
+  }, 0);
 
   return Math.max(0, gross - breakHours);
 }
@@ -827,7 +831,7 @@ function renderClock() {
     clockButton.textContent = "CLOCK IN";
 
     if (breakButton) {
-      breakButton.textContent = "START BREAK";
+      breakButton.textContent = "START LUNCH";
       breakButton.disabled = true;
       breakButton.style.opacity = "0.5";
     }
@@ -849,8 +853,8 @@ function renderClock() {
     breakButton.disabled = false;
     breakButton.style.opacity = "1";
     breakButton.textContent = openBreak
-      ? "END BREAK"
-      : "START BREAK";
+      ? "END LUNCH"
+      : "START LUNCH";
   }
 }
 
@@ -1463,8 +1467,8 @@ function renderAll() {
   renderSchedule();
   installScheduleButton();
   updateClockMessage();
-installHomeTimeClock();
-   installLogoutButton();
+  installHomeTimeClock();
+  installLogoutButton();
    
 }
    /* =========================================================
@@ -1476,6 +1480,11 @@ function installHomeTimeClock() {
   if (!dashboard) return;
 
   let box = document.getElementById("home-time-clock");
+
+  if (box) {
+    updateHomeClockDisplay();
+    return;
+  }
 
   if (!box) {
     box = document.createElement("div");
@@ -1570,11 +1579,25 @@ function installHomeTimeClock() {
     </div>
   `;
 
+  $("home-clock-button").onclick = toggleClock;
+  $("home-lunch-button").onclick = function () {
+    const punch = getOpenPunch(getCurrentEmployee().id);
+    if (!punch) return;
+    if ((punch.breaks || []).some(item => item.start && !item.end)) {
+      endBreak();
+    } else {
+      startBreak();
+    }
+  };
+
   updateHomeClockDisplay();
 
   if (!window.homeClockDisplayTimer) {
     window.homeClockDisplayTimer =
-      setInterval(updateHomeClockDisplay, 1000);
+      setInterval(function () {
+        updateHomeClockDisplay();
+        updateDateTime();
+      }, 1000);
   }
 }
 
@@ -1608,6 +1631,28 @@ function updateHomeClockDisplay() {
     parts.find(part => part.type === "timeZoneName")?.value || "";
 
   zoneEl.textContent = zone;
+
+  const employee = getCurrentEmployee();
+  const punch = getOpenPunch(employee.id);
+  const onLunch = punch && (punch.breaks || []).some(item => item.start && !item.end);
+  const worked = state.punches
+    .filter(item => item.employeeId === employee.id &&
+      (item.date === dateKey() || item === punch))
+    .reduce((total, item) => total + calculatePunchHours(item), 0);
+  const seconds = Math.floor(worked * 3600);
+  $("home-work-timer").textContent = [
+    Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60
+  ].map(value => String(value).padStart(2, "0")).join(":");
+  $("home-clock-button").textContent = punch ? "CLOCK OUT" : "CLOCK IN";
+  $("home-lunch-button").textContent = onLunch ? "END LUNCH" : "START LUNCH";
+  $("home-lunch-button").disabled = !punch;
+  $("home-clock-status").textContent = onLunch ? "On lunch — timer paused" :
+    punch ? "Clocked in" : "Not clocked in";
+  const shifts = state.schedule.filter(item =>
+    item.employeeId === employee.id && item.date === dateKey());
+  $("home-scheduled-hours").textContent = shifts.length ? shifts.map(item =>
+    `${item.start} – ${item.end} • ${item.breakMinutes || 0} minute lunch`
+  ).join(" | ") : "No shift scheduled today";
 }
 
 /* =========================================================
@@ -1668,7 +1713,7 @@ function showLoginScreen() {
         <h1 style="margin:0 0 6px;">MyService</h1>
         <p style="margin:0 0 24px;">TEST • Sign in</p>
 
-        <input id="testLoginEmail" type="email" placeholder="Email" style="width:100%;padding:15px;margin-bottom:12px;">
+        <input id="testLoginEmail" type="email" autocomplete="username" aria-label="Email" placeholder="example@example.com" style="width:100%;padding:15px;margin-bottom:12px;">
 
         <input id="testLoginPassword" type="password" placeholder="Password" style="width:100%;padding:15px;margin-bottom:16px;">
 
@@ -1701,7 +1746,16 @@ document.addEventListener("DOMContentLoaded", function () {
   if (!loggedIn) {
     showLoginScreen();
     activateLoginScreen();
+    return;
   }
+
+  const email = localStorage.getItem(LOGIN_KEY);
+  state.currentUser = { id: email, email, name: loggedIn.name, role: loggedIn.role };
+  getCurrentEmployee();
+  saveState();
+  updateDateTime();
+  const savedPage = localStorage.getItem(ACTIVE_PAGE_KEY);
+  showSection(savedPage && $(savedPage)?.classList.contains("page") ? savedPage : "dashboard");
 });
 
 function installLogoutButton() {
@@ -1725,7 +1779,6 @@ document.addEventListener("DOMContentLoaded", function () {
     installLogoutButton();
   }
 });
-
 
 
 
