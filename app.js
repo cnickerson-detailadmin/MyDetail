@@ -23,6 +23,7 @@ const defaultState = {
   },
 
   settings: {
+    lunchMinutes: 30,
     tipMode: "pool",
     salesMode: "manual",
     defaultCardFeeRate: 0.03,
@@ -648,7 +649,8 @@ function startBreak() {
   punch.breaks.push({
     id: uid("break"),
     start: now,
-    end: null
+    end: null,
+    durationMinutes: getLunchMinutes()
   });
 
   employee.status = "On Break";
@@ -1460,7 +1462,61 @@ function installScheduleButton() {
    MINIMUM RENDER
    ========================================================= */
 
+function getLunchMinutes() {
+  const value = Number(state.settings.lunchMinutes);
+  return [30, 40, 45, 60].includes(value) ? value : 30;
+}
+
+function countdownText(seconds) {
+  seconds = Math.max(0, Math.ceil(seconds));
+  const minutes = Math.floor(seconds / 60);
+  return `${String(minutes).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function shiftBounds(shift) {
+  const startMinutes = scheduleTimeToMinutes(shift.start);
+  const endMinutes = scheduleTimeToMinutes(shift.end);
+  if (startMinutes === null || endMinutes === null) return { start: NaN, end: NaN };
+  const start = new Date(`${shift.date}T00:00:00`);
+  const end = new Date(`${shift.date}T00:00:00`);
+  start.setMinutes(startMinutes);
+  end.setMinutes(endMinutes);
+  if (end <= start) end.setDate(end.getDate() + 1);
+  return { start: start.getTime(), end: end.getTime() };
+}
+
+function installLunchSettings() {
+  const section = $("settings");
+  if (!section) return;
+  let panel = $("lunch-settings");
+  const allowed = ["Admin", "Developer"].includes(getCurrentUser().role);
+  if (!allowed) { if (panel) panel.hidden = true; return; }
+  if (!panel) {
+    panel = document.createElement("div");
+    panel.id = "lunch-settings";
+    panel.className = "panel";
+    panel.innerHTML = `<h2>Company Setup — Lunch Duration</h2>
+      <label for="company-lunch-minutes">Standard lunch countdown</label>
+      <select id="company-lunch-minutes">${[30,40,45,60].map(minutes =>
+        `<option value="${minutes}">${minutes} minutes</option>`).join("")}</select>
+      <p>Applies to new lunches. Active lunches keep their original duration. Employees must tap End Lunch themselves.</p>
+      <p>Test setup: saved in this browser only.</p>`;
+    section.appendChild(panel);
+    $("company-lunch-minutes").onchange = function () {
+      if (!["Admin", "Developer"].includes(getCurrentUser().role)) return;
+      const minutes = Number(this.value);
+      if (![30,40,45,60].includes(minutes)) return;
+      state.settings.lunchMinutes = minutes;
+      saveState();
+      updateHomeClockDisplay();
+    };
+  }
+  panel.hidden = false;
+  $("company-lunch-minutes").value = String(getLunchMinutes());
+}
+
 function renderAll() {
+  installLunchSettings();
   renderClock();
   renderPunchTable();
   renderMyPunchLog();
@@ -1577,6 +1633,12 @@ function installHomeTimeClock() {
          style="margin-top:12px;font-size:13px;opacity:.7;">
       Not clocked in
     </div>
+    <div style="margin-top:16px;" aria-live="off">
+      <strong>Lunch remaining</strong>
+      <div id="home-lunch-timer" style="font-size:26px;">30:00</div>
+      <strong>Shift remaining</strong>
+      <div id="home-shift-timer" style="font-size:26px;">No scheduled shift</div>
+    </div>
   `;
 
   $("home-clock-button").onclick = toggleClock;
@@ -1635,6 +1697,20 @@ function updateHomeClockDisplay() {
   const employee = getCurrentEmployee();
   const punch = getOpenPunch(employee.id);
   const onLunch = punch && (punch.breaks || []).some(item => item.start && !item.end);
+  const lunch = punch && (punch.breaks || []).find(item => item.start && !item.end);
+  const lunchSeconds = lunch ? Math.ceil((new Date(lunch.start).getTime() +
+    (lunch.durationMinutes || getLunchMinutes()) * 60000 - now.getTime()) / 1000) : getLunchMinutes() * 60;
+  $("home-lunch-timer").textContent = lunchSeconds <= 0 ?
+    "00:00 — Lunch time reached; tap End Lunch" : countdownText(lunchSeconds);
+  const activeShift = state.schedule.map(shift => ({ shift, ...shiftBounds(shift) }))
+    .filter(item => item.shift.employeeId === employee.id && item.start <= now.getTime() && item.end > now.getTime())
+    .sort((a, b) => a.end - b.end)[0];
+  const endedShift = punch && state.schedule.map(shift => ({ shift, ...shiftBounds(shift) }))
+    .some(item => item.shift.employeeId === employee.id && item.end <= now.getTime() &&
+      item.end > new Date(punch.clockIn).getTime());
+  $("home-shift-timer").textContent = activeShift ?
+    countdownText(Math.ceil((activeShift.end - now.getTime()) / 1000)) :
+    endedShift ? "00:00 — Scheduled shift ended; still clocked in" : "No active scheduled shift";
   const worked = state.punches
     .filter(item => item.employeeId === employee.id &&
       (item.date === dateKey() || item === punch))
@@ -1779,8 +1855,6 @@ document.addEventListener("DOMContentLoaded", function () {
     installLogoutButton();
   }
 });
-
-
 
 
 
