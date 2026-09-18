@@ -401,6 +401,117 @@ function canManageEmployees() {
     )
   );
 }
+
+/* =========================================================
+   ACTIVITY
+   ========================================================= */
+
+function addActivity(title, description = "", icon = "•") {
+  state.activity.unshift({
+    id: uid("activity"),
+    title,
+    description,
+    time: new Date().toISOString(),
+    icon
+  });
+
+  state.activity = state.activity.slice(0, 100);
+
+  saveState();
+}
+
+
+/* =========================================================
+   NAVIGATION
+   ========================================================= */
+
+function showSection(sectionId) {
+  const target = $(sectionId);
+
+  if (!target) {
+    console.warn("Missing section:", sectionId);
+    return;
+  }
+
+  localStorage.setItem(
+    ACTIVE_PAGE_KEY,
+    sectionId
+  );
+
+  document.querySelectorAll(".page").forEach(page => {
+    page.classList.remove("active");
+  });
+
+  target.classList.add("active");
+
+  document.querySelectorAll(".nav").forEach(button => {
+    button.classList.remove("active");
+
+    const action = button.getAttribute("onclick") || "";
+
+    if (
+      action.includes(`showSection('${sectionId}')`) ||
+      action.includes(`showSection("${sectionId}")`)
+    ) {
+      button.classList.add("active");
+    }
+  });
+
+  const sidebar = $("sidebar");
+
+  if (sidebar && window.innerWidth <= 900) {
+    sidebar.classList.remove("open");
+  }
+
+  window.scrollTo(0, 0);
+
+  renderAll();
+}
+
+function toggleSidebar() {
+  const sidebar = $("sidebar");
+
+  if (sidebar) {
+    sidebar.classList.toggle("open");
+  }
+}
+
+
+/* =========================================================
+   DATE / TIME
+   ========================================================= */
+
+function updateDateTime() {
+  const now = new Date();
+
+  if ($("currentDate")) {
+    $("currentDate").textContent =
+      now.toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "short",
+        day: "numeric"
+      });
+  }
+
+  if ($("currentTime")) {
+    $("currentTime").textContent =
+      now.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit"
+      });
+  }
+
+  if ($("liveClock")) {
+    $("liveClock").textContent =
+      now.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit"
+      });
+  }
+
+  updateClockMessage();
+}
 /* =========================================================
    TIME CLOCK
    ========================================================= */
