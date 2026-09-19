@@ -2315,10 +2315,15 @@ async function loginTestUser(email, password, companyCode) {
     localStorage.setItem("myservice_supabase_refresh_token", authData.refresh_token);
   }
 
-  localStorage.setItem(
-    LOGIN_KEY,
-    email
-  );
+  const stayLoggedIn = $("stayLoggedIn")?.checked !== false;
+
+  if (stayLoggedIn) {
+    localStorage.setItem(LOGIN_KEY, email);
+    sessionStorage.removeItem(LOGIN_KEY);
+  } else {
+    sessionStorage.setItem(LOGIN_KEY, email);
+    localStorage.removeItem(LOGIN_KEY);
+  }
 
   state.currentUser = {
     id: email,
@@ -2333,18 +2338,18 @@ async function loginTestUser(email, password, companyCode) {
 }
 
 function logoutTestUser() {
-  localStorage.removeItem(
-    LOGIN_KEY
-  );
+  localStorage.removeItem(LOGIN_KEY);
+  sessionStorage.removeItem(LOGIN_KEY);
+  localStorage.removeItem("myservice_supabase_access_token");
+  localStorage.removeItem("myservice_supabase_refresh_token");
 
   location.reload();
 }
 
 function getLoggedInTestUser() {
   const email =
-    localStorage.getItem(
-      LOGIN_KEY
-    );
+    localStorage.getItem(LOGIN_KEY) ||
+    sessionStorage.getItem(LOGIN_KEY);
 
   return email
     ? TEST_ACCOUNTS[email] || null
@@ -2389,16 +2394,32 @@ function showLoginScreen() {
           "
         >
 
-        <input
-          id="testLoginPassword"
-          type="password"
-          placeholder="Password"
-          style="
-            width:100%;
-            padding:15px;
-            margin-bottom:16px;
-          "
-        >
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+          <input
+            id="testLoginPassword"
+            type="password"
+            autocomplete="current-password"
+            placeholder="Password"
+            style="
+              flex:1;
+              width:100%;
+              padding:15px;
+              margin:0;
+            "
+          >
+          <button
+            id="toggleTestPassword"
+            type="button"
+            class="outline-button"
+            aria-label="Show password"
+            style="min-height:48px;padding:0 14px;"
+          >Show</button>
+        </div>
+
+        <label style="display:flex;align-items:center;gap:8px;margin:0 0 16px;">
+          <input id="stayLoggedIn" type="checkbox" checked>
+          Stay logged in
+        </label>
 
         <input
           id="testCompanyCode"
@@ -2435,6 +2456,18 @@ function activateLoginScreen() {
     $("testLoginButton");
 
   if (!button) return;
+
+  const passwordInput = $("testLoginPassword");
+  const togglePassword = $("toggleTestPassword");
+
+  if (togglePassword && passwordInput) {
+    togglePassword.onclick = function () {
+      const visible = passwordInput.type === "text";
+      passwordInput.type = visible ? "password" : "text";
+      togglePassword.textContent = visible ? "Show" : "Hide";
+      togglePassword.setAttribute("aria-label", visible ? "Show password" : "Hide password");
+    };
+  }
 
   button.onclick = async function () {
     const email =
