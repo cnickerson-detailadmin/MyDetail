@@ -2305,23 +2305,41 @@ const TEST_ACCOUNTS = {
 const LOGIN_KEY = "myservice_test_login";
 const TEST_COMPANY_CODE = "296342140657398401";
 
-function loginTestUser(email, password, companyCode) {
-  email = email
-    .trim()
-    .toLowerCase();
+async function loginTestUser(email, password, companyCode) {
+  email = email.trim().toLowerCase();
 
-  const account =
-    TEST_ACCOUNTS[email];
+  const account = TEST_ACCOUNTS[email];
 
   if (
     !account ||
-    password !== "123" ||
     String(companyCode || "").trim() !== TEST_COMPANY_CODE
   ) {
-    alert(
-      "Incorrect email, password, or company code."
-    );
+    alert("Incorrect email, password, or company code.");
     return false;
+  }
+
+  const authResponse = await fetch(
+    "https://nvgzbgcuzuzbvbcksfhq.supabase.co/auth/v1/token?grant_type=password",
+    {
+      method: "POST",
+      headers: {
+        "apikey": "sb_publishable_ZVRbTwG3_0zWt2FlrMn_3w_y8HlM-r-",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ email, password })
+    }
+  );
+
+  const authData = await authResponse.json();
+
+  if (!authResponse.ok || !authData.access_token) {
+    alert("Incorrect email, password, or company code.");
+    return false;
+  }
+
+  localStorage.setItem("myservice_supabase_access_token", authData.access_token);
+  if (authData.refresh_token) {
+    localStorage.setItem("myservice_supabase_refresh_token", authData.refresh_token);
   }
 
   localStorage.setItem(
@@ -2445,7 +2463,7 @@ function activateLoginScreen() {
 
   if (!button) return;
 
-  button.onclick = function () {
+  button.onclick = async function () {
     const email =
       $("testLoginEmail").value;
 
@@ -2456,7 +2474,7 @@ function activateLoginScreen() {
       $("testCompanyCode").value;
 
     if (
-      loginTestUser(
+      await loginTestUser(
         email,
         password,
         companyCode
