@@ -1974,6 +1974,68 @@ function returnToDeveloperHome() {
   switchDeveloperView("Developer");
 }
 
+function getDeveloperAlerts() {
+  return [
+    {
+      code: "ARCH-001",
+      urgency: "CRITICAL",
+      color: "#b91c1c",
+      title: "Secure multi-company separation is not finished",
+      area: "Roles and company data",
+      impact: "This unfinished security layer can cause users to see the wrong controls or leave business data without verified company-level isolation. MyService is not safe for real customer data until this is completed.",
+      fix: "Connect every protected table to company membership and enforce roles with tested RLS policies."
+    },
+    {
+      code: "DATA-001",
+      urgency: "HIGH",
+      color: "#c2410c",
+      title: "23 protected tables have no access policies",
+      area: "Supabase database",
+      impact: "This configuration can cause schedules, customers, jobs, tasks, reports and other backend features to return no data or fail when the live app tries to use them.",
+      fix: "Add company-scoped SELECT, INSERT, UPDATE and DELETE policies one feature group at a time."
+    },
+    {
+      code: "AUTH-001",
+      urgency: "HIGH",
+      color: "#c2410c",
+      title: "Quick PIN verification is not built yet",
+      area: "Authentication",
+      impact: "The site can save a PIN, but it cannot use that PIN to unlock a returning session yet. Users may create a PIN and never be prompted to verify it.",
+      fix: "Add a secure verify-PIN database function, attempt limits, lockout timing and the returning-user PIN screen."
+    },
+    {
+      code: "AUTH-002",
+      urgency: "MEDIUM",
+      color: "#a16207",
+      title: "Leaked-password protection is disabled",
+      area: "Supabase Auth",
+      impact: "This setting can allow a user to choose a password already exposed in a known data breach, increasing account-takeover risk.",
+      fix: "Enable leaked-password protection before production accounts are allowed."
+    }
+  ];
+}
+
+function developerAlertMarkup(alert) {
+  return `
+    <article style="padding:16px;border:1px solid #dbe4ef;border-left:6px solid ${alert.color};border-radius:14px;background:#fff;">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:8px;">
+        <strong style="color:#0d2345;">${escapeHTML(alert.code)}</strong>
+        <span style="padding:4px 8px;border-radius:999px;background:${alert.color};color:white;font-size:11px;font-weight:850;">
+          ${escapeHTML(alert.urgency)}
+        </span>
+        <span style="font-size:12px;color:#61728c;">${escapeHTML(alert.area)}</span>
+      </div>
+      <h3 style="margin:0 0 8px;color:#0d2345;">${escapeHTML(alert.title)}</h3>
+      <p style="margin:0 0 8px;color:#334a68;line-height:1.45;">
+        <strong>What this can cause:</strong> ${escapeHTML(alert.impact)}
+      </p>
+      <p style="margin:0;color:#61728c;line-height:1.45;">
+        <strong>Recommended fix:</strong> ${escapeHTML(alert.fix)}
+      </p>
+    </article>
+  `;
+}
+
 function installDeveloperExperience() {
   if (!isDeveloperLogin()) return;
 
@@ -2057,6 +2119,20 @@ function installDeveloperExperience() {
             </p>
           </div>
           <button class="primary-button" type="button" onclick="showSection('support')">VIEW TICKETS</button>
+        </div>
+      </section>
+
+      <section class="card" style="padding:18px;background:#f8fbff;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px;">
+          <div>
+            <div class="eyebrow">LIVE RISK LIST</div>
+            <h2 style="margin:4px 0;">Security & Code Alerts</h2>
+            <p style="margin:0;color:#61728c;">What each problem can cause and how urgently it needs attention.</p>
+          </div>
+          <span class="pill">${getDeveloperAlerts().length} OPEN</span>
+        </div>
+        <div style="display:grid;gap:12px;">
+          ${getDeveloperAlerts().map(developerAlertMarkup).join("")}
         </div>
       </section>
 
