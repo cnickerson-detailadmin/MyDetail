@@ -765,7 +765,10 @@ function toggleClock() {
     return;
   }
 
-  if (!window.confirm("Are you sure you want to clock out?")) {
+  const workedSeconds = Math.max(0, Math.floor(calculatePunchHours(punch) * 3600));
+  const workedTime = formatTimer(workedSeconds);
+
+  if (!window.confirm(`You have worked ${workedTime} hrs. Clock out?`)) {
     return;
   }
 
