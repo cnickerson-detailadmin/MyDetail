@@ -2533,20 +2533,27 @@ function showLoginScreen() {
       justify-content:center;
       padding:20px;
       background:#f3f7fc;
+      box-sizing:border-box;
     ">
       <div style="
         width:100%;
         max-width:420px;
         background:white;
         padding:28px;
-        border-radius:20px;
+        border-radius:24px;
+        box-shadow:0 12px 36px rgba(16,42,76,.08);
+        box-sizing:border-box;
       ">
-        <h1 style="margin:0 0 6px;">
-          MyService
+        <h1 style="margin:0;font-size:42px;line-height:1;font-weight:850;color:#0d2345;">
+          My<span style="color:#1677f2;">Service</span>
         </h1>
 
-        <p style="margin:0 0 24px;">
-          TEST • Sign in
+        <p style="margin:8px 0 24px;color:#71809a;font-size:15px;">
+          Manage Today. A Better Tomorrow.
+        </p>
+
+        <p style="margin:0 0 18px;color:#536783;font-size:18px;">
+          TEST • Sign In
         </p>
 
         <input
@@ -2556,23 +2563,32 @@ function showLoginScreen() {
           aria-label="Email"
           placeholder="example@example.com"
           style="
+            display:block;
             width:100%;
+            box-sizing:border-box;
             padding:15px;
-            margin-bottom:12px;
+            margin:0 0 12px;
+            border:1px solid #d6dfeb;
+            border-radius:14px;
+            font-size:16px;
           "
         >
 
-        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+        <div style="display:flex;gap:8px;align-items:center;margin:0 0 6px;width:100%;">
           <input
             id="testLoginPassword"
             type="password"
             autocomplete="current-password"
             placeholder="Password"
             style="
-              flex:1;
-              width:100%;
+              min-width:0;
+              flex:1 1 auto;
+              box-sizing:border-box;
               padding:15px;
               margin:0;
+              border:1px solid #d6dfeb;
+              border-radius:14px;
+              font-size:16px;
             "
           >
           <button
@@ -2580,14 +2596,24 @@ function showLoginScreen() {
             type="button"
             class="outline-button"
             aria-label="Show password"
-            style="min-height:48px;padding:0 14px;"
+            style="flex:0 0 auto;min-height:50px;padding:0 14px;"
           >Show</button>
         </div>
 
         <button
           id="forgotPasswordButton"
           type="button"
-          style="border:0;background:transparent;color:#1267d6;padding:0;margin:0 0 14px;font-weight:700;"
+          style="
+            display:block;
+            border:0;
+            background:transparent;
+            color:#126fe8;
+            padding:4px 0;
+            margin:0 0 14px;
+            font-size:15px;
+            font-weight:700;
+            text-align:left;
+          "
         >
           Forgot password?
         </button>
@@ -2601,21 +2627,41 @@ function showLoginScreen() {
           aria-label="Company Code"
           placeholder="Company Code"
           style="
+            display:block;
             width:100%;
+            box-sizing:border-box;
             padding:15px;
-            margin-bottom:8px;
+            margin:0 0 8px;
+            border:1px solid #d6dfeb;
+            border-radius:14px;
+            font-size:16px;
           "
         >
 
-        <div style="margin:0 0 16px;font-size:14px;">
-          <div style="font-weight:700;">Forgot company code?</div>
-          <div style="margin-top:4px;">Please contact your HR or administrator.</div>
+        <div style="margin:0 0 16px;font-size:14px;line-height:1.45;">
+          <div style="font-weight:700;color:#126fe8;">Forgot company code?</div>
+          <div style="margin-top:3px;color:#61728c;">Please contact your HR or administrator.</div>
           ${getLoginHelpPhoneMarkup()}
         </div>
 
-        <label style="display:flex;align-items:center;gap:8px;margin:0 0 16px;">
-          <input id="stayLoggedIn" type="checkbox" checked>
-          Stay logged in
+        <label style="
+          display:flex;
+          align-items:center;
+          gap:9px;
+          width:max-content;
+          max-width:100%;
+          margin:0 0 18px;
+          color:#173153;
+          font-size:15px;
+          font-weight:650;
+        ">
+          <input
+            id="stayLoggedIn"
+            type="checkbox"
+            checked
+            style="width:20px;height:20px;margin:0;flex:0 0 20px;"
+          >
+          <span>Stay logged in</span>
         </label>
 
         <button
@@ -2623,7 +2669,10 @@ function showLoginScreen() {
           class="primary-button"
           style="
             width:100%;
-            min-height:52px;
+            min-height:54px;
+            font-size:16px;
+            font-weight:800;
+            border-radius:14px;
           "
         >
           LOGIN
