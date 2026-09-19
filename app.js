@@ -467,10 +467,30 @@ function estimateSupportDifficulty(subject, description, priority = "standard") 
     max = 20;
   }
 
+  let chatgptDifficulty = difficulty;
+  let chatgptMin = min;
+  let chatgptMax = max;
+
+  if (difficulty === "Complex") {
+    chatgptDifficulty = "Moderate";
+    chatgptMin = Math.max(15, Math.round(min * 0.6));
+    chatgptMax = Math.max(30, Math.round(max * 0.6));
+  } else if (difficulty === "Moderate") {
+    chatgptDifficulty = "Easy";
+    chatgptMin = Math.max(5, Math.round(min * 0.5));
+    chatgptMax = Math.max(15, Math.round(max * 0.6));
+  } else {
+    chatgptDifficulty = "Easy";
+    chatgptMin = Math.max(5, Math.round(min * 0.7));
+    chatgptMax = Math.max(10, Math.round(max * 0.8));
+  }
+
   return {
     difficulty,
     estimatedMinutes: max,
-    estimateLabel: min + "–" + max + " min"
+    estimateLabel: min + "–" + max + " min",
+    chatgptDifficulty,
+    chatgptEstimateLabel: chatgptMin + "–" + chatgptMax + " min"
   };
 }
 
@@ -494,6 +514,8 @@ function submitSupportTicket(event) {
     difficulty: estimate.difficulty,
     estimatedMinutes: estimate.estimatedMinutes,
     estimateLabel: estimate.estimateLabel,
+    chatgptDifficulty: estimate.chatgptDifficulty,
+    chatgptEstimateLabel: estimate.chatgptEstimateLabel,
     status: "Open",
     createdAt: new Date().toISOString()
   };
@@ -505,8 +527,10 @@ function submitSupportTicket(event) {
     title: priority === "emergency" ? "🚨 Emergency Support Ticket" : "Support Ticket",
     description:
       ticket.id + " • " + ticket.subject +
-      " • Estimated difficulty: " + ticket.difficulty +
-      " • Likely fix time: " + ticket.estimateLabel,
+      " • Overall difficulty: " + ticket.difficulty +
+      " • With ChatGPT help: " + ticket.chatgptDifficulty +
+      " • Likely fix time: " + ticket.estimateLabel +
+      " • With ChatGPT: " + ticket.chatgptEstimateLabel,
     time: ticket.createdAt
   });
 
@@ -517,8 +541,10 @@ function submitSupportTicket(event) {
 
   alert(
     ticket.id + " created\n" +
-    "Estimated difficulty: " + ticket.difficulty + "\n" +
-    "Likely fix time: " + ticket.estimateLabel
+    "Overall difficulty: " + ticket.difficulty + "\n" +
+    "Overall likely fix time: " + ticket.estimateLabel + "\n" +
+    "With ChatGPT help: " + ticket.chatgptDifficulty + "\n" +
+    "Likely fix time with ChatGPT: " + ticket.chatgptEstimateLabel
   );
 }
 
@@ -535,8 +561,14 @@ function renderSupportTickets() {
     <div class="notification-card" style="margin-bottom:12px;">
       <strong>${escapeHTML(ticket.id)} • ${escapeHTML(ticket.subject)}</strong>
       <p style="margin:8px 0 4px;">
-        <b>${escapeHTML(ticket.difficulty)}</b> • Estimated ${escapeHTML(ticket.estimateLabel)}
+        <b>Overall:</b> ${escapeHTML(ticket.difficulty)} • ${escapeHTML(ticket.estimateLabel)}
       </p>
+      <p style="margin:4px 0 4px;">
+        <b>With ChatGPT help:</b> ${escapeHTML(ticket.chatgptDifficulty || ticket.difficulty)} • ${escapeHTML(ticket.chatgptEstimateLabel || ticket.estimateLabel)}
+      </p>
+      <small style="display:block;margin-bottom:6px;opacity:.7;">
+        Estimates only. Actual repair time can vary.
+      </small>
       <small>
         ${ticket.priority === "emergency" ? "EMERGENCY • " : ""}
         ${escapeHTML(ticket.status)} • ${escapeHTML(formatTime(ticket.createdAt))}
