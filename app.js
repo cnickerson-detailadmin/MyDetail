@@ -2343,6 +2343,21 @@ function showLoginScreen() {
           "
         >
 
+        <input
+          id="testCompanyCode"
+          type="text"
+          inputmode="numeric"
+          maxlength="6"
+          pattern="[0-9]{6}"
+          aria-label="Company Code"
+          placeholder="6-digit Company Code"
+          style="
+            width:100%;
+            padding:15px;
+            margin-bottom:16px;
+          "
+        >
+
         <button
           id="testLoginButton"
           class="primary-button"
