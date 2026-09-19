@@ -2198,6 +2198,70 @@ function updateHomeClockDisplay() {
 
 
 /* =========================================================
+   TEAM MANAGEMENT
+   ========================================================= */
+
+function createAccount() {
+  const name = prompt("Employee full name:");
+  if (!name || !name.trim()) return;
+
+  const email = prompt("Employee email:");
+  if (!email || !email.trim()) return;
+
+  const roleInput = prompt("Role: Employee, Manager, or Admin", "Employee");
+  if (!roleInput) return;
+
+  const role = ["Admin", "Manager"].includes(roleInput.trim()) ? roleInput.trim() : "Employee";
+  const employee = {
+    id: "emp_" + Date.now(),
+    name: name.trim(),
+    email: email.trim().toLowerCase(),
+    role,
+    active: true,
+    createdAt: new Date().toISOString()
+  };
+
+  if (!Array.isArray(state.employees)) state.employees = [];
+  state.employees.push(employee);
+  saveState();
+  renderEmployees();
+  alert(employee.name + " was added to My Team.");
+}
+
+function renderEmployees() {
+  const grid = $("employeeGrid");
+  if (!grid) return;
+
+  const employees = Array.isArray(state.employees) ? state.employees.filter(e => e && e.active !== false) : [];
+  if (!employees.length) {
+    grid.innerHTML = '<div class="empty-state">No team members yet. Tap + Create Account to add one.</div>';
+    return;
+  }
+
+  grid.innerHTML = employees.map(employee => `
+    <button type="button" class="card" style="width:100%;text-align:left;margin-bottom:12px;" onclick="openEmployeeProfile('${employee.id}')">
+      <strong>${employee.name || "Team Member"}</strong>
+      <div>${employee.role || "Employee"}</div>
+      <small>${employee.email || ""}</small>
+    </button>
+  `).join("");
+}
+
+function openEmployeeProfile(employeeId) {
+  const employee = (state.employees || []).find(e => String(e.id) === String(employeeId));
+  if (!employee) return;
+  alert(
+    employee.name + "\n" +
+    (employee.role || "Employee") + "\n" +
+    (employee.email || "") + "\n\n" +
+    "Employee profile controls are ready for the next step."
+  );
+}
+
+document.addEventListener("DOMContentLoaded", renderEmployees);
+
+
+/* =========================================================
    MYSERVICE — TEST LOGIN / LOGOUT
    ========================================================= */
 
