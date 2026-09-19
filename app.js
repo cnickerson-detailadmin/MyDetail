@@ -1937,13 +1937,172 @@ function renderAll() {
   installScheduleButton();
   updateClockMessage();
   installHomeTimeClock();
+  installDeveloperExperience();
   installLogoutButton();
 }/* =========================================================
+   DEVELOPER COMMAND CENTER
+   ========================================================= */
+
+const DEVELOPER_VIEW_KEY = "myservice_developer_view";
+
+function isDeveloperLogin() {
+  return getLoggedInTestUser()?.role === "Developer";
+}
+
+function getDeveloperView() {
+  if (!isDeveloperLogin()) return null;
+
+  const saved = localStorage.getItem(DEVELOPER_VIEW_KEY);
+  return ["Developer", "Admin", "Employee"].includes(saved)
+    ? saved
+    : "Developer";
+}
+
+function switchDeveloperView(role) {
+  if (!isDeveloperLogin()) return;
+
+  const nextRole = ["Admin", "Employee"].includes(role)
+    ? role
+    : "Developer";
+
+  localStorage.setItem(DEVELOPER_VIEW_KEY, nextRole);
+  localStorage.setItem(ACTIVE_PAGE_KEY, "dashboard");
+  location.reload();
+}
+
+function returnToDeveloperHome() {
+  switchDeveloperView("Developer");
+}
+
+function installDeveloperExperience() {
+  if (!isDeveloperLogin()) return;
+
+  const dashboard = $("dashboard");
+  const sidebar = $("sidebar");
+  const view = getDeveloperView();
+
+  if (!dashboard || !sidebar) return;
+
+  const existingNavigation = $("developer-navigation");
+  const existingHome = $("developer-command-center");
+
+  if (view !== "Developer") {
+    if (existingHome) existingHome.remove();
+    if (existingNavigation) existingNavigation.remove();
+
+    if (!$("developer-preview-navigation")) {
+      const previewNavigation = document.createElement("div");
+      previewNavigation.id = "developer-preview-navigation";
+      previewNavigation.className = "nav-section";
+      previewNavigation.innerHTML = `
+        <div class="nav-title">DEVELOPER PREVIEW</div>
+        <div style="padding:0 12px 10px;font-size:13px;font-weight:750;color:#536783;">
+          Viewing the ${escapeHTML(view)} experience
+        </div>
+        <button class="nav" type="button" onclick="returnToDeveloperHome()">
+          <span>←</span>
+          Return to Developer
+        </button>
+      `;
+      sidebar.insertBefore(previewNavigation, sidebar.firstChild);
+    }
+
+    return;
+  }
+
+  const previewNavigation = $("developer-preview-navigation");
+  if (previewNavigation) previewNavigation.remove();
+
+  if (!existingNavigation) {
+    const navigation = document.createElement("div");
+    navigation.id = "developer-navigation";
+    navigation.className = "nav-section";
+    navigation.innerHTML = `
+      <div class="nav-title">DEVELOPER</div>
+      <button class="nav" type="button" onclick="showSection('support')">
+        <span>🛟</span>
+        Support Tickets
+      </button>
+      <button class="nav" type="button" onclick="showSection('settings')">
+        <span>⚙</span>
+        Admin Entire App Setup
+      </button>
+      <button class="nav" type="button" onclick="switchDeveloperView('Employee')">
+        <span>♙</span>
+        Employee Experience
+      </button>
+    `;
+    sidebar.insertBefore(navigation, sidebar.firstChild);
+  }
+
+  if (!existingHome) {
+    const home = document.createElement("div");
+    home.id = "developer-command-center";
+    home.className = "panel";
+    home.style.cssText = "display:grid;gap:16px;margin-bottom:18px;";
+    home.innerHTML = `
+      <div>
+        <div class="eyebrow">PLATFORM OWNER</div>
+        <h1 style="margin:4px 0 6px;">Developer Command Center</h1>
+        <p style="margin:0;color:#61728c;">Manage support, configure the full application, and preview each user experience.</p>
+      </div>
+
+      <section class="card" style="padding:18px;border:2px solid rgba(22,119,242,.18);">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;">
+          <div>
+            <div class="eyebrow">FIRST PRIORITY</div>
+            <h2 style="margin:4px 0;">Support Tickets</h2>
+            <p style="margin:0;color:#61728c;">
+              ${state.supportTickets.filter(ticket => ticket.status === "Open").length} open ticket(s)
+            </p>
+          </div>
+          <button class="primary-button" type="button" onclick="showSection('support')">VIEW TICKETS</button>
+        </div>
+      </section>
+
+      <section class="card" style="padding:18px;">
+        <div class="eyebrow">ADMIN</div>
+        <h2 style="margin:4px 0 8px;">Entire App Setup</h2>
+        <p style="margin:0 0 14px;color:#61728c;">Open all company setup and management controls.</p>
+        <button class="outline-button" type="button" onclick="showSection('settings')">OPEN ADMIN SETUP</button>
+      </section>
+
+      <section class="card" style="padding:18px;">
+        <div class="eyebrow">EMPLOYEE</div>
+        <h2 style="margin:4px 0 8px;">Employee Experience</h2>
+        <p style="margin:0 0 14px;color:#61728c;">Preview the simple employee-facing app.</p>
+        <button class="outline-button" type="button" onclick="switchDeveloperView('Employee')">OPEN EMPLOYEE VIEW</button>
+      </section>
+
+      <section class="card" style="padding:18px;">
+        <h2 style="margin:0 0 6px;text-align:center;">Which would you like to switch to?</h2>
+        <p style="margin:0 0 14px;text-align:center;color:#61728c;">Quick access</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <button class="primary-button" type="button" onclick="switchDeveloperView('Admin')">ADMIN</button>
+          <button class="primary-button" type="button" onclick="switchDeveloperView('Employee')">EMPLOYEE</button>
+        </div>
+      </section>
+    `;
+
+    Array.from(dashboard.children).forEach(child => {
+      child.hidden = true;
+    });
+    dashboard.insertBefore(home, dashboard.firstChild);
+  }
+}
+
+/* =========================================================
    HOMEPAGE EMPLOYEE TIME CLOCK
    ========================================================= */
 
 function installHomeTimeClock() {
   const dashboard = $("dashboard");
+
+  if (isDeveloperLogin() && getDeveloperView() === "Developer") {
+    const existing = $("home-time-clock");
+    if (existing) existing.remove();
+    return;
+  }
 
   if (!dashboard) return;
 
@@ -2647,6 +2806,7 @@ function logoutTestUser() {
   localStorage.removeItem("myservice_supabase_access_token");
   localStorage.removeItem("myservice_supabase_refresh_token");
   localStorage.removeItem("myservice_supabase_user_id");
+  localStorage.removeItem(DEVELOPER_VIEW_KEY);
 
   location.reload();
 }
@@ -3015,12 +3175,23 @@ document.addEventListener(
       localStorage.getItem(LOGIN_KEY) ||
       sessionStorage.getItem(LOGIN_KEY);
 
+    const activeRole =
+      loggedIn.role === "Developer"
+        ? getDeveloperView()
+        : loggedIn.role;
+
     state.currentUser = {
       id: email,
       email,
-      name: loggedIn.name,
-      role: loggedIn.role
+      name: activeRole === "Developer"
+        ? loggedIn.name
+        : loggedIn.name + " (" + activeRole + " Preview)",
+      role: activeRole
     };
+
+    const currentEmployee = getCurrentEmployee();
+    currentEmployee.name = state.currentUser.name;
+    currentEmployee.role = activeRole;
 
     getCurrentEmployee();
     saveState();
