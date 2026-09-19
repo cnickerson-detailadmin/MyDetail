@@ -2265,43 +2265,7 @@ document.addEventListener("DOMContentLoaded", renderEmployees);
    MYSERVICE — TEST LOGIN / LOGOUT
    ========================================================= */
 
-const TEST_ACCOUNTS = {
-  "developer@admin.myservice.test": {
-    role: "Developer",
-    name: "Developer"
-  },
-
-  "testadmin1@admin.myservice.test": {
-    role: "Admin",
-    name: "Test Admin 1"
-  },
-
-  "testadmin2@admin.myservice.test": {
-    role: "Admin",
-    name: "Test Admin 2"
-  },
-
-  "testadmin3@admin.myservice.test": {
-    role: "Admin",
-    name: "Test Admin 3"
-  },
-
-  "testemployee1@employee.myservice.test": {
-    role: "Employee",
-    name: "Test Employee 1"
-  },
-
-  "testemployee2@employee.myservice.test": {
-    role: "Employee",
-    name: "Test Employee 2"
-  },
-
-  "testemployee3@employee.myservice.test": {
-    role: "Employee",
-    name: "Test Employee 3"
-  }
-};
-
+const TEST_ACCOUNTS = {};
 const LOGIN_KEY = "myservice_test_login";
 const TEST_COMPANY_CODE = "296342140657398401";
 
