@@ -1952,8 +1952,314 @@ function renderAll() {
   updateClockMessage();
   installHomeTimeClock();
   installDeveloperExperience();
+  installStateLaborLawStrip();
   installLogoutButton();
 }/* =========================================================
+   STATE-SCOPED LABOR LAW STRIP
+   ========================================================= */
+
+const STATE_LABOR_AUTHORITIES = {
+  AL:["Alabama","https://labor.alabama.gov/"],
+  AK:["Alaska","https://labor.alaska.gov/lss/whhome.htm"],
+  AZ:["Arizona","https://www.azica.gov/labor-minimum-wage-main-page"],
+  AR:["Arkansas","https://labor.arkansas.gov/divisions/labor-standards/"],
+  CA:["California","https://www.dir.ca.gov/dlse/"],
+  CO:["Colorado","https://cdle.colorado.gov/dlss"],
+  CT:["Connecticut","https://portal.ct.gov/dol/divisions/wage-and-workplace-standards"],
+  DE:["Delaware","https://labor.delaware.gov/divisions/industrial-affairs/"],
+  FL:["Florida","https://www.floridajobs.org/workforce-statistics/workforce-statistics-data-releases/minimum-wage"],
+  GA:["Georgia","https://dol.georgia.gov/"],
+  HI:["Hawaii","https://labor.hawaii.gov/wsd/"],
+  ID:["Idaho","https://www.labor.idaho.gov/businesses/idaho-labor-laws/"],
+  IL:["Illinois","https://labor.illinois.gov/laws-rules.html"],
+  IN:["Indiana","https://www.in.gov/dol/"],
+  IA:["Iowa","https://workforce.iowa.gov/employers/labor-law"],
+  KS:["Kansas","https://www.dol.ks.gov/employers/workplace-laws"],
+  KY:["Kentucky","https://elc.ky.gov/workplace-standards/Pages/default.aspx"],
+  LA:["Louisiana","https://www.laworks.net/"],
+  ME:["Maine","https://www.maine.gov/labor/labor_laws/"],
+  MD:["Maryland","https://labor.maryland.gov/labor/wages/"],
+  MA:["Massachusetts","https://www.mass.gov/orgs/department-of-labor-standards"],
+  MI:["Michigan","https://www.michigan.gov/leo/bureaus-agencies/ber/wage-and-hour"],
+  MN:["Minnesota","https://www.dli.mn.gov/business/employment-practices"],
+  MS:["Mississippi","https://mdes.ms.gov/employers/"],
+  MO:["Missouri","https://labor.mo.gov/dls"],
+  MT:["Montana","https://erd.dli.mt.gov/labor-standards"],
+  NE:["Nebraska","https://dol.nebraska.gov/LaborStandards"],
+  NV:["Nevada","https://labor.nv.gov/"],
+  NH:["New Hampshire","https://www.dol.nh.gov/"],
+  NJ:["New Jersey","https://www.nj.gov/labor/wageandhour/"],
+  NM:["New Mexico","https://www.dws.state.nm.us/"],
+  NY:["New York","https://dol.ny.gov/"],
+  NC:["North Carolina","https://www.labor.nc.gov/workplace-rights"],
+  ND:["North Dakota","https://www.nd.gov/labor/"],
+  OH:["Ohio","https://com.ohio.gov/divisions-and-programs/industrial-compliance/wage-and-hour"],
+  OK:["Oklahoma","https://oklahoma.gov/labor.html"],
+  OR:["Oregon","https://www.oregon.gov/boli/workers/pages/default.aspx"],
+  PA:["Pennsylvania","https://www.pa.gov/agencies/dli.html"],
+  RI:["Rhode Island","https://dlt.ri.gov/regulation-and-safety/labor-standards"],
+  SC:["South Carolina","https://llr.sc.gov/wage/"],
+  SD:["South Dakota","https://dlr.sd.gov/employment_laws/"],
+  TN:["Tennessee","https://www.tn.gov/workforce/employees/labor-laws.html"],
+  TX:["Texas","https://www.twc.texas.gov/programs/wage-and-hour"],
+  UT:["Utah","https://laborcommission.utah.gov/divisions/utah-antidiscrimination-and-labor-uald/wage-claim/"],
+  VT:["Vermont","https://labor.vermont.gov/rights-and-wages"],
+  VA:["Virginia","https://doli.virginia.gov/labor-law/"],
+  WA:["Washington","https://www.lni.wa.gov/workers-rights/"],
+  WV:["West Virginia","https://labor.wv.gov/Wage-Hour/Pages/default.aspx"],
+  WI:["Wisconsin","https://dwd.wisconsin.gov/er/laborstandards/"],
+  WY:["Wyoming","https://dws.wyo.gov/dws-division/labor-standards/"]
+};
+
+const NEW_YORK_LABOR_LAWS = [
+  {key:"ny_minimum_wage_2026",text:"In 2026, New York's minimum wage is $17.00 in New York City, Long Island, and Westchester County, and $16.00 in the rest of the state.",url:"https://dol.ny.gov/minimum-wage"},
+  {key:"ny_meal_period_over_six_hours",text:"New York generally requires at least a 30-minute unpaid meal period when an employee works a shift longer than six hours.",url:"https://dol.ny.gov/day-rest-and-meal-periods"},
+  {key:"ny_day_of_rest",text:"Certain New York employees must receive at least 24 consecutive hours of rest in each calendar week.",url:"https://dol.ny.gov/day-rest-and-meal-periods"},
+  {key:"ny_new_hire_pay_notice",text:"New York employers must give each new hire a written notice of pay rate and payday under the Wage Theft Prevention Act.",url:"https://dol.ny.gov/notice-pay-rate"},
+  {key:"ny_pay_stub_each_payday",text:"New York employees must receive a wage statement or pay stub with every payment of wages.",url:"https://dol.ny.gov/wage-theft-and-labor-standards-law"},
+  {key:"ny_overtime",text:"Most covered, nonexempt New York employees must receive 1½ times their regular rate for hours worked over 40 in a workweek.",url:"https://dol.ny.gov/wages-and-hours-frequently-asked-questions"},
+  {key:"ny_short_breaks_paid",text:"When a New York employer permits a short break of up to 20 minutes, that break should be counted as paid working time.",url:"https://dol.ny.gov/wages-and-hours-frequently-asked-questions"},
+  {key:"ny_pay_frequency",text:"New York generally requires manual workers to be paid weekly and clerical or other workers at least twice monthly, subject to coverage rules.",url:"https://dol.ny.gov/frequency-pay"},
+  {key:"ny_harassment_policy_training",text:"New York employers must maintain a written sexual-harassment prevention policy and provide annual prevention training.",url:"https://dol.ny.gov/posting-requirements-under-nys-labor-law"},
+  {key:"ny_breast_milk_paid_breaks",text:"New York employees may take paid 30-minute breaks as reasonably needed to express breast milk for up to three years after childbirth.",url:"https://dol.ny.gov/breast-milk-expression-workplace"},
+  {key:"ny_breast_milk_private_space",text:"A New York lactation space must be private and cannot be a restroom or toilet stall.",url:"https://dol.ny.gov/breast-milk-expression-workplace"},
+  {key:"ny_sick_leave",text:"New York sick-leave requirements depend on employer size and income; covered employers may owe up to 40 or 56 hours of leave each year.",url:"https://dol.ny.gov/new-york-paid-sick-leave"},
+  {key:"ny_illegal_deductions",text:"New York employers generally cannot deduct cash shortages, breakage, uniform maintenance, or other employer business costs from wages.",url:"https://dol.ny.gov/protect-your-paycheck"},
+  {key:"ny_minor_schedule_posting",text:"New York employers of minors must post a schedule showing the hours each minor begins and ends work and receives meal periods.",url:"https://dol.ny.gov/posting-requirements-under-nys-labor-law"},
+  {key:"ny_equal_pay",text:"New York law prohibits paying an employee less because of protected status when the employee performs equal or substantially similar work under similar conditions.",url:"https://dol.ny.gov/equal-pay-law"}
+];
+
+const STATE_COMPLIANCE_TOPICS = [
+  ["minimum_wage","Before setting pay rates, check {state}'s current minimum-wage rules, covered workers, and exemptions."],
+  ["overtime","Before calculating overtime, check {state}'s current overtime rules in addition to federal requirements."],
+  ["meal_rest","Before scheduling breaks, check whether {state} requires meal or rest periods for the workers and shift involved."],
+  ["pay_frequency","Before choosing a payday schedule, check {state}'s pay-frequency and wage-statement requirements."],
+  ["leave","Before denying time off, check {state}'s current paid and unpaid leave protections."],
+  ["final_pay","Before processing a separation, check {state}'s deadlines and rules for an employee's final paycheck."],
+  ["posters","Check that every required {state} workplace poster is current and displayed where employees can see it."],
+  ["minor_labor","Before scheduling a worker under 18, check {state}'s hour limits, permits, and prohibited-work rules."],
+  ["deductions","Before deducting money from wages, check what {state} permits and whether written authorization is required."],
+  ["classification","Before treating someone as an independent contractor or exempt employee, check {state}'s classification tests."]
+];
+
+let laborLawStripLoading = false;
+let laborLawStripLastClaimAt = 0;
+let laborLawStripState = null;
+let laborLawStripItem = null;
+
+function shouldShowLaborLawStrip() {
+  const databaseRole = String(authenticatedContext?.databaseRole || "").toLowerCase();
+
+  if (databaseRole === "developer") {
+    return getDeveloperView() !== "Employee";
+  }
+
+  return databaseRole === "primary_admin" || databaseRole === "admin";
+}
+
+function getLaborLawCatalog(stateCode) {
+  if (stateCode === "NY") return NEW_YORK_LABOR_LAWS;
+
+  const authority = STATE_LABOR_AUTHORITIES[stateCode];
+  if (!authority) return [];
+
+  const stateName = authority[0];
+  const sourceUrl = authority[1];
+
+  return STATE_COMPLIANCE_TOPICS.map(function (topic) {
+    return {
+      key: stateCode.toLowerCase() + "_" + topic[0],
+      text: topic[1].replaceAll("{state}", stateName),
+      url: sourceUrl
+    };
+  });
+}
+
+function ensureLaborLawStrip() {
+  let strip = $("state-labor-law-strip");
+  if (strip) return strip;
+
+  strip = document.createElement("aside");
+  strip.id = "state-labor-law-strip";
+  strip.setAttribute("aria-live", "polite");
+  strip.style.cssText = [
+    "width:100%",
+    "box-sizing:border-box",
+    "min-height:38px",
+    "padding:8px 14px",
+    "background:#ffd84d",
+    "border-top:1px solid #e2b900",
+    "border-bottom:1px solid #d8aa00",
+    "color:#332900",
+    "display:flex",
+    "align-items:center",
+    "gap:8px",
+    "overflow-x:auto",
+    "white-space:nowrap",
+    "font-size:12px",
+    "line-height:1.35",
+    "font-weight:700",
+    "position:relative",
+    "z-index:40"
+  ].join(";");
+
+  const topbar = document.querySelector(".topbar");
+  if (topbar) topbar.insertAdjacentElement("afterend", strip);
+  else document.body.prepend(strip);
+
+  return strip;
+}
+
+function renderLaborLawStrip(stateCode, item, message) {
+  const strip = ensureLaborLawStrip();
+  const stateName = STATE_LABOR_AUTHORITIES[stateCode]?.[0] || stateCode || "State";
+  const label = stateCode === "NY" ? "NYS LABOR LAWS" : stateCode + " LABOR LAWS";
+
+  if (message) {
+    strip.innerHTML =
+      '<strong style="letter-spacing:.08em;">' + escapeHTML(label) + '</strong>' +
+      '<span aria-hidden="true">•</span><span>' + escapeHTML(message) + '</span>';
+    return;
+  }
+
+  strip.innerHTML =
+    '<strong style="letter-spacing:.08em;flex:0 0 auto;">' + escapeHTML(label) + '</strong>' +
+    '<span aria-hidden="true">•</span>' +
+    '<strong style="flex:0 0 auto;">Did you know?</strong>' +
+    '<span>' + escapeHTML(item.text) + '</span>' +
+    '<a href="' + escapeHTML(item.url) + '" target="_blank" rel="noopener noreferrer" ' +
+      'style="color:#332900;text-decoration:underline;font-weight:900;flex:0 0 auto;" ' +
+      'aria-label="Open the official ' + escapeHTML(stateName) + ' labor source">OFFICIAL SOURCE ↗</a>' +
+    '<span style="font-weight:600;opacity:.72;flex:0 0 auto;">Reminder only—check coverage and exceptions.</span>';
+}
+
+async function getMyLaborState(accessToken) {
+  const response = await fetch(SUPABASE_URL + "/rest/v1/rpc/my_labor_state", {
+    method: "POST",
+    headers: {
+      "apikey": SUPABASE_KEY,
+      "Authorization": "Bearer " + accessToken,
+      "Content-Type": "application/json"
+    },
+    body: "{}"
+  });
+
+  if (!response.ok) throw new Error("Could not resolve registered state.");
+  return String(await response.json() || "").toUpperCase();
+}
+
+async function loadStateLaborLaw(forceNew = false) {
+  if (!shouldShowLaborLawStrip()) {
+    $("state-labor-law-strip")?.remove();
+    return;
+  }
+
+  const strip = ensureLaborLawStrip();
+
+  if (!forceNew && laborLawStripItem && laborLawStripState) {
+    renderLaborLawStrip(laborLawStripState, laborLawStripItem);
+    return;
+  }
+
+  const now = Date.now();
+  if (laborLawStripLoading || now - laborLawStripLastClaimAt < 5000) return;
+
+  const accessToken = getStoredAuthItem(ACCESS_TOKEN_KEY);
+  const userId = authenticatedContext?.id;
+  if (!accessToken || !userId) return;
+
+  laborLawStripLoading = true;
+  laborLawStripLastClaimAt = now;
+  strip.textContent = "Loading your registered state's labor-law reminder…";
+
+  try {
+    const stateCode = await getMyLaborState(accessToken);
+    const catalog = getLaborLawCatalog(stateCode);
+
+    if (!stateCode || !STATE_LABOR_AUTHORITIES[stateCode]) {
+      renderLaborLawStrip(stateCode, null, "A registered business state is required before state labor-law reminders can appear.");
+      return;
+    }
+
+    const usedResponse = await fetch(
+      SUPABASE_URL + "/rest/v1/labor_law_views?select=law_key&user_id=eq." +
+        encodeURIComponent(userId) + "&state_code=eq." + encodeURIComponent(stateCode),
+      {
+        headers: {
+          "apikey": SUPABASE_KEY,
+          "Authorization": "Bearer " + accessToken
+        }
+      }
+    );
+
+    if (!usedResponse.ok) throw new Error("Could not load labor-law history.");
+
+    const usedRows = await usedResponse.json();
+    const usedKeys = new Set((usedRows || []).map(row => row.law_key));
+    const unused = catalog.filter(item => !usedKeys.has(item.key));
+
+    if (!unused.length) {
+      renderLaborLawStrip(
+        stateCode,
+        null,
+        "Every verified reminder currently available for " +
+          STATE_LABOR_AUTHORITIES[stateCode][0] +
+          " has been shown. None will be repeated."
+      );
+      return;
+    }
+
+    const randomIndex = globalThis.crypto?.getRandomValues
+      ? globalThis.crypto.getRandomValues(new Uint32Array(1))[0] % unused.length
+      : Math.floor(Math.random() * unused.length);
+    const item = unused[randomIndex];
+
+    const claimResponse = await fetch(
+      SUPABASE_URL + "/rest/v1/labor_law_views",
+      {
+        method: "POST",
+        headers: {
+          "apikey": SUPABASE_KEY,
+          "Authorization": "Bearer " + accessToken,
+          "Content-Type": "application/json",
+          "Prefer": "return=minimal"
+        },
+        body: JSON.stringify({
+          user_id: userId,
+          state_code: stateCode,
+          law_key: item.key,
+          law_text: item.text,
+          source_url: item.url
+        })
+      }
+    );
+
+    if (!claimResponse.ok) throw new Error("Could not save labor-law history.");
+
+    laborLawStripState = stateCode;
+    laborLawStripItem = item;
+    renderLaborLawStrip(stateCode, item);
+  } catch (error) {
+    renderLaborLawStrip(
+      laborLawStripState || "NY",
+      null,
+      "The official state reminder could not load. Refresh to try again; no prior reminder was reused."
+    );
+  } finally {
+    laborLawStripLoading = false;
+  }
+}
+
+function installStateLaborLawStrip() {
+  if (!shouldShowLaborLawStrip()) {
+    $("state-labor-law-strip")?.remove();
+    return;
+  }
+
+  loadStateLaborLaw(false);
+}
+
+/* =========================================================
    DEVELOPER COMMAND CENTER
    ========================================================= */
 
@@ -2009,6 +2315,190 @@ function getResolvedDeveloperChecks() {
     "Returning users must verify their PIN; five failed attempts cause a 15-minute lockout."
   ];
 }
+
+const DEVELOPER_RECOMMENDATION_SUBJECTS = [
+  { category: "Feature", name: "login screen" },
+  { category: "Security", name: "PIN setup and unlock flow" },
+  { category: "Design", name: "developer dashboard" },
+  { category: "Design", name: "employee dashboard" },
+  { category: "Design", name: "admin dashboard" },
+  { category: "Design", name: "mobile bottom navigation" },
+  { category: "Support", name: "support-ticket queue" },
+  { category: "Feature", name: "employee time clock" },
+  { category: "Feature", name: "lunch countdown" },
+  { category: "Feature", name: "schedule builder" },
+  { category: "Feature", name: "absence alerts" },
+  { category: "Feature", name: "attendance warnings" },
+  { category: "Feature", name: "employee profiles" },
+  { category: "Feature", name: "business onboarding" },
+  { category: "Feature", name: "temperature logs" },
+  { category: "Feature", name: "daily checklist" },
+  { category: "Feature", name: "checklist photo evidence" },
+  { category: "Feature", name: "inventory counts" },
+  { category: "Feature", name: "barcode scanning" },
+  { category: "Feature", name: "purchase orders" },
+  { category: "Feature", name: "vendor records" },
+  { category: "Feature", name: "customer records" },
+  { category: "Feature", name: "job and order cards" },
+  { category: "Feature", name: "cash-drop workflow" },
+  { category: "Feature", name: "tips and payouts" },
+  { category: "Feature", name: "sales reports" },
+  { category: "Feature", name: "profit-and-loss view" },
+  { category: "Design", name: "notification center" },
+  { category: "Design", name: "company settings" },
+  { category: "Feature", name: "developer role switcher" },
+  { category: "Security", name: "session-expiration notices" },
+  { category: "Fix", name: "error messages" },
+  { category: "Feature", name: "offline and PWA experience" },
+  { category: "Design", name: "accessibility and readability" },
+  { category: "Fix", name: "loading performance" },
+  { category: "Security", name: "activity and audit log" }
+];
+
+const DEVELOPER_RECOMMENDATION_EDITS = [
+  "make its primary action easier to reach on a phone",
+  "add clearer success and failure feedback",
+  "reduce the number of taps needed for the most common task",
+  "add a concise explanation before users make an important change",
+  "create a more helpful empty state for first-time users",
+  "strengthen the visual hierarchy between urgent and routine information",
+  "add a review summary before the final submission",
+  "make role permissions clearer inside the interface",
+  "surface the most useful next action automatically",
+  "add a compact status summary that is readable at a glance",
+  "improve recovery when a request fails or the connection drops",
+  "make important controls easier to use one-handed"
+];
+
+const DEVELOPER_RECOMMENDATION_OUTCOMES = [
+  "employees can finish common work faster",
+  "administrators can spot problems sooner",
+  "mobile users are less likely to tap the wrong control",
+  "support tickets contain clearer information",
+  "new users immediately understand what to do next",
+  "company activity remains easier to review and audit",
+  "urgent warnings stand out without overwhelming the screen",
+  "busy shifts require less navigation between pages",
+  "users receive confirmation that their work was saved",
+  "managers can make decisions with less guesswork",
+  "the experience feels more polished and trustworthy",
+  "future backend integration requires fewer interface changes"
+];
+
+let developerRecommendationLoading = false;
+let developerRecommendationLastClaimAt = 0;
+
+function buildDeveloperRecommendation(number) {
+  const index = Number(number) - 1;
+  const subjects = DEVELOPER_RECOMMENDATION_SUBJECTS;
+  const edits = DEVELOPER_RECOMMENDATION_EDITS;
+  const outcomes = DEVELOPER_RECOMMENDATION_OUTCOMES;
+  const total = subjects.length * edits.length * outcomes.length;
+
+  if (!Number.isSafeInteger(index) || index < 0 || index >= total) {
+    return null;
+  }
+
+  const subject = subjects[index % subjects.length];
+  const editIndex = Math.floor(index / subjects.length) % edits.length;
+  const outcomeIndex = Math.floor(index / (subjects.length * edits.length)) % outcomes.length;
+
+  return {
+    category: subject.category,
+    text:
+      "Review the " + subject.name + " and " + edits[editIndex] +
+      " so " + outcomes[outcomeIndex] + ".",
+    number: number,
+    total: total
+  };
+}
+
+async function loadDeveloperRecommendation() {
+  const target = $("developer-recommendation-text");
+  const category = $("developer-recommendation-category");
+  const counter = $("developer-recommendation-counter");
+
+  if (!target || !category || !counter || developerRecommendationLoading) return;
+  if (!isDeveloperLogin() || getDeveloperView() !== "Developer") return;
+
+  const now = Date.now();
+  if (now - developerRecommendationLastClaimAt < 5000) return;
+
+  const accessToken = getStoredAuthItem(ACCESS_TOKEN_KEY);
+  const userId = authenticatedContext?.id;
+  if (!accessToken || !userId) return;
+
+  developerRecommendationLoading = true;
+  developerRecommendationLastClaimAt = now;
+  target.textContent = "Creating a new recommendation that has never been used…";
+  category.textContent = "Loading";
+  counter.textContent = "";
+
+  try {
+    const claimResponse = await fetch(
+      SUPABASE_URL + "/rest/v1/developer_recommendations?select=id,opened_at",
+      {
+        method: "POST",
+        headers: {
+          "apikey": SUPABASE_KEY,
+          "Authorization": "Bearer " + accessToken,
+          "Content-Type": "application/json",
+          "Prefer": "return=representation"
+        },
+        body: JSON.stringify({ user_id: userId })
+      }
+    );
+
+    if (!claimResponse.ok) throw new Error("Could not claim recommendation.");
+
+    const rows = await claimResponse.json();
+    const row = Array.isArray(rows) ? rows[0] : null;
+    const recommendation = buildDeveloperRecommendation(Number(row?.id));
+
+    if (!recommendation) {
+      category.textContent = "Queue complete";
+      target.textContent = "Every prepared recommendation has been used. No previous suggestion will be recycled.";
+      counter.textContent = "Add more recommendations before another can appear.";
+      return;
+    }
+
+    category.textContent = recommendation.category;
+    target.textContent = recommendation.text;
+    counter.textContent =
+      "Recommendation #" + recommendation.number +
+      " • New every time the app opens • Never reused";
+
+    await fetch(
+      SUPABASE_URL + "/rest/v1/developer_recommendations?id=eq." + encodeURIComponent(row.id),
+      {
+        method: "PATCH",
+        headers: {
+          "apikey": SUPABASE_KEY,
+          "Authorization": "Bearer " + accessToken,
+          "Content-Type": "application/json",
+          "Prefer": "return=minimal"
+        },
+        body: JSON.stringify({
+          category: recommendation.category,
+          suggestion_text: recommendation.text
+        })
+      }
+    );
+  } catch (error) {
+    category.textContent = "Unavailable";
+    target.textContent = "A new recommendation could not be loaded. No older recommendation was reused.";
+    counter.textContent = "Open the app again to retry.";
+  } finally {
+    developerRecommendationLoading = false;
+  }
+}
+
+document.addEventListener("visibilitychange", function () {
+  if (!document.hidden) {
+    loadDeveloperRecommendation();
+    loadStateLaborLaw(true);
+  }
+});
 
 function developerAlertMarkup(alert) {
   return `
@@ -2138,11 +2628,15 @@ function installDeveloperExperience() {
       </section>
 
       <section class="card" style="padding:18px;border:1px solid rgba(22,119,242,.18);background:linear-gradient(145deg,#ffffff,#f4f8ff);">
-        <div class="eyebrow">RECOMMENDING</div>
-        <h2 style="margin:4px 0 8px;">Features / Edits / Design / Fixes</h2>
-        <p style="margin:0;color:#61728c;">
-          Prioritized recommendations for new features, code edits, design improvements, and necessary fixes.
+        <div class="eyebrow">NEW EVERY APP OPEN</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+          <h2 style="margin:4px 0 8px;">Features / Edits / Design / Fixes</h2>
+          <span id="developer-recommendation-category" class="pill">Loading</span>
+        </div>
+        <p id="developer-recommendation-text" style="margin:0;color:#334a68;font-size:16px;font-weight:750;line-height:1.5;">
+          Creating a new recommendation that has never been used…
         </p>
+        <small id="developer-recommendation-counter" style="display:block;margin-top:10px;color:#7b8aa0;"></small>
       </section>
 
       <section class="card" style="padding:18px;">
@@ -2173,6 +2667,7 @@ function installDeveloperExperience() {
       child.hidden = true;
     });
     dashboard.insertBefore(home, dashboard.firstChild);
+    loadDeveloperRecommendation();
   }
 }
 
