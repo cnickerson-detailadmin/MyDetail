@@ -2137,6 +2137,14 @@ function installDeveloperExperience() {
         </div>
       </section>
 
+      <section class="card" style="padding:18px;border:1px solid rgba(22,119,242,.18);background:linear-gradient(145deg,#ffffff,#f4f8ff);">
+        <div class="eyebrow">RECOMMENDING</div>
+        <h2 style="margin:4px 0 8px;">Features / Edits / Design / Fixes</h2>
+        <p style="margin:0;color:#61728c;">
+          Prioritized recommendations for new features, code edits, design improvements, and necessary fixes.
+        </p>
+      </section>
+
       <section class="card" style="padding:18px;">
         <div class="eyebrow">ADMIN</div>
         <h2 style="margin:4px 0 8px;">Entire App Setup</h2>
