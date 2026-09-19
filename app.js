@@ -2362,6 +2362,7 @@ async function loginTestUser(email, password, companyCode) {
   }
 
   localStorage.setItem("myservice_supabase_access_token", authData.access_token);
+  localStorage.setItem("myservice_supabase_user_id", authData.user?.id || "");
   if (authData.refresh_token) {
     localStorage.setItem("myservice_supabase_refresh_token", authData.refresh_token);
   }
@@ -2388,11 +2389,90 @@ async function loginTestUser(email, password, companyCode) {
   return true;
 }
 
+async function userHasQuickPin(accessToken, userId) {
+  if (!accessToken || !userId) return false;
+
+  const response = await fetch(
+    "https://nvgzbgcuzuzbvbcksfhq.supabase.co/rest/v1/user_quick_pins?user_id=eq." +
+      encodeURIComponent(userId) +
+      "&select=user_id&limit=1",
+    {
+      headers: {
+        "apikey": "sb_publishable_ZVRbTwG3_0zWt2FlrMn_3w_y8HlM-r-",
+        "Authorization": "Bearer " + accessToken
+      }
+    }
+  );
+
+  if (!response.ok) return false;
+  const rows = await response.json();
+  return Array.isArray(rows) && rows.length > 0;
+}
+
+function showQuickPinSetupScreen(accessToken) {
+  document.body.innerHTML = `
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:#f3f7fc;box-sizing:border-box;">
+      <div style="width:100%;max-width:420px;background:white;padding:28px;border-radius:24px;box-shadow:0 12px 36px rgba(16,42,76,.08);box-sizing:border-box;">
+        <h1 style="margin:0;color:#0d2345;">Create your 4-digit PIN</h1>
+        <p style="color:#61728c;line-height:1.45;">Required before you can continue to MyService.</p>
+
+        <input id="newQuickPin" type="password" inputmode="numeric" maxlength="4"
+          autocomplete="new-password" placeholder="4-digit PIN"
+          style="display:block;width:100%;box-sizing:border-box;padding:15px;margin:18px 0 10px;border:1px solid #d6dfeb;border-radius:14px;font-size:20px;text-align:center;letter-spacing:8px;">
+
+        <input id="confirmQuickPin" type="password" inputmode="numeric" maxlength="4"
+          autocomplete="new-password" placeholder="Confirm PIN"
+          style="display:block;width:100%;box-sizing:border-box;padding:15px;margin:0 0 16px;border:1px solid #d6dfeb;border-radius:14px;font-size:20px;text-align:center;letter-spacing:8px;">
+
+        <button id="saveQuickPin" type="button" class="primary-button"
+          style="width:100%;min-height:54px;border-radius:14px;font-weight:800;">
+          CREATE PIN
+        </button>
+      </div>
+    </div>
+  `;
+
+  $("saveQuickPin").onclick = async function () {
+    const pin = $("newQuickPin").value.trim();
+    const confirmPin = $("confirmQuickPin").value.trim();
+
+    if (!/^\\d{4}$/.test(pin)) {
+      alert("Your PIN must be exactly 4 digits.");
+      return;
+    }
+    if (pin !== confirmPin) {
+      alert("PINs do not match.");
+      return;
+    }
+
+    const response = await fetch(
+      "https://nvgzbgcuzuzbvbcksfhq.supabase.co/rest/v1/rpc/set_my_quick_pin",
+      {
+        method: "POST",
+        headers: {
+          "apikey": "sb_publishable_ZVRbTwG3_0zWt2FlrMn_3w_y8HlM-r-",
+          "Authorization": "Bearer " + accessToken,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ new_pin: pin })
+      }
+    );
+
+    if (!response.ok) {
+      alert("PIN could not be saved. Please try again.");
+      return;
+    }
+
+    location.reload();
+  };
+}
+
 function logoutTestUser() {
   localStorage.removeItem(LOGIN_KEY);
   sessionStorage.removeItem(LOGIN_KEY);
   localStorage.removeItem("myservice_supabase_access_token");
   localStorage.removeItem("myservice_supabase_refresh_token");
+  localStorage.removeItem("myservice_supabase_user_id");
 
   location.reload();
 }
@@ -2732,7 +2812,7 @@ function activateLoginScreen() {
 
 document.addEventListener(
   "DOMContentLoaded",
-  function () {
+  async function () {
     const recoverySession = getRecoverySessionFromUrl();
 
     if (recoverySession) {
@@ -2749,10 +2829,17 @@ document.addEventListener(
       return;
     }
 
+    const accessToken = localStorage.getItem("myservice_supabase_access_token");
+    const userId = localStorage.getItem("myservice_supabase_user_id");
+
+    if (!(await userHasQuickPin(accessToken, userId))) {
+      showQuickPinSetupScreen(accessToken);
+      return;
+    }
+
     const email =
-      localStorage.getItem(
-        LOGIN_KEY
-      );
+      localStorage.getItem(LOGIN_KEY) ||
+      sessionStorage.getItem(LOGIN_KEY);
 
     state.currentUser = {
       id: email,
