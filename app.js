@@ -740,6 +740,30 @@ function clockOut() {
     "✓"
   );
 
+  const shiftRange =
+    `${formatTime(punch.clockIn)}-${formatTime(punch.clockOut)}`;
+  const lunchRanges = (punch.breaks || [])
+    .filter(item => item.start && item.end)
+    .map(item => `${formatTime(item.start)}-${formatTime(item.end)}`)
+    .join(", ") || "None";
+
+  state.notifications.unshift({
+    id: uid("notification"),
+    audience: "Admin",
+    type: "clock-out",
+    employeeId: employee.id,
+    employeeName: employee.name,
+    title: `${employee.name} clocked out`,
+    description:
+      `Today's wages: ${money(punch.estimatedGrossPay)} • ` +
+      `Hourly rate: ${Number(punch.hourlyRate || TEST_HOURLY_RATE).toFixed(2)} • ` +
+      `Hours worked: ${Number(punch.totalHours || 0).toFixed(2)} • ` +
+      `${shiftRange} • Lunch: ${lunchRanges}`,
+    time: now,
+    read: false
+  });
+  state.notifications = state.notifications.slice(0, 100);
+
   saveState();
   renderAll();
 
