@@ -4029,3 +4029,177 @@ document.addEventListener(
     }
   }
 );
+
+/* =========================================================
+   DEVELOPER SUPPLIER / BUYER CONNECTIONS
+   Developer-only marketplace configuration workspace.
+   ========================================================= */
+
+const SUPPLIER_MARKETPLACE_KEY = "myservice_supplier_marketplace_v1";
+
+function getSupplierMarketplaceState() {
+  try {
+    const raw = localStorage.getItem(SUPPLIER_MARKETPLACE_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return {
+      suppliers: Array.isArray(parsed?.suppliers) ? parsed.suppliers : [],
+      buyers: Array.isArray(parsed?.buyers) ? parsed.buyers : [],
+      connections: Array.isArray(parsed?.connections) ? parsed.connections : [],
+      settings: {
+        supplierFeePercent: Number(parsed?.settings?.supplierFeePercent ?? 4),
+        buyerCreditPercent: Number(parsed?.settings?.buyerCreditPercent ?? 2),
+        myServicePercent: Number(parsed?.settings?.myServicePercent ?? 2),
+        minMyServicePercent: Number(parsed?.settings?.minMyServicePercent ?? 1)
+      }
+    };
+  } catch {
+    return {
+      suppliers: [], buyers: [], connections: [],
+      settings: { supplierFeePercent: 4, buyerCreditPercent: 2, myServicePercent: 2, minMyServicePercent: 1 }
+    };
+  }
+}
+
+function saveSupplierMarketplaceState(value) {
+  localStorage.setItem(SUPPLIER_MARKETPLACE_KEY, JSON.stringify(value));
+}
+
+function supplierMarketplaceMarkup() {
+  if (!isDeveloperLogin() || getDeveloperView() !== "Developer") return;
+
+  const dashboard = $("dashboard");
+  if (!dashboard) return;
+
+  let panel = $("developer-supplier-marketplace");
+  if (!panel) {
+    panel = document.createElement("section");
+    panel.id = "developer-supplier-marketplace";
+    panel.className = "panel";
+    panel.style.cssText = "margin-bottom:18px;border:2px solid rgba(22,119,255,.18);";
+    dashboard.insertBefore(panel, dashboard.children[1] || null);
+  }
+
+  const m = getSupplierMarketplaceState();
+  const fee = m.settings.supplierFeePercent;
+  const credit = m.settings.buyerCreditPercent;
+  const retained = m.settings.myServicePercent;
+
+  panel.innerHTML = `
+    <div class="eyebrow">DEVELOPER ONLY • SUPPLIER MARKETPLACE</div>
+    <h2 style="margin:4px 0 6px;">Supplier / Buyer Connections</h2>
+    <p style="margin:0 0 16px;color:#61728c;">
+      Configure the marketplace model before exposing it to customer businesses.
+      This developer workspace does not process real orders or payments.
+    </p>
+
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px;">
+      <div style="padding:14px;border-radius:15px;background:#f8fbff;">
+        <small>SUPPLIER FEE</small><strong style="display:block;font-size:24px;">${fee}%</strong>
+      </div>
+      <div style="padding:14px;border-radius:15px;background:#f8fbff;">
+        <small>BUYER CREDIT</small><strong style="display:block;font-size:24px;">${credit}%</strong>
+      </div>
+      <div style="padding:14px;border-radius:15px;background:#f8fbff;">
+        <small>MYSERVICE RETAINED</small><strong style="display:block;font-size:24px;">${retained}%</strong>
+      </div>
+    </div>
+
+    <div style="padding:14px;border:1px solid #dbe7f5;border-radius:15px;margin-bottom:14px;">
+      <strong>Current proposed model</strong>
+      <p style="margin:6px 0 0;color:#61728c;">
+        Supplier pays ${fee}% per completed shipment. ${credit}% is credited to the buyer and
+        ${retained}% is retained by MyService. The MyService retained share cannot be configured
+        below ${m.settings.minMyServicePercent}%.
+      </p>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <button class="outline-button" type="button" onclick="addDeveloperSupplier()">+ ADD SUPPLIER</button>
+      <button class="outline-button" type="button" onclick="addDeveloperBuyer()">+ ADD BUYER</button>
+      <button class="outline-button" type="button" onclick="connectDeveloperSupplierBuyer()">CONNECT SUPPLIER → BUYER</button>
+      <button class="outline-button" type="button" onclick="showDeveloperMarketplaceConnections()">VIEW CONNECTIONS</button>
+    </div>
+
+    <div style="margin-top:14px;padding:14px;border-radius:15px;background:#f8fbff;">
+      <strong>Developer setup counts</strong>
+      <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:8px;color:#61728c;font-size:13px;">
+        <span>Suppliers: ${m.suppliers.length}</span>
+        <span>Buyers: ${m.buyers.length}</span>
+        <span>Connections: ${m.connections.length}</span>
+      </div>
+    </div>
+  `;
+}
+
+function addDeveloperSupplier() {
+  if (!isDeveloperLogin() || getDeveloperView() !== "Developer") return;
+  const name = prompt("Supplier business name:");
+  if (!name?.trim()) return;
+  const m = getSupplierMarketplaceState();
+  m.suppliers.push({ id: uid("supplier"), name: name.trim(), status: "Pending verification", createdAt: new Date().toISOString() });
+  saveSupplierMarketplaceState(m);
+  supplierMarketplaceMarkup();
+}
+
+function addDeveloperBuyer() {
+  if (!isDeveloperLogin() || getDeveloperView() !== "Developer") return;
+  const name = prompt("Buyer business name:");
+  if (!name?.trim()) return;
+  const m = getSupplierMarketplaceState();
+  m.buyers.push({ id: uid("buyer"), name: name.trim(), status: "Pending verification", createdAt: new Date().toISOString() });
+  saveSupplierMarketplaceState(m);
+  supplierMarketplaceMarkup();
+}
+
+function connectDeveloperSupplierBuyer() {
+  if (!isDeveloperLogin() || getDeveloperView() !== "Developer") return;
+  const m = getSupplierMarketplaceState();
+  if (!m.suppliers.length || !m.buyers.length) {
+    alert("Add at least one supplier and one buyer first.");
+    return;
+  }
+
+  const supplier = m.suppliers[m.suppliers.length - 1];
+  const buyer = m.buyers[m.buyers.length - 1];
+
+  m.connections.push({
+    id: uid("connection"),
+    supplierId: supplier.id,
+    supplierName: supplier.name,
+    buyerId: buyer.id,
+    buyerName: buyer.name,
+    status: "Pending supplier/buyer approval",
+    feeModel: { supplierFeePercent: m.settings.supplierFeePercent, buyerCreditPercent: m.settings.buyerCreditPercent, myServicePercent: m.settings.myServicePercent },
+    createdAt: new Date().toISOString()
+  });
+
+  saveSupplierMarketplaceState(m);
+  supplierMarketplaceMarkup();
+  alert("Developer test connection created. Real customer matching and payments require the secure backend.");
+}
+
+function showDeveloperMarketplaceConnections() {
+  if (!isDeveloperLogin() || getDeveloperView() !== "Developer") return;
+  const m = getSupplierMarketplaceState();
+  if (!m.connections.length) {
+    alert("No supplier/buyer connections yet.");
+    return;
+  }
+  alert(m.connections.map((c, i) =>
+    (i + 1) + ". " + c.supplierName + " → " + c.buyerName + " • " + c.status
+  ).join("\\n"));
+}
+
+function installDeveloperSupplierMarketplace() {
+  if (!isDeveloperLogin() || getDeveloperView() !== "Developer") {
+    $("developer-supplier-marketplace")?.remove();
+    return;
+  }
+  supplierMarketplaceMarkup();
+}
+
+const originalInstallDeveloperExperience = installDeveloperExperience;
+installDeveloperExperience = function () {
+  originalInstallDeveloperExperience();
+  installDeveloperSupplierMarketplace();
+};
