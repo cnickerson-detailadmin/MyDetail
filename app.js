@@ -765,6 +765,10 @@ function toggleClock() {
     return;
   }
 
+  if (!window.confirm("Are you sure you want to clock out?")) {
+    return;
+  }
+
   clockOut();
 }
 
