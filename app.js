@@ -442,11 +442,21 @@ function estimateSupportDifficulty(subject, description, priority = "standard") 
     "payment", "corrupt", "cannot login", "can't login"
   ];
 
+  const sensitive = [
+    "password", "pin", "ssn", "social security", "bank account",
+    "routing number", "credit card", "card number", "cvv", "token",
+    "access token", "refresh token", "secret", "api key", "private key",
+    "medical", "health information", "payroll", "tax id", "ein",
+    "security breach", "account takeover"
+  ];
+
   const easy = [
     "clock in", "clock-in", "clock out", "clock-out", "forgot password",
     "password reset", "button", "display", "wrong time", "schedule",
     "permission", "profile"
   ];
+
+  const mayBeTooSensitiveForChatGPT = sensitive.some(term => text.includes(term));
 
   let difficulty = "Moderate";
   let min = 15;
@@ -490,7 +500,8 @@ function estimateSupportDifficulty(subject, description, priority = "standard") 
     estimatedMinutes: max,
     estimateLabel: min + "–" + max + " min",
     chatgptDifficulty,
-    chatgptEstimateLabel: chatgptMin + "–" + chatgptMax + " min"
+    chatgptEstimateLabel: chatgptMin + "–" + chatgptMax + " min",
+    mayBeTooSensitiveForChatGPT
   };
 }
 
@@ -516,6 +527,7 @@ function submitSupportTicket(event) {
     estimateLabel: estimate.estimateLabel,
     chatgptDifficulty: estimate.chatgptDifficulty,
     chatgptEstimateLabel: estimate.chatgptEstimateLabel,
+    mayBeTooSensitiveForChatGPT: estimate.mayBeTooSensitiveForChatGPT,
     status: "Open",
     createdAt: new Date().toISOString()
   };
@@ -530,7 +542,8 @@ function submitSupportTicket(event) {
       " • Overall difficulty: " + ticket.difficulty +
       " • With ChatGPT help: " + ticket.chatgptDifficulty +
       " • Likely fix time: " + ticket.estimateLabel +
-      " • With ChatGPT: " + ticket.chatgptEstimateLabel,
+      " • With ChatGPT: " + ticket.chatgptEstimateLabel +
+      (ticket.mayBeTooSensitiveForChatGPT ? " • May be too sensitive for ChatGPT" : ""),
     time: ticket.createdAt
   });
 
@@ -544,7 +557,8 @@ function submitSupportTicket(event) {
     "Overall difficulty: " + ticket.difficulty + "\n" +
     "Overall likely fix time: " + ticket.estimateLabel + "\n" +
     "With ChatGPT help: " + ticket.chatgptDifficulty + "\n" +
-    "Likely fix time with ChatGPT: " + ticket.chatgptEstimateLabel
+    "Likely fix time with ChatGPT: " + ticket.chatgptEstimateLabel +
+    (ticket.mayBeTooSensitiveForChatGPT ? "\nMay be too sensitive for ChatGPT" : "")
   );
 }
 
@@ -566,6 +580,11 @@ function renderSupportTickets() {
       <p style="margin:4px 0 4px;">
         <b>With ChatGPT help:</b> ${escapeHTML(ticket.chatgptDifficulty || ticket.difficulty)} • ${escapeHTML(ticket.chatgptEstimateLabel || ticket.estimateLabel)}
       </p>
+      ${ticket.mayBeTooSensitiveForChatGPT ? `
+        <div style="margin:8px 0;padding:10px 12px;border-radius:12px;background:rgba(220,38,38,.08);font-weight:750;">
+          ⚠ May be too sensitive for ChatGPT
+        </div>
+      ` : ""}
       <small style="display:block;margin-bottom:6px;opacity:.7;">
         Estimates only. Actual repair time can vary.
       </small>
