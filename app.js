@@ -795,16 +795,44 @@ function toggleClock() {
     return;
   }
 
-  const workedSeconds = Math.max(0, Math.floor(calculatePunchHours(punch) * 3600));
-  const workedTime = formatTimer(workedSeconds);
+  const now = new Date();
+  const today = dateKey(now);
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const scheduledShift = state.schedule.find(shift =>
+    shift.employeeId === employee.id &&
+    shift.date === today &&
+    shift.status !== "cancelled" &&
+    scheduleTimeToMinutes(shift.start) !== null &&
+    scheduleTimeToMinutes(shift.end) !== null &&
+    currentMinutes >= scheduleTimeToMinutes(shift.start)
+  );
 
-  if (!window.confirm(`You have worked ${workedTime} hrs. Clock out?`)) {
-    return;
+  let confirmationMessage;
+
+  if (scheduledShift) {
+    const startMinutes = scheduleTimeToMinutes(scheduledShift.start);
+    let endMinutes = scheduleTimeToMinutes(scheduledShift.end);
+    let comparableCurrentMinutes = currentMinutes;
+
+    if (endMinutes < startMinutes) {
+      endMinutes += 1440;
+      if (comparableCurrentMinutes < startMinutes) comparableCurrentMinutes += 1440;
+    }
+
+    if (comparableCurrentMinutes < endMinutes) {
+      const remainingSeconds = Math.max(0, (endMinutes - comparableCurrentMinutes) * 60 - now.getSeconds());
+      confirmationMessage = `You still have ${formatTimer(remainingSeconds)} left of your scheduled shift. Are you sure you'd like to clock out?`;
+    }
   }
 
+  if (!confirmationMessage) {
+    const workedSeconds = Math.max(0, Math.floor(calculatePunchHours(punch) * 3600));
+    confirmationMessage = `You have worked ${formatTimer(workedSeconds)} hrs. Clock out?`;
+  }
+
+  if (!window.confirm(confirmationMessage)) return;
   clockOut();
 }
-
 function ensureBreakButton() {
   const clockButton = $("clockButton");
 
