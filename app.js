@@ -2265,7 +2265,7 @@ document.addEventListener("DOMContentLoaded", renderEmployees);
    MYSERVICE — TEST LOGIN / LOGOUT
    ========================================================= */
 
-const TEST_ACCOUNTS = {};
+const TEST_ACCOUNTS = Object.fromEntries(\n  Array.from({ length: 10 }, (_, i) => [\n    `camry9306+employee${i + 1}@gmail.com`,\n    { role: "Employee", name: `Test Employee ${i + 1}` }\n  ])\n);
 const LOGIN_KEY = "myservice_test_login";
 const TEST_COMPANY_CODE = "296342140657398401";
 
