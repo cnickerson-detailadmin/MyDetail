@@ -2610,7 +2610,7 @@ function showQuickPinSetupScreen(accessToken) {
     const pin = $("newQuickPin").value.trim();
     const confirmPin = $("confirmQuickPin").value.trim();
 
-    if (!/^\\d{4}$/.test(pin)) {
+    if (!/^\d{4}$/.test(pin)) {
       alert("Your PIN must be exactly 4 digits.");
       return;
     }
