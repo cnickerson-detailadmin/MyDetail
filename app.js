@@ -2239,8 +2239,9 @@ const TEST_ACCOUNTS = {
 };
 
 const LOGIN_KEY = "myservice_test_login";
+const TEST_COMPANY_CODE = "296342";
 
-function loginTestUser(email, password) {
+function loginTestUser(email, password, companyCode) {
   email = email
     .trim()
     .toLowerCase();
@@ -2250,10 +2251,11 @@ function loginTestUser(email, password) {
 
   if (
     !account ||
-    password !== "123"
+    password !== "123" ||
+    String(companyCode || "").trim() !== TEST_COMPANY_CODE
   ) {
     alert(
-      "Incorrect email or password."
+      "Incorrect email, password, or company code."
     );
     return false;
   }
@@ -2386,10 +2388,14 @@ function activateLoginScreen() {
     const password =
       $("testLoginPassword").value;
 
+    const companyCode =
+      $("testCompanyCode").value;
+
     if (
       loginTestUser(
         email,
-        password
+        password,
+        companyCode
       )
     ) {
       location.reload();
