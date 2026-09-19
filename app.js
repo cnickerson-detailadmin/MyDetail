@@ -2239,7 +2239,7 @@ const TEST_ACCOUNTS = {
 };
 
 const LOGIN_KEY = "myservice_test_login";
-const TEST_COMPANY_CODE = "296342";
+const TEST_COMPANY_CODE = "296342140657398401";
 
 function loginTestUser(email, password, companyCode) {
   email = email
@@ -2349,10 +2349,10 @@ function showLoginScreen() {
           id="testCompanyCode"
           type="text"
           inputmode="numeric"
-          maxlength="6"
-          pattern="[0-9]{6}"
+          maxlength="18"
+          pattern="[0-9]{6,18}"
           aria-label="Company Code"
-          placeholder="6-digit Company Code"
+          placeholder="Company Code"
           style="
             width:100%;
             padding:15px;
