@@ -5,8 +5,22 @@
 
 "use strict";
 
-const STORAGE_KEY = "myservice_restaurant_v4";
+const STORAGE_KEY_BASE = "myservice_restaurant_v4";
+let STORAGE_KEY = STORAGE_KEY_BASE;
 const ACTIVE_PAGE_KEY = "myservice_active_page";
+
+function activateCompanyStorage(companyId) {
+  const safeCompanyId = String(companyId || "unknown").replace(/[^0-9A-Za-z_-]/g, "");
+  const scopedKey = STORAGE_KEY_BASE + ":company:" + safeCompanyId;
+
+  if (!localStorage.getItem(scopedKey)) {
+    const legacyState = localStorage.getItem(STORAGE_KEY_BASE);
+    if (legacyState) localStorage.setItem(scopedKey, legacyState);
+  }
+
+  STORAGE_KEY = scopedKey;
+  state = loadState();
+}
 const TEST_HOURLY_RATE = 17.50;
 
 /* =========================================================
@@ -1977,41 +1991,22 @@ function returnToDeveloperHome() {
 function getDeveloperAlerts() {
   return [
     {
-      code: "ARCH-001",
-      urgency: "CRITICAL",
-      color: "#b91c1c",
-      title: "Secure multi-company separation is not finished",
-      area: "Roles and company data",
-      impact: "This unfinished security layer can cause users to see the wrong controls or leave business data without verified company-level isolation. MyService is not safe for real customer data until this is completed.",
-      fix: "Connect every protected table to company membership and enforce roles with tested RLS policies."
-    },
-    {
-      code: "DATA-001",
-      urgency: "HIGH",
-      color: "#c2410c",
-      title: "23 protected tables have no access policies",
-      area: "Supabase database",
-      impact: "This configuration can cause schedules, customers, jobs, tasks, reports and other backend features to return no data or fail when the live app tries to use them.",
-      fix: "Add company-scoped SELECT, INSERT, UPDATE and DELETE policies one feature group at a time."
-    },
-    {
-      code: "AUTH-001",
-      urgency: "HIGH",
-      color: "#c2410c",
-      title: "Quick PIN verification is not built yet",
-      area: "Authentication",
-      impact: "The site can save a PIN, but it cannot use that PIN to unlock a returning session yet. Users may create a PIN and never be prompted to verify it.",
-      fix: "Add a secure verify-PIN database function, attempt limits, lockout timing and the returning-user PIN screen."
-    },
-    {
       code: "AUTH-002",
-      urgency: "MEDIUM",
+      urgency: "PLAN REQUIRED",
       color: "#a16207",
-      title: "Leaked-password protection is disabled",
+      title: "Leaked-password screening requires Supabase Pro",
       area: "Supabase Auth",
-      impact: "This setting can allow a user to choose a password already exposed in a known data breach, increasing account-takeover risk.",
-      fix: "Enable leaked-password protection before production accounts are allowed."
+      impact: "Known-compromised-password screening cannot be enabled while this Supabase project is on the Free plan. Strong password rules still apply, but breached-password checking remains unavailable.",
+      fix: "Upgrade the Supabase project to Pro, then enable leaked-password protection in Auth settings."
     }
+  ];
+}
+
+function getResolvedDeveloperChecks() {
+  return [
+    "Company roles and company data are protected by tested RLS policies.",
+    "All protected tables now have access policies.",
+    "Returning users must verify their PIN; five failed attempts cause a 15-minute lockout."
   ];
 }
 
@@ -2133,6 +2128,12 @@ function installDeveloperExperience() {
         </div>
         <div style="display:grid;gap:12px;">
           ${getDeveloperAlerts().map(developerAlertMarkup).join("")}
+        </div>
+        <div style="margin-top:14px;padding:14px;border-radius:14px;background:#ecfdf5;color:#166534;">
+          <strong>${getResolvedDeveloperChecks().length} SECURITY CHECKS FIXED</strong>
+          <div style="display:grid;gap:6px;margin-top:8px;font-size:13px;">
+            ${getResolvedDeveloperChecks().map(item => `<div>✓ ${escapeHTML(item)}</div>`).join("")}
+          </div>
         </div>
       </section>
 
@@ -2725,38 +2726,136 @@ document.addEventListener("DOMContentLoaded", renderEmployees);
    MYSERVICE — TEST LOGIN / LOGOUT
    ========================================================= */
 
-const TEST_ACCOUNTS = {
-  "camry9306+developer@gmail.com": { role: "Developer", name: "Developer" },
-  "camry9306+admin@gmail.com": { role: "Admin", name: "Test Admin" },
-  ...Object.fromEntries(
-    Array.from({ length: 10 }, (_, i) => [
-      "camry9306+employee" + (i + 1) + "@gmail.com",
-      { role: "Employee", name: "Test Employee " + (i + 1) }
-    ])
-  )
-};
+const SUPABASE_URL = "https://nvgzbgcuzuzbvbcksfhq.supabase.co";
+const SUPABASE_KEY = "sb_publishable_ZVRbTwG3_0zWt2FlrMn_3w_y8HlM-r-";
 const LOGIN_KEY = "myservice_test_login";
-const TEST_COMPANY_CODE = "296342140657398401";
+const ACCESS_TOKEN_KEY = "myservice_supabase_access_token";
+const REFRESH_TOKEN_KEY = "myservice_supabase_refresh_token";
+const USER_ID_KEY = "myservice_supabase_user_id";
+const PIN_VERIFIED_KEY = "myservice_pin_verified_user";
+let authenticatedContext = null;
+
+function getStoredAuthItem(key) {
+  return sessionStorage.getItem(key) || localStorage.getItem(key);
+}
+
+function saveAuthTokens(authData, persistent) {
+  const destination = persistent ? localStorage : sessionStorage;
+  const other = persistent ? sessionStorage : localStorage;
+
+  [ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, USER_ID_KEY].forEach(key => other.removeItem(key));
+
+  destination.setItem(ACCESS_TOKEN_KEY, authData.access_token || "");
+  destination.setItem(REFRESH_TOKEN_KEY, authData.refresh_token || "");
+  destination.setItem(USER_ID_KEY, authData.user?.id || "");
+}
+
+function normalizeDatabaseRole(role) {
+  return {
+    developer: "Developer",
+    primary_admin: "Admin",
+    admin: "Admin",
+    manager: "Manager",
+    company_support: "Manager",
+    employee: "Employee"
+  }[String(role || "").toLowerCase()] || "Employee";
+}
+
+async function fetchMyAppContext(accessToken, companyCode = null) {
+  const response = await fetch(SUPABASE_URL + "/rest/v1/rpc/get_my_app_context", {
+    method: "POST",
+    headers: {
+      "apikey": SUPABASE_KEY,
+      "Authorization": "Bearer " + accessToken,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ company_code: companyCode })
+  });
+
+  if (!response.ok) {
+    const error = new Error("Unable to verify account access.");
+    error.status = response.status;
+    throw error;
+  }
+
+  const rows = await response.json();
+  const row = Array.isArray(rows) ? rows[0] : null;
+  if (!row) return null;
+
+  return {
+    id: row.user_id,
+    email: "",
+    name: row.full_name || "MyService User",
+    role: normalizeDatabaseRole(row.role),
+    databaseRole: row.role,
+    companyId: String(row.company_id),
+    companyName: row.company_name || "MyService Business",
+    active: row.active === true
+  };
+}
+
+async function refreshStoredSession() {
+  const refreshToken = getStoredAuthItem(REFRESH_TOKEN_KEY);
+  if (!refreshToken) return null;
+
+  const persistent = Boolean(localStorage.getItem(REFRESH_TOKEN_KEY));
+  const response = await fetch(
+    SUPABASE_URL + "/auth/v1/token?grant_type=refresh_token",
+    {
+      method: "POST",
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ refresh_token: refreshToken })
+    }
+  );
+
+  if (!response.ok) return null;
+  const authData = await response.json();
+  if (!authData.access_token) return null;
+
+  saveAuthTokens(authData, persistent);
+  return authData.access_token;
+}
+
+async function restoreAuthenticatedContext() {
+  let accessToken = getStoredAuthItem(ACCESS_TOKEN_KEY);
+  if (!accessToken) return null;
+
+  try {
+    authenticatedContext = await fetchMyAppContext(accessToken);
+  } catch (error) {
+    if (error.status !== 401) return null;
+
+    accessToken = await refreshStoredSession();
+    if (!accessToken) return null;
+
+    try {
+      authenticatedContext = await fetchMyAppContext(accessToken);
+    } catch {
+      return null;
+    }
+  }
+
+  return authenticatedContext;
+}
 
 async function loginTestUser(email, password, companyCode) {
-  email = email.trim().toLowerCase();
+  email = String(email || "").trim().toLowerCase();
+  companyCode = String(companyCode || "").trim();
 
-  const account = TEST_ACCOUNTS[email];
-
-  if (
-    !account ||
-    String(companyCode || "").trim() !== TEST_COMPANY_CODE
-  ) {
-    alert("Incorrect email, password, or company code.");
+  if (!email || !password || !/^\d{6}$/.test(companyCode)) {
+    alert("Enter your email, password, and 6-digit company code.");
     return false;
   }
 
   const authResponse = await fetch(
-    "https://nvgzbgcuzuzbvbcksfhq.supabase.co/auth/v1/token?grant_type=password",
+    SUPABASE_URL + "/auth/v1/token?grant_type=password",
     {
       method: "POST",
       headers: {
-        "apikey": "sb_publishable_ZVRbTwG3_0zWt2FlrMn_3w_y8HlM-r-",
+        "apikey": SUPABASE_KEY,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({ email, password })
@@ -2770,13 +2869,20 @@ async function loginTestUser(email, password, companyCode) {
     return false;
   }
 
-  localStorage.setItem("myservice_supabase_access_token", authData.access_token);
-  localStorage.setItem("myservice_supabase_user_id", authData.user?.id || "");
-  if (authData.refresh_token) {
-    localStorage.setItem("myservice_supabase_refresh_token", authData.refresh_token);
+  let context;
+  try {
+    context = await fetchMyAppContext(authData.access_token, companyCode);
+  } catch {
+    context = null;
+  }
+
+  if (!context || !context.active) {
+    alert("Incorrect email, password, or company code.");
+    return false;
   }
 
   const stayLoggedIn = $("stayLoggedIn")?.checked !== false;
+  saveAuthTokens(authData, stayLoggedIn);
 
   if (stayLoggedIn) {
     localStorage.setItem(LOGIN_KEY, email);
@@ -2786,39 +2892,35 @@ async function loginTestUser(email, password, companyCode) {
     localStorage.removeItem(LOGIN_KEY);
   }
 
-  state.currentUser = {
-    id: email,
-    name: account.name,
-    email,
-    role: account.role
-  };
-
-  saveState();
+  context.email = email;
+  authenticatedContext = context;
+  sessionStorage.removeItem(PIN_VERIFIED_KEY);
 
   return true;
 }
 
-async function userHasQuickPin(accessToken, userId) {
-  if (!accessToken || !userId) return false;
+async function userHasQuickPin(accessToken) {
+  if (!accessToken) return false;
 
-  const response = await fetch(
-    "https://nvgzbgcuzuzbvbcksfhq.supabase.co/rest/v1/user_quick_pins?user_id=eq." +
-      encodeURIComponent(userId) +
-      "&select=user_id&limit=1",
-    {
-      headers: {
-        "apikey": "sb_publishable_ZVRbTwG3_0zWt2FlrMn_3w_y8HlM-r-",
-        "Authorization": "Bearer " + accessToken
-      }
-    }
-  );
+  const response = await fetch(SUPABASE_URL + "/rest/v1/rpc/has_my_quick_pin", {
+    method: "POST",
+    headers: {
+      "apikey": SUPABASE_KEY,
+      "Authorization": "Bearer " + accessToken,
+      "Content-Type": "application/json"
+    },
+    body: "{}"
+  });
 
   if (!response.ok) return false;
-  const rows = await response.json();
-  return Array.isArray(rows) && rows.length > 0;
+  return (await response.json()) === true;
 }
 
-function showQuickPinSetupScreen(accessToken) {
+function isQuickPinVerified(userId) {
+  return sessionStorage.getItem(PIN_VERIFIED_KEY) === String(userId || "");
+}
+
+function showQuickPinSetupScreen(accessToken, userId) {
   document.body.innerHTML = `
     <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:#f3f7fc;box-sizing:border-box;">
       <div style="width:100%;max-width:420px;background:white;padding:28px;border-radius:24px;box-shadow:0 12px 36px rgba(16,42,76,.08);box-sizing:border-box;">
@@ -2855,11 +2957,11 @@ function showQuickPinSetupScreen(accessToken) {
     }
 
     const response = await fetch(
-      "https://nvgzbgcuzuzbvbcksfhq.supabase.co/rest/v1/rpc/set_my_quick_pin",
+      SUPABASE_URL + "/rest/v1/rpc/set_my_quick_pin",
       {
         method: "POST",
         headers: {
-          "apikey": "sb_publishable_ZVRbTwG3_0zWt2FlrMn_3w_y8HlM-r-",
+          "apikey": SUPABASE_KEY,
           "Authorization": "Bearer " + accessToken,
           "Content-Type": "application/json"
         },
@@ -2872,29 +2974,107 @@ function showQuickPinSetupScreen(accessToken) {
       return;
     }
 
+    sessionStorage.setItem(PIN_VERIFIED_KEY, String(userId || ""));
     location.reload();
   };
 }
 
-function logoutTestUser() {
-  localStorage.removeItem(LOGIN_KEY);
-  sessionStorage.removeItem(LOGIN_KEY);
-  localStorage.removeItem("myservice_supabase_access_token");
-  localStorage.removeItem("myservice_supabase_refresh_token");
-  localStorage.removeItem("myservice_supabase_user_id");
-  localStorage.removeItem(DEVELOPER_VIEW_KEY);
+function showQuickPinVerificationScreen(accessToken, userId) {
+  document.body.innerHTML = `
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:#f3f7fc;box-sizing:border-box;">
+      <div style="width:100%;max-width:420px;background:white;padding:28px;border-radius:24px;box-shadow:0 12px 36px rgba(16,42,76,.08);box-sizing:border-box;">
+        <h1 style="margin:0;color:#0d2345;">Enter your 4-digit PIN</h1>
+        <p style="color:#61728c;line-height:1.45;">Verify it is you before opening MyService.</p>
+        <input id="verifyQuickPin" type="password" inputmode="numeric" maxlength="4"
+          autocomplete="one-time-code" placeholder="4-digit PIN"
+          style="display:block;width:100%;box-sizing:border-box;padding:15px;margin:18px 0 10px;border:1px solid #d6dfeb;border-radius:14px;font-size:20px;text-align:center;letter-spacing:8px;">
+        <div id="pinVerifyMessage" style="min-height:22px;margin-bottom:10px;color:#b91c1c;font-size:14px;"></div>
+        <button id="verifyQuickPinButton" type="button" class="primary-button"
+          style="width:100%;min-height:54px;border-radius:14px;font-weight:800;">UNLOCK</button>
+        <button id="pinLogoutButton" type="button" class="outline-button"
+          style="width:100%;min-height:48px;margin-top:10px;border-radius:14px;font-weight:800;">LOG OUT</button>
+      </div>
+    </div>
+  `;
 
+  $("pinLogoutButton").onclick = logoutTestUser;
+  $("verifyQuickPinButton").onclick = async function () {
+    const pin = $("verifyQuickPin").value.trim();
+    const message = $("pinVerifyMessage");
+
+    if (!/^\d{4}$/.test(pin)) {
+      message.textContent = "Enter exactly 4 digits.";
+      return;
+    }
+
+    const response = await fetch(SUPABASE_URL + "/rest/v1/rpc/verify_my_quick_pin", {
+      method: "POST",
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Authorization": "Bearer " + accessToken,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ candidate_pin: pin })
+    });
+
+    if (!response.ok) {
+      message.textContent = "PIN could not be verified. Please try again.";
+      return;
+    }
+
+    const result = await response.json();
+
+    if (result?.verified) {
+      sessionStorage.setItem(PIN_VERIFIED_KEY, String(userId || ""));
+      location.reload();
+      return;
+    }
+
+    if (result?.locked) {
+      const until = result.locked_until
+        ? new Date(result.locked_until).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+        : "15 minutes";
+      message.textContent = "Too many attempts. Try again after " + until + ".";
+      return;
+    }
+
+    message.textContent = "Incorrect PIN. " + Number(result?.remaining_attempts || 0) + " attempt(s) remaining.";
+    $("verifyQuickPin").value = "";
+    $("verifyQuickPin").focus();
+  };
+}
+
+function logoutTestUser() {
+  const accessToken = getStoredAuthItem(ACCESS_TOKEN_KEY);
+
+  if (accessToken) {
+    fetch(SUPABASE_URL + "/auth/v1/logout", {
+      method: "POST",
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Authorization": "Bearer " + accessToken
+      }
+    }).catch(() => {});
+  }
+
+  [
+    LOGIN_KEY,
+    ACCESS_TOKEN_KEY,
+    REFRESH_TOKEN_KEY,
+    USER_ID_KEY
+  ].forEach(key => {
+    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
+  });
+
+  sessionStorage.removeItem(PIN_VERIFIED_KEY);
+  localStorage.removeItem(DEVELOPER_VIEW_KEY);
+  authenticatedContext = null;
   location.reload();
 }
 
 function getLoggedInTestUser() {
-  const email =
-    localStorage.getItem(LOGIN_KEY) ||
-    sessionStorage.getItem(LOGIN_KEY);
-
-  return email
-    ? TEST_ACCOUNTS[email] || null
-    : null;
+  return authenticatedContext;
 }
 
 function getLoginHelpPhoneMarkup() {
@@ -2919,12 +3099,12 @@ async function sendPasswordResetEmail(email) {
   }
 
   const response = await fetch(
-    "https://nvgzbgcuzuzbvbcksfhq.supabase.co/auth/v1/recover?redirect_to=" +
+    SUPABASE_URL + "/auth/v1/recover?redirect_to=" +
       encodeURIComponent("https://cnickerson-detailadmin.github.io/MyDetail/"),
     {
       method: "POST",
       headers: {
-        "apikey": "sb_publishable_ZVRbTwG3_0zWt2FlrMn_3w_y8HlM-r-",
+        "apikey": SUPABASE_KEY,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({ email })
@@ -2990,11 +3170,11 @@ function showPasswordRecoveryScreen(accessToken) {
     }
 
     const response = await fetch(
-      "https://nvgzbgcuzuzbvbcksfhq.supabase.co/auth/v1/user",
+      SUPABASE_URL + "/auth/v1/user",
       {
         method: "PUT",
         headers: {
-          "apikey": "sb_publishable_ZVRbTwG3_0zWt2FlrMn_3w_y8HlM-r-",
+          "apikey": SUPABASE_KEY,
           "Authorization": "Bearer " + accessToken,
           "Content-Type": "application/json"
         },
@@ -3112,8 +3292,8 @@ function showLoginScreen() {
           id="testCompanyCode"
           type="text"
           inputmode="numeric"
-          maxlength="18"
-          pattern="[0-9]{6,18}"
+          maxlength="6"
+          pattern="[0-9]{6}"
           aria-label="Company Code"
           placeholder="Company Code"
           style="
@@ -3230,26 +3410,38 @@ document.addEventListener(
       return;
     }
 
-    const loggedIn =
-      getLoggedInTestUser();
+    const loggedIn = await restoreAuthenticatedContext();
 
     if (!loggedIn) {
+      [
+        LOGIN_KEY,
+        ACCESS_TOKEN_KEY,
+        REFRESH_TOKEN_KEY,
+        USER_ID_KEY
+      ].forEach(key => {
+        localStorage.removeItem(key);
+        sessionStorage.removeItem(key);
+      });
       showLoginScreen();
       activateLoginScreen();
       return;
     }
 
-    const accessToken = localStorage.getItem("myservice_supabase_access_token");
-    const userId = localStorage.getItem("myservice_supabase_user_id");
+    activateCompanyStorage(loggedIn.companyId);
+    state.companyName = loggedIn.companyName;
 
-    if (!(await userHasQuickPin(accessToken, userId))) {
-      showQuickPinSetupScreen(accessToken);
+    const accessToken = getStoredAuthItem(ACCESS_TOKEN_KEY);
+    const userId = loggedIn.id;
+
+    if (!(await userHasQuickPin(accessToken))) {
+      showQuickPinSetupScreen(accessToken, userId);
       return;
     }
 
-    const email =
-      localStorage.getItem(LOGIN_KEY) ||
-      sessionStorage.getItem(LOGIN_KEY);
+    if (!isQuickPinVerified(userId)) {
+      showQuickPinVerificationScreen(accessToken, userId);
+      return;
+    }
 
     const activeRole =
       loggedIn.role === "Developer"
@@ -3257,26 +3449,23 @@ document.addEventListener(
         : loggedIn.role;
 
     state.currentUser = {
-      id: email,
-      email,
+      id: userId,
+      email: loggedIn.email,
       name: activeRole === "Developer"
         ? loggedIn.name
         : loggedIn.name + " (" + activeRole + " Preview)",
-      role: activeRole
+      role: activeRole,
+      companyId: loggedIn.companyId
     };
 
     const currentEmployee = getCurrentEmployee();
     currentEmployee.name = state.currentUser.name;
     currentEmployee.role = activeRole;
 
-    getCurrentEmployee();
     saveState();
     updateDateTime();
 
-    const savedPage =
-      localStorage.getItem(
-        ACTIVE_PAGE_KEY
-      );
+    const savedPage = localStorage.getItem(ACTIVE_PAGE_KEY);
 
     showSection(
       savedPage &&
