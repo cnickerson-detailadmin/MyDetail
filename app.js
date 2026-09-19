@@ -28,7 +28,9 @@ const defaultState = {
     tipMode: "pool",
     salesMode: "manual",
     defaultCardFeeRate: 0.03,
-    estimatedTaxRate: 0.15
+    estimatedTaxRate: 0.15,
+    displayLoginHelpPhone: false,
+    loginHelpPhone: ""
   },
 
   users: [
@@ -1703,8 +1705,57 @@ function installLunchSettings() {
     String(getLunchMinutes());
 }
 
+function installLoginHelpSettings() {
+  const section = $("settings");
+  if (!section) return;
+
+  const allowed = ["Developer", "Admin"].includes(getCurrentUser().role);
+  let panel = $("login-help-settings");
+
+  if (!allowed) {
+    if (panel) panel.hidden = true;
+    return;
+  }
+
+  if (!panel) {
+    panel = document.createElement("div");
+    panel.id = "login-help-settings";
+    panel.className = "panel";
+    panel.innerHTML = `
+      <h2>Login Help Contact</h2>
+      <p>Optionally show a public administrator phone number on the login screen for employees who forgot their company code.</p>
+
+      <label style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+        <input id="display-login-help-phone" type="checkbox">
+        Display contact number on login screen
+      </label>
+
+      <label for="login-help-phone">Administrator phone number</label>
+      <input id="login-help-phone" type="tel" autocomplete="tel"
+        placeholder="(716) 555-0123" style="width:100%;padding:12px;margin:6px 0 12px;">
+
+      <button id="save-login-help-phone" type="button" class="primary-button">
+        SAVE LOGIN CONTACT
+      </button>
+    `;
+    section.appendChild(panel);
+
+    $("save-login-help-phone").onclick = function () {
+      state.settings.displayLoginHelpPhone = $("display-login-help-phone").checked;
+      state.settings.loginHelpPhone = $("login-help-phone").value.trim();
+      saveState();
+      alert("Login help contact saved.");
+    };
+  }
+
+  panel.hidden = false;
+  $("display-login-help-phone").checked = state.settings.displayLoginHelpPhone === true;
+  $("login-help-phone").value = state.settings.loginHelpPhone || "";
+}
+
 function renderAll() {
   installLunchSettings();
+  installLoginHelpSettings();
   renderClock();
   renderPunchTable();
   renderMyPunchLog();
@@ -2356,6 +2407,123 @@ function getLoggedInTestUser() {
     : null;
 }
 
+function getLoginHelpPhoneMarkup() {
+  const enabled = state.settings?.displayLoginHelpPhone === true;
+  const phone = String(state.settings?.loginHelpPhone || "").trim();
+
+  if (!enabled || !phone) return "";
+
+  return `
+    <div style="margin-top:6px;font-weight:700;">
+      Call/Text: ${escapeHTML(phone)}
+    </div>
+  `;
+}
+
+async function sendPasswordResetEmail(email) {
+  email = String(email || "").trim().toLowerCase();
+
+  if (!email) {
+    alert("Enter your email address first.");
+    return;
+  }
+
+  const response = await fetch(
+    "https://nvgzbgcuzuzbvbcksfhq.supabase.co/auth/v1/recover?redirect_to=" +
+      encodeURIComponent("https://cnickerson-detailadmin.github.io/MyDetail/"),
+    {
+      method: "POST",
+      headers: {
+        "apikey": "sb_publishable_ZVRbTwG3_0zWt2FlrMn_3w_y8HlM-r-",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ email })
+    }
+  );
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    alert(data.msg || data.message || "Unable to send reset email right now.");
+    return;
+  }
+
+  alert("If that email belongs to a MyService account, a password reset email has been sent.");
+}
+
+function getRecoverySessionFromUrl() {
+  const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  if (params.get("type") !== "recovery") return null;
+
+  const accessToken = params.get("access_token");
+  return accessToken ? { accessToken } : null;
+}
+
+function showPasswordRecoveryScreen(accessToken) {
+  document.body.innerHTML = `
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:#f3f7fc;">
+      <div style="width:100%;max-width:420px;background:white;padding:28px;border-radius:20px;">
+        <h1 style="margin:0 0 6px;">MyService</h1>
+        <p style="margin:0 0 24px;">Create a new password</p>
+
+        <input id="newRecoveryPassword" type="password" autocomplete="new-password"
+          placeholder="New password" style="width:100%;padding:15px;margin-bottom:12px;">
+
+        <input id="confirmRecoveryPassword" type="password" autocomplete="new-password"
+          placeholder="Confirm new password" style="width:100%;padding:15px;margin-bottom:8px;">
+
+        <p style="font-size:13px;opacity:.7;margin:0 0 16px;">
+          Use at least 8 characters, including 1 number and 1 special character.
+        </p>
+
+        <button id="saveRecoveryPassword" class="primary-button"
+          style="width:100%;min-height:52px;">SAVE NEW PASSWORD</button>
+      </div>
+    </div>
+  `;
+
+  $("saveRecoveryPassword").onclick = async function () {
+    const password = $("newRecoveryPassword").value;
+    const confirmPassword = $("confirmRecoveryPassword").value;
+
+    if (password !== confirmPassword) {
+      alert("Passwords do not match.");
+      return;
+    }
+
+    if (
+      password.length < 8 ||
+      !/[0-9]/.test(password) ||
+      !/[^A-Za-z0-9]/.test(password)
+    ) {
+      alert("Password must be at least 8 characters and include 1 number and 1 special character.");
+      return;
+    }
+
+    const response = await fetch(
+      "https://nvgzbgcuzuzbvbcksfhq.supabase.co/auth/v1/user",
+      {
+        method: "PUT",
+        headers: {
+          "apikey": "sb_publishable_ZVRbTwG3_0zWt2FlrMn_3w_y8HlM-r-",
+          "Authorization": "Bearer " + accessToken,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ password })
+      }
+    );
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      alert(data.msg || data.message || "Password could not be updated.");
+      return;
+    }
+
+    history.replaceState(null, "", window.location.pathname);
+    alert("Password updated. You can now sign in.");
+    location.reload();
+  };
+}
+
 function showLoginScreen() {
   document.body.innerHTML = `
     <div style="
@@ -2416,10 +2584,13 @@ function showLoginScreen() {
           >Show</button>
         </div>
 
-        <label style="display:flex;align-items:center;gap:8px;margin:0 0 16px;">
-          <input id="stayLoggedIn" type="checkbox" checked>
-          Stay logged in
-        </label>
+        <button
+          id="forgotPasswordButton"
+          type="button"
+          style="border:0;background:transparent;color:#1267d6;padding:0;margin:0 0 14px;font-weight:700;"
+        >
+          Forgot password?
+        </button>
 
         <input
           id="testCompanyCode"
@@ -2432,9 +2603,20 @@ function showLoginScreen() {
           style="
             width:100%;
             padding:15px;
-            margin-bottom:16px;
+            margin-bottom:8px;
           "
         >
+
+        <div style="margin:0 0 16px;font-size:14px;">
+          <div style="font-weight:700;">Forgot company code?</div>
+          <div style="margin-top:4px;">Please contact your HR or administrator.</div>
+          ${getLoginHelpPhoneMarkup()}
+        </div>
+
+        <label style="display:flex;align-items:center;gap:8px;margin:0 0 16px;">
+          <input id="stayLoggedIn" type="checkbox" checked>
+          Stay logged in
+        </label>
 
         <button
           id="testLoginButton"
@@ -2459,6 +2641,14 @@ function activateLoginScreen() {
 
   const passwordInput = $("testLoginPassword");
   const togglePassword = $("toggleTestPassword");
+
+  const forgotPasswordButton = $("forgotPasswordButton");
+
+  if (forgotPasswordButton) {
+    forgotPasswordButton.onclick = async function () {
+      await sendPasswordResetEmail($("testLoginEmail")?.value);
+    };
+  }
 
   if (togglePassword && passwordInput) {
     togglePassword.onclick = function () {
@@ -2494,6 +2684,13 @@ function activateLoginScreen() {
 document.addEventListener(
   "DOMContentLoaded",
   function () {
+    const recoverySession = getRecoverySessionFromUrl();
+
+    if (recoverySession) {
+      showPasswordRecoveryScreen(recoverySession.accessToken);
+      return;
+    }
+
     const loggedIn =
       getLoggedInTestUser();
 
