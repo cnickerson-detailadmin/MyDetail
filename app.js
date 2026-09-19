@@ -134,6 +134,7 @@ const defaultState = {
   tipPayouts: [],
   feedbackQueue: [],
   notifications: [],
+  supportTickets: [],
 
   checklist: [
     { id: "check-1", title: "Opening equipment check", completed: false },
@@ -225,6 +226,10 @@ function loadState() {
 
       notifications: Array.isArray(parsed.notifications)
         ? parsed.notifications
+        : [],
+
+      supportTickets: Array.isArray(parsed.supportTickets)
+        ? parsed.supportTickets
         : [],
 
       checklist: Array.isArray(parsed.checklist)
@@ -422,6 +427,123 @@ function addActivity(title, description = "", icon = "•") {
   saveState();
 }
 
+
+
+/* =========================================================
+   SUPPORT TICKETS
+   ========================================================= */
+
+function estimateSupportDifficulty(subject, description, priority = "standard") {
+  const text = (String(subject || "") + " " + String(description || "")).toLowerCase();
+
+  const complex = [
+    "security", "breach", "database", "data missing", "data loss",
+    "everyone", "all employees", "entire business", "outage", "server",
+    "payment", "corrupt", "cannot login", "can't login"
+  ];
+
+  const easy = [
+    "clock in", "clock-in", "clock out", "clock-out", "forgot password",
+    "password reset", "button", "display", "wrong time", "schedule",
+    "permission", "profile"
+  ];
+
+  let difficulty = "Moderate";
+  let min = 15;
+  let max = 45;
+
+  if (complex.some(term => text.includes(term))) {
+    difficulty = "Complex";
+    min = 30;
+    max = 120;
+  } else if (easy.some(term => text.includes(term))) {
+    difficulty = "Easy";
+    min = 5;
+    max = 15;
+  }
+
+  if (priority === "emergency" && difficulty === "Easy") {
+    min = 5;
+    max = 20;
+  }
+
+  return {
+    difficulty,
+    estimatedMinutes: max,
+    estimateLabel: min + "–" + max + " min"
+  };
+}
+
+function submitSupportTicket(event) {
+  event.preventDefault();
+
+  const subject = $("supportSubject")?.value.trim() || "";
+  const description = $("supportDescription")?.value.trim() || "";
+  const priority = $("supportPriority")?.value || "standard";
+
+  if (!subject || !description) return;
+
+  const estimate = estimateSupportDifficulty(subject, description, priority);
+  const ticket = {
+    id: "MS-" + String(Date.now()).slice(-6),
+    company: state.companyName || "MyService Business",
+    user: getCurrentUser()?.name || "User",
+    subject,
+    description,
+    priority,
+    difficulty: estimate.difficulty,
+    estimatedMinutes: estimate.estimatedMinutes,
+    estimateLabel: estimate.estimateLabel,
+    status: "Open",
+    createdAt: new Date().toISOString()
+  };
+
+  state.supportTickets.unshift(ticket);
+
+  state.notifications.unshift({
+    id: uid("notification"),
+    title: priority === "emergency" ? "🚨 Emergency Support Ticket" : "Support Ticket",
+    description:
+      ticket.id + " • " + ticket.subject +
+      " • Estimated difficulty: " + ticket.difficulty +
+      " • Likely fix time: " + ticket.estimateLabel,
+    time: ticket.createdAt
+  });
+
+  saveState();
+  renderSupportTickets();
+
+  if ($("supportTicketForm")) $("supportTicketForm").reset();
+
+  alert(
+    ticket.id + " created\n" +
+    "Estimated difficulty: " + ticket.difficulty + "\n" +
+    "Likely fix time: " + ticket.estimateLabel
+  );
+}
+
+function renderSupportTickets() {
+  const list = $("supportTicketList");
+  if (!list) return;
+
+  if (!state.supportTickets.length) {
+    list.innerHTML = '<p style="opacity:.7;">No support tickets yet.</p>';
+    return;
+  }
+
+  list.innerHTML = state.supportTickets.slice(0, 20).map(ticket => `
+    <div class="notification-card" style="margin-bottom:12px;">
+      <strong>${escapeHTML(ticket.id)} • ${escapeHTML(ticket.subject)}</strong>
+      <p style="margin:8px 0 4px;">
+        <b>${escapeHTML(ticket.difficulty)}</b> • Estimated ${escapeHTML(ticket.estimateLabel)}
+      </p>
+      <small>
+        ${ticket.priority === "emergency" ? "EMERGENCY • " : ""}
+        ${escapeHTML(ticket.status)} • ${escapeHTML(formatTime(ticket.createdAt))}
+      </small>
+    </div>
+  `).join("");
+}
 
 /* =========================================================
    NAVIGATION
@@ -1756,6 +1878,7 @@ function installLoginHelpSettings() {
 function renderAll() {
   installLunchSettings();
   installLoginHelpSettings();
+  renderSupportTickets();
   renderClock();
   renderPunchTable();
   renderMyPunchLog();
