@@ -223,6 +223,15 @@
       <button
         class="nav"
         type="button"
+        onclick="showSection('support')"
+      >
+        <span>🛟</span>
+        Support
+      </button>
+
+      <button
+        class="nav"
+        type="button"
         onclick="showSection('feedback')"
       >
         <span>💬</span>
@@ -1352,6 +1361,47 @@
 
     </section>
 
+
+    <section
+      id="support"
+      class="page"
+    >
+      <div class="page-header">
+        <div>
+          <div class="eyebrow">MYSERVICE SUPPORT</div>
+          <h1>Support</h1>
+          <p>Report an issue and get an automatic difficulty and likely fix-time estimate.</p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <form id="supportTicketForm" onsubmit="submitSupportTicket(event)">
+          <label for="supportPriority">Priority</label>
+          <select id="supportPriority">
+            <option value="standard">Standard</option>
+            <option value="emergency">Emergency — major business interruption</option>
+          </select>
+
+          <label for="supportSubject">Subject</label>
+          <input id="supportSubject" type="text" maxlength="120" placeholder="Example: Employee can't clock in" required>
+
+          <label for="supportDescription">What happened?</label>
+          <textarea id="supportDescription" maxlength="3000" placeholder="Describe the issue, error message, affected feature and when it started." required></textarea>
+
+          <button class="primary-button" type="submit">CREATE SUPPORT TICKET</button>
+        </form>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Recent Tickets</h2>
+            <p>Difficulty and repair-time estimates are estimates, not guarantees.</p>
+          </div>
+        </div>
+        <div id="supportTicketList"></div>
+      </div>
+    </section>
 
     <section
       id="feedback"
