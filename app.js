@@ -5478,3 +5478,27 @@ async function installMyServiceApp() {
 
   alert("Open this site in your browser menu and choose Install App or Add to Home Screen.");
 }
+
+
+/* =========================================================
+   MYSERVICE MOBILE INSTALL REDIRECT
+   Mobile browsers are routed to the install screen unless
+   MyService is already running as an installed standalone PWA.
+   ========================================================= */
+(function () {
+  const isStandalone =
+    window.matchMedia("(display-mode: standalone)").matches ||
+    window.navigator.standalone === true;
+
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+  if (
+    isMobile &&
+    !isStandalone &&
+    !location.pathname.endsWith("/install.html")
+  ) {
+    const target = new URL("./install.html", location.href);
+    target.searchParams.set("continue", location.pathname + location.search + location.hash);
+    location.replace(target.href);
+  }
+})();
