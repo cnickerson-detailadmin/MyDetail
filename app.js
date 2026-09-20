@@ -3665,7 +3665,7 @@ function showQuickPinSetupScreen(accessToken, userId) {
   }
 
   document.body.innerHTML = `
-    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:#f3f7fc;box-sizing:border-box;">
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:#1677f2;box-sizing:border-box;">
       <div style="width:100%;max-width:390px;background:white;padding:24px;border-radius:20px;box-shadow:0 12px 36px rgba(16,42,76,.08);box-sizing:border-box;text-align:center;">
         <div style="font-size:12px;font-weight:900;letter-spacing:1.4px;color:#1677f2;margin-bottom:6px;">MYSERVICE LOGIN CODE</div>
         <h1 id="quickPinSetupTitle" style="margin:0;color:#0d2345;font-size:27px;"></h1>
@@ -3685,7 +3685,7 @@ function showQuickPinVerificationScreen(accessToken, userId) {
   let showPin = false;
 
   document.body.innerHTML = `
-    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:#f3f7fc;box-sizing:border-box;">
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:#1677f2;box-sizing:border-box;">
       <div style="width:100%;max-width:390px;background:white;padding:24px;border-radius:20px;box-shadow:0 12px 36px rgba(16,42,76,.08);box-sizing:border-box;text-align:center;">
         <div style="font-size:12px;font-weight:900;letter-spacing:1.4px;color:#1677f2;margin-bottom:6px;">MYSERVICE LOGIN CODE</div>
         <h1 style="margin:0;color:#0d2345;font-size:27px;">Enter your 4-digit login code</h1>
@@ -4178,6 +4178,8 @@ document.addEventListener(
 
     saveState();
     updateDateTime();
+
+    document.getElementById("myservice-auth-boot")?.remove();
 
     const savedPage = localStorage.getItem(ACTIVE_PAGE_KEY);
 
