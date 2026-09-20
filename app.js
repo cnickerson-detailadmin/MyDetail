@@ -3430,20 +3430,22 @@ async function restoreAuthenticatedContext() {
 
   try {
     authenticatedContext = await fetchMyAppContext(accessToken);
+    return authenticatedContext;
   } catch (error) {
-    if (error.status !== 401) return null;
+    // A 401 means the access token expired. Refresh it normally.
+    if (error?.status === 401) {
+      accessToken = await refreshStoredSession();
+      if (!accessToken) return null;
 
-    accessToken = await refreshStoredSession();
-    if (!accessToken) return null;
-
-    try {
       authenticatedContext = await fetchMyAppContext(accessToken);
-    } catch {
-      return null;
+      return authenticatedContext;
     }
-  }
 
-  return authenticatedContext;
+    // Network/server failures are NOT a logout condition.
+    const transient = new Error("AUTH_TEMPORARY_UNAVAILABLE");
+    transient.cause = error;
+    throw transient;
+  }
 }
 
 async function loginTestUser(email, password, companyCode) {
@@ -4182,6 +4184,23 @@ function activateLoginScreen() {
   };
 }
 
+function showAuthRecoveryScreen() {
+  document.body.innerHTML = `
+    <div style="position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:22px;background:#1677f2;box-sizing:border-box;">
+      <div style="width:100%;max-width:390px;background:#fff;border-radius:20px;padding:24px;box-sizing:border-box;text-align:center;">
+        <div style="font-size:12px;font-weight:900;letter-spacing:1.3px;color:#1677f2;">MYSERVICE SECURE SIGN-IN</div>
+        <h1 style="margin:8px 0 6px;color:#0d2345;font-size:25px;">Connection interrupted</h1>
+        <p style="margin:0;color:#61728c;line-height:1.45;">Your login was kept safe. MyService did not sign you out.</p>
+        <button id="authRecoveryRetry" type="button" class="primary-button"
+          style="width:100%;min-height:50px;margin-top:18px;border-radius:14px;">TRY AGAIN</button>
+      </div>
+    </div>
+  `;
+
+  const retry = $("authRecoveryRetry");
+  if (retry) retry.onclick = () => location.reload();
+}
+
 function withAuthStartupTimeout(promise, ms = 8000) {
   return Promise.race([
     promise,
@@ -4270,6 +4289,17 @@ document.addEventListener(
       );
     } catch (error) {
       console.error("MyService auth startup failed:", error);
+
+      const transient =
+        error?.message === "AUTH_STARTUP_TIMEOUT" ||
+        error?.message === "AUTH_TEMPORARY_UNAVAILABLE";
+
+      if (transient && getStoredAuthItem(REFRESH_TOKEN_KEY)) {
+        showAuthRecoveryScreen();
+        return;
+      }
+
+      // Only clear stored credentials when the session is genuinely invalid.
       [
         LOGIN_KEY,
         ACCESS_TOKEN_KEY,
