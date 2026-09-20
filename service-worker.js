@@ -1,9 +1,9 @@
-const CACHE_NAME = "myservice-cache-v5";
+const CACHE_NAME = "myservice-cache-v6";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./styles.css?v=3",
-  "./app.js?v=20-developer-ai",
+  "./app.js?v=21-compact-ai-chat",
   "./manifest.json",
   "./install.html"
 ];
