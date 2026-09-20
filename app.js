@@ -2295,17 +2295,82 @@ function returnToDeveloperHome() {
 }
 
 function getDeveloperAlerts() {
-  return [
+  const alerts = [
     {
       code: "AUTH-002",
       urgency: "PLAN REQUIRED",
       color: "#a16207",
-      title: "Leaked-password screening requires Supabase Pro",
+      title: "Leaked-password screening is not enabled",
       area: "Supabase Auth",
-      impact: "Known-compromised-password screening cannot be enabled while this Supabase project is on the Free plan. Strong password rules still apply, but breached-password checking remains unavailable.",
-      fix: "Upgrade the Supabase project to Pro, then enable leaked-password protection in Auth settings."
+      impact: "Known-compromised-password screening is currently unavailable. Existing password rules still apply, but breached-password checking is not active.",
+      fix: "Enable leaked-password protection in Supabase Auth when the project plan supports it."
     }
   ];
+
+  try {
+    const adv = typeof getAdvancedState === "function" ? getAdvancedState() : null;
+    const api = adv?.integrationSettings?.apiStatus || {};
+
+    if (!api.square?.configured) {
+      alerts.push({
+        code: "API-101",
+        urgency: "SETUP NEEDED",
+        color: "#c2410c",
+        title: "Square POS connection is not production-configured",
+        area: "POS Integration",
+        impact: "Businesses cannot complete a real Square connection or automatically import POS sales yet.",
+        fix: "Add the Square application ID, application secret and redirect URI to Supabase Edge Function secrets, then complete a sandbox OAuth test."
+      });
+    }
+
+    if (!api.gusto?.configured) {
+      alerts.push({
+        code: "API-102",
+        urgency: "SETUP NEEDED",
+        color: "#c2410c",
+        title: "Gusto payroll connection is not production-configured",
+        area: "Payroll Integration",
+        impact: "Businesses cannot complete a real Gusto authorization or send payroll-ready data yet.",
+        fix: "Add the Gusto client ID, client secret and redirect URI to Supabase Edge Function secrets, then complete sandbox authorization and approved-hours testing."
+      });
+    }
+
+    if (!api.ticketmaster?.configured) {
+      alerts.push({
+        code: "API-103",
+        urgency: "FEATURE LIMITED",
+        color: "#ca8a04",
+        title: "Nearby-event feed needs a provider API key",
+        area: "Scheduling Intelligence",
+        impact: "Weather can load, but automatic nearby sports, concerts and public-event data will not appear until the event provider is configured.",
+        fix: "Add the Ticketmaster Discovery API key to the Supabase Edge Function secrets."
+      });
+    }
+
+    if (!Number.isFinite(adv?.integrationSettings?.businessLat) || !Number.isFinite(adv?.integrationSettings?.businessLon)) {
+      alerts.push({
+        code: "OPS-201",
+        urgency: "CONFIGURE",
+        color: "#2563eb",
+        title: "Business planning location is not set",
+        area: "Scheduling Intelligence",
+        impact: "Weather and nearby-event demand hints cannot target the business location.",
+        fix: "Set the business planning latitude and longitude from Live API Connections."
+      });
+    }
+  } catch {}
+
+  return alerts;
+}
+
+function scrollToDeveloperCodeAlerts() {
+  const el = $("developer-code-alerts");
+  if (el) {
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+  showSection("dashboard");
+  setTimeout(() => $("developer-code-alerts")?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
 }
 
 function getResolvedDeveloperChecks() {
@@ -2566,6 +2631,10 @@ function installDeveloperExperience() {
     navigation.className = "nav-section";
     navigation.innerHTML = `
       <div class="nav-title">DEVELOPER</div>
+      <button class="nav" type="button" onclick="scrollToDeveloperCodeAlerts()">
+        <span>⚠</span>
+        Code Alerts
+      </button>
       <button class="nav" type="button" onclick="showSection('support')">
         <span>🛟</span>
         Support Tickets
@@ -2607,7 +2676,7 @@ function installDeveloperExperience() {
         </div>
       </section>
 
-      <section class="card" style="padding:18px;background:#f8fbff;">
+      <section id="developer-code-alerts" class="card" style="padding:18px;background:#f8fbff;">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px;">
           <div>
             <div class="eyebrow">LIVE RISK LIST</div>
