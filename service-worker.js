@@ -1,5 +1,5 @@
-const CACHE_NAME = "myservice-cache-v22";
-const BUILD_ID = "37-pin-self-repair";
+const CACHE_NAME = "myservice-cache-v23";
+const BUILD_ID = "38-ai-call-audio-scroll";
 
 const APP_SHELL = [
   "./styles.css?v=4-pro-desktop",
