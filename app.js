@@ -4823,3 +4823,297 @@ renderAll = function () {
   originalRenderAllAdvancedSuite();
   installAdvancedOperationsSuite();
 };
+
+
+/* =========================================================
+   MYSERVICE LIVE API BRIDGE
+   Weather is live through NWS immediately.
+   Ticketmaster, Square and Gusto become live when their
+   provider credentials are added to Supabase Edge secrets.
+   ========================================================= */
+
+function getApiBridgeState() {
+  const adv = getAdvancedState();
+  adv.integrationSettings = adv.integrationSettings || {};
+  if (typeof adv.integrationSettings.businessLat !== "number") adv.integrationSettings.businessLat = null;
+  if (typeof adv.integrationSettings.businessLon !== "number") adv.integrationSettings.businessLon = null;
+  if (!adv.integrationSettings.apiStatus) adv.integrationSettings.apiStatus = {};
+  return adv;
+}
+
+async function callMyServiceEdgeFunction(name, body) {
+  const token = getStoredAuthItem(ACCESS_TOKEN_KEY);
+  if (!token) throw new Error("You must be logged in.");
+
+  const response = await fetch(
+    SUPABASE_URL + "/functions/v1/" + encodeURIComponent(name),
+    {
+      method: "POST",
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Authorization": "Bearer " + token,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body || {})
+    }
+  );
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || data.message || "API request failed.");
+  }
+  return data;
+}
+
+function configurePlanningLocationApi() {
+  if (!canManageEmployees()) return;
+  const adv = getApiBridgeState();
+  const latRaw = prompt(
+    "Business latitude:",
+    adv.integrationSettings.businessLat ?? ""
+  );
+  if (latRaw === null) return;
+  const lonRaw = prompt(
+    "Business longitude:",
+    adv.integrationSettings.businessLon ?? ""
+  );
+  if (lonRaw === null) return;
+
+  const lat = Number(latRaw);
+  const lon = Number(lonRaw);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+    alert("Enter a valid latitude and longitude.");
+    return;
+  }
+
+  adv.integrationSettings.businessLat = lat;
+  adv.integrationSettings.businessLon = lon;
+  saveAdvancedState(adv);
+  alert("Business planning location saved.");
+  renderAll();
+}
+
+async function loadLivePlanningIntelligenceApi() {
+  if (!canManageEmployees()) return;
+
+  const adv = getApiBridgeState();
+  const lat = adv.integrationSettings.businessLat;
+  const lon = adv.integrationSettings.businessLon;
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    alert("Set the business planning location first.");
+    return;
+  }
+
+  const button = $("load-live-planning-api");
+  if (button) {
+    button.disabled = true;
+    button.textContent = "LOADING…";
+  }
+
+  try {
+    const data = await callMyServiceEdgeFunction("planning-intelligence", {
+      lat,
+      lon,
+      radiusMiles: Number(adv.forecastSettings?.eventRadiusMiles || 15),
+      startDateTime: new Date().toISOString()
+    });
+
+    adv.integrationSettings.lastPlanningApiResult = data;
+    adv.integrationSettings.lastPlanningApiAt = new Date().toISOString();
+    saveAdvancedState(adv);
+    renderAll();
+  } catch (error) {
+    alert(error.message || "Could not load live planning data.");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "LOAD LIVE WEATHER / EVENTS";
+    }
+  }
+}
+
+async function refreshIntegrationApiStatus() {
+  if (!canManageEmployees()) return;
+
+  try {
+    const data = await callMyServiceEdgeFunction("integration-broker", {
+      action: "status"
+    });
+
+    const adv = getApiBridgeState();
+    adv.integrationSettings.apiStatus = data;
+    adv.integrationSettings.apiStatusCheckedAt = new Date().toISOString();
+    saveAdvancedState(adv);
+    renderAll();
+  } catch (error) {
+    alert(error.message || "Could not check API status.");
+  }
+}
+
+async function beginProviderOAuth(provider) {
+  if (!canManageEmployees()) return;
+
+  try {
+    const data = await callMyServiceEdgeFunction("integration-broker", {
+      action: "authorize_url",
+      provider
+    });
+
+    if (!data?.url) {
+      alert("No authorization URL was returned.");
+      return;
+    }
+
+    sessionStorage.setItem("myservice_oauth_provider", provider);
+    sessionStorage.setItem("myservice_oauth_state", data.state || "");
+    location.href = data.url;
+  } catch (error) {
+    alert(
+      (error.message || "Provider connection is not configured.") +
+      "\n\nAdd that provider's developer credentials to Supabase Edge Function secrets first."
+    );
+  }
+}
+
+function formatApiPlanningResult() {
+  const adv = getApiBridgeState();
+  const data = adv.integrationSettings.lastPlanningApiResult;
+  if (!data) {
+    return '<div class="notification-card"><strong>No live planning data loaded yet</strong><p>Set the business location, then load live weather and event data.</p></div>';
+  }
+
+  const w = data.weather;
+  const events = Array.isArray(data.events) ? data.events : [];
+  const demand = data.demandHint || { level: "normal", reasons: [] };
+
+  const weatherMarkup = w
+    ? '<div class="list-row"><div><strong>' +
+      escapeHTML(w.shortForecast || "Weather") +
+      '</strong><small>' +
+      escapeHTML(String(w.temperature ?? "—")) + '°' +
+      escapeHTML(w.temperatureUnit || "F") +
+      ' • Rain ' + escapeHTML(String(w.precipitationProbability ?? "—")) +
+      '% • ' + escapeHTML(w.windSpeed || "") +
+      ' • Source: National Weather Service</small></div><span class="pill">' +
+      escapeHTML(String(demand.level || "normal").toUpperCase()) +
+      '</span></div>'
+    : '<div class="notification-card"><strong>Weather unavailable</strong><p>The National Weather Service feed did not return a forecast for this request.</p></div>';
+
+  const eventMarkup = events.length
+    ? events.slice(0, 10).map(event => {
+        const start = event.startTime
+          ? new Date(event.startTime).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})
+          : "Start TBD";
+        const end = event.estimatedEndTime
+          ? new Date(event.estimatedEndTime).toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})
+          : "Estimated end TBD";
+        return '<div class="list-row"><div><strong>' +
+          escapeHTML(event.name || "Event") +
+          '</strong><small>' +
+          escapeHTML(event.venue || "") +
+          (event.city ? ' • ' + escapeHTML(event.city) : '') +
+          ' • ' + escapeHTML(start) + ' — ' + escapeHTML(end) +
+          (event.endTimeIsEstimate ? ' • Estimated end time' : '') +
+          ' • Source: ' + escapeHTML(event.source || "Event provider") +
+          '</small></div></div>';
+      }).join("")
+    : '<div class="notification-card"><strong>No live events returned</strong><p>' +
+      (data.sourceStatus?.events === "not_configured"
+        ? "Ticketmaster API key has not been added yet. Weather is still live."
+        : "No nearby events were returned for this search window.") +
+      '</p></div>';
+
+  return weatherMarkup + eventMarkup;
+}
+
+function integrationApiStatusMarkup() {
+  const adv = getApiBridgeState();
+  const status = adv.integrationSettings.apiStatus || {};
+
+  const item = (name, configured, detail) =>
+    '<div class="list-row"><div><strong>' + escapeHTML(name) +
+    '</strong><small>' + escapeHTML(detail) +
+    '</small></div><span class="pill" style="' +
+    (configured
+      ? 'background:#ecfdf5;color:#166534;'
+      : 'background:#fff7ed;color:#9a3412;') +
+    '">' + (configured ? "READY" : "NEEDS CREDENTIALS") + '</span></div>';
+
+  return [
+    item("Ticketmaster Events", status.ticketmaster?.configured === true, "Nearby public events"),
+    item("Square POS", status.square?.configured === true, "Sales / order data via OAuth"),
+    item("Gusto Payroll", status.gusto?.configured === true, "Payroll integration via OAuth")
+  ].join("");
+}
+
+function installLiveApiBridge() {
+  const dashboard = $("dashboard");
+  if (!dashboard || !canManageEmployees()) return;
+
+  let apiPanel = $("myservice-live-api-panel");
+  if (!apiPanel) {
+    apiPanel = document.createElement("section");
+    apiPanel.id = "myservice-live-api-panel";
+    apiPanel.className = "panel";
+    dashboard.appendChild(apiPanel);
+  }
+
+  const adv = getApiBridgeState();
+  const last = adv.integrationSettings.lastPlanningApiAt
+    ? new Date(adv.integrationSettings.lastPlanningApiAt).toLocaleString()
+    : "Never";
+
+  apiPanel.innerHTML = `
+    <div class="panel-header">
+      <div>
+        <div class="eyebrow">LIVE API CONNECTIONS</div>
+        <h2>Weather, Events, POS & Payroll</h2>
+        <p>Secure server-side API bridge through Supabase Edge Functions.</p>
+      </div>
+      <button class="outline-button" type="button" onclick="refreshIntegrationApiStatus()">CHECK API STATUS</button>
+    </div>
+
+    <div class="dashboard-grid">
+      <div class="panel" style="box-shadow:none;margin:0;">
+        <h3>Scheduling Intelligence API</h3>
+        <p>
+          Business location:
+          ${Number.isFinite(adv.integrationSettings.businessLat)
+            ? escapeHTML(String(adv.integrationSettings.businessLat)) + ", " + escapeHTML(String(adv.integrationSettings.businessLon))
+            : "Not set"}
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="outline-button" type="button" onclick="configurePlanningLocationApi()">SET BUSINESS LOCATION</button>
+          <button id="load-live-planning-api" class="primary-button" type="button" onclick="loadLivePlanningIntelligenceApi()">LOAD LIVE WEATHER / EVENTS</button>
+        </div>
+        <small style="display:block;margin-top:10px;color:#7b8aa0;">Last updated: ${escapeHTML(last)}</small>
+      </div>
+
+      <div class="panel" style="box-shadow:none;margin:0;">
+        <h3>Business Integrations</h3>
+        <p>Connect existing systems instead of replacing them.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="outline-button" type="button" onclick="beginProviderOAuth('square')">CONNECT SQUARE</button>
+          <button class="outline-button" type="button" onclick="beginProviderOAuth('gusto')">CONNECT GUSTO</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <h3 style="margin-bottom:10px;">Live planning result</h3>
+      ${formatApiPlanningResult()}
+    </div>
+
+    <div style="margin-top:16px;">
+      <h3 style="margin-bottom:10px;">Provider readiness</h3>
+      ${integrationApiStatusMarkup()}
+    </div>
+  `;
+}
+
+const originalRenderAllLiveApiBridge = renderAll;
+renderAll = function () {
+  originalRenderAllLiveApiBridge();
+  installLiveApiBridge();
+};
