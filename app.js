@@ -6026,6 +6026,9 @@ let developerAISpeechBuffer = "";
 let developerAISpeechDebounce = null;
 let developerAIPendingVoiceReply = null;
 let developerAIUserIsSpeaking = false;
+let developerAIFreeCallMode = false;
+let developerAISpeakerMode = true;
+let developerAISpeechUtterance = null;
 
 function setDeveloperAICallScrollSafe() {
   document.documentElement.style.overflowY = "auto";
@@ -6118,7 +6121,11 @@ function queueDeveloperAIUserSpeech(transcript) {
     const status = $("developer-ai-status");
     if (status) status.textContent = "Heard you — working on it…";
 
-    await sendDeveloperAIMessage();
+    if (developerAIFreeCallMode) {
+      await answerDeveloperAIFreeCall(message);
+    } else {
+      await sendDeveloperAIMessage();
+    }
   }, 1100);
 }
 
@@ -6169,6 +6176,10 @@ function stopDeveloperAICall() {
   developerAISpeechBuffer = "";
   developerAIUserIsSpeaking = false;
   developerAIPendingVoiceReply = null;
+  developerAIFreeCallMode = false;
+
+  try { window.speechSynthesis?.cancel?.(); } catch (_) {}
+  developerAISpeechUtterance = null;
 
   stopDeveloperAIAudio();
   setDeveloperAICallScrollSafe();
@@ -6331,11 +6342,13 @@ function openDeveloperAICallWindow() {
       </div>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
       <button id="developer-ai-call-mute" type="button"
         style="min-height:54px;border:0;border-radius:18px;background:rgba(255,255,255,.16);color:white;font-weight:850;">MUTE</button>
+      <button id="developer-ai-call-speaker" type="button"
+        style="min-height:54px;border:0;border-radius:18px;background:white;color:#0f5fc7;font-weight:900;">🔊 SPEAKER</button>
       <button id="developer-ai-call-end" type="button"
-        style="min-height:54px;border:0;border-radius:18px;background:#d92d20;color:white;font-weight:900;">END CALL</button>
+        style="min-height:54px;border:0;border-radius:18px;background:#d92d20;color:white;font-weight:900;">END</button>
     </div>
   `;
 
@@ -6351,13 +6364,25 @@ function openDeveloperAICallWindow() {
   $("developer-ai-call-mute").onclick = function () {
     muted = !muted;
     if (developerAIAudio) developerAIAudio.muted = muted;
+    if (developerAIRealtimeAudio) developerAIRealtimeAudio.muted = muted;
     try {
+      if (muted) window.speechSynthesis?.pause?.();
+      else window.speechSynthesis?.resume?.();
       if (developerAIAudioContext) {
         if (muted) developerAIAudioContext.suspend();
         else developerAIAudioContext.resume();
       }
     } catch (_) {}
     this.textContent = muted ? "UNMUTE" : "MUTE";
+  };
+
+  $("developer-ai-call-speaker").onclick = function () {
+    developerAISpeakerMode = !developerAISpeakerMode;
+    if (developerAIRealtimeAudio) developerAIRealtimeAudio.volume = developerAISpeakerMode ? 1 : 0.45;
+    if (developerAIAudio) developerAIAudio.volume = developerAISpeakerMode ? 1 : 0.45;
+    this.textContent = developerAISpeakerMode ? "🔊 SPEAKER" : "🔉 QUIET";
+    this.style.background = developerAISpeakerMode ? "white" : "rgba(255,255,255,.16)";
+    this.style.color = developerAISpeakerMode ? "#0f5fc7" : "white";
   };
 }
 
@@ -6518,6 +6543,203 @@ async function startDeveloperAIRealtimeCall() {
   if (status) status.textContent = "Developer AI realtime voice ready.";
 }
 
+
+function getDeveloperAIFreeVoice() {
+  const voices = window.speechSynthesis?.getVoices?.() || [];
+  const preferredNames = ["Ava", "Samantha", "Zoe", "Nicky", "Evan", "Aaron", "Alex"];
+  for (const name of preferredNames) {
+    const voice = voices.find(item =>
+      String(item.name || "").toLowerCase().includes(name.toLowerCase()) &&
+      String(item.lang || "").toLowerCase().startsWith("en")
+    );
+    if (voice) return voice;
+  }
+  return voices.find(item =>
+    String(item.lang || "").toLowerCase().startsWith("en-us") &&
+    item.localService !== false
+  ) || voices.find(item =>
+    String(item.lang || "").toLowerCase().startsWith("en")
+  ) || null;
+}
+
+function cleanDeveloperAIFreeReply(value) {
+  const banned = /\b(fuck|shit|bitch|asshole|damn|cunt)\b/gi;
+  return String(value || "")
+    .replace(banned, "—")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 700);
+}
+
+function buildDeveloperAIFreeReply(message) {
+  const text = String(message || "").trim();
+  const lower = text.toLowerCase();
+  const currentUser = getCurrentUser?.();
+  const tickets = Array.isArray(state?.supportTickets) ? state.supportTickets : [];
+  const openTickets = tickets.filter(ticket => String(ticket.status || "").toLowerCase() !== "closed");
+  const activeEmployees = Array.isArray(state?.employees)
+    ? state.employees.filter(employee => employee.active !== false)
+    : [];
+
+  if (!text) return "I’m listening.";
+  if (/\b(hi|hey|hello|yo)\b/.test(lower)) {
+    return "Hey Caleb. I’m here. What do you want to check in MyService?";
+  }
+  if (lower.includes("what time") || lower.includes("current time")) {
+    return "It’s " + new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) + ".";
+  }
+  if (lower.includes("ticket")) {
+    return openTickets.length
+      ? "You have " + openTickets.length + " open support " + (openTickets.length === 1 ? "ticket" : "tickets") + "."
+      : "You don’t have any open support tickets right now.";
+  }
+  if (lower.includes("employee") || lower.includes("staff")) {
+    return "MyService currently has " + activeEmployees.length + " active " +
+      (activeEmployees.length === 1 ? "team member" : "team members") + " in this workspace.";
+  }
+  if (lower.includes("who am i") || lower.includes("my role")) {
+    return "You’re signed in as " + String(currentUser?.name || "the developer") +
+      ", with the " + String(currentUser?.role || "Developer") + " role.";
+  }
+  if (lower.includes("security") || lower.includes("password") || lower.includes("api key")) {
+    return "I can explain the security status, but I will not reveal passwords, API keys, private employee data, or bypass permissions.";
+  }
+  if (lower.includes("swear") || lower.includes("curse")) {
+    return "No. I’ll keep it clean and professional.";
+  }
+  if (lower.includes("help") || lower.includes("what can you do")) {
+    return "In no-credit call mode, I can read MyService status, team counts, support-ticket counts, time, role information, and give safe navigation help. I can’t change security settings or expose private information.";
+  }
+  if (lower.includes("schedule")) {
+    return "I can help check scheduling information without changing anyone’s shift or permissions.";
+  }
+  if (lower.includes("clock")) {
+    const employee = typeof getCurrentEmployee === "function" ? getCurrentEmployee() : null;
+    return employee
+      ? String(employee.name || "Your account") + " is currently " + String(employee.status || "off clock") + "."
+      : "I couldn’t read the current clock status.";
+  }
+  return "I heard you. The no-credit call is working, but that request needs cloud-level reasoning. I can still help with MyService status, navigation, staffing, clock, schedule, or support tickets without charging API credits.";
+}
+
+function speakDeveloperAIFreeReply(reply) {
+  return new Promise(resolve => {
+    const synth = window.speechSynthesis;
+    if (!synth || typeof SpeechSynthesisUtterance === "undefined") {
+      resolve();
+      return;
+    }
+
+    synth.cancel();
+    const utterance = new SpeechSynthesisUtterance(cleanDeveloperAIFreeReply(reply));
+    developerAISpeechUtterance = utterance;
+    utterance.voice = getDeveloperAIFreeVoice();
+    utterance.lang = utterance.voice?.lang || "en-US";
+    utterance.rate = 0.92;
+    utterance.pitch = 0.98;
+    utterance.volume = developerAISpeakerMode ? 1 : 0.45;
+
+    utterance.onstart = () => {
+      developerAISpeaking = true;
+      updateDeveloperAICallWindow("Speaking…", "Developer AI • no-credit mode");
+    };
+    utterance.onend = () => {
+      developerAISpeaking = false;
+      developerAISpeechUtterance = null;
+      updateDeveloperAICallWindow("Listening…", "No-credit voice connected");
+      restartDeveloperAIListening(250);
+      resolve();
+    };
+    utterance.onerror = () => {
+      developerAISpeaking = false;
+      developerAISpeechUtterance = null;
+      restartDeveloperAIListening(250);
+      resolve();
+    };
+
+    synth.speak(utterance);
+  });
+}
+
+async function answerDeveloperAIFreeCall(message) {
+  const history = getDeveloperAIHistory();
+  const reply = cleanDeveloperAIFreeReply(buildDeveloperAIFreeReply(message));
+  history.push({ role: "user", content: String(message || "").trim() });
+  history.push({ role: "assistant", content: reply });
+  saveDeveloperAIHistory(history);
+  renderDeveloperAIChat();
+
+  updateDeveloperAICallWindow("Thinking…", String(message || "").trim());
+  const status = $("developer-ai-status");
+  if (status) status.textContent = "Developer AI • no-credit call mode";
+  await speakDeveloperAIFreeReply(reply);
+}
+
+async function startDeveloperAIFreeCall() {
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!Recognition || !window.speechSynthesis) {
+    throw new Error("This device does not support the free voice-call mode.");
+  }
+
+  developerAICallMode = true;
+  developerAIFreeCallMode = true;
+  developerAISpeakerMode = true;
+  unlockDeveloperAIAudio();
+  window.speechSynthesis.getVoices();
+
+  openDeveloperAICallWindow();
+  updateDeveloperAICallWindow("Connecting…", "Starting no-credit voice");
+  setDeveloperAICallScrollSafe();
+
+  const button = $("developer-ai-call");
+  const status = $("developer-ai-status");
+  if (button) button.textContent = "■ END CALL";
+  if (status) status.textContent = "Starting no-credit Developer AI call…";
+
+  const recognition = new Recognition();
+  developerAIRecognition = recognition;
+  recognition.lang = "en-US";
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+
+  recognition.onstart = () => {
+    developerAIUserIsSpeaking = false;
+    updateDeveloperAICallWindow("Listening…", "No-credit voice connected");
+  };
+  recognition.onspeechstart = () => {
+    developerAIUserIsSpeaking = true;
+    try { window.speechSynthesis.cancel(); } catch (_) {}
+    updateDeveloperAICallWindow("Listening…", "Go ahead — I won’t interrupt.");
+  };
+  recognition.onresult = event => {
+    const transcript = Array.from(event.results || [])
+      .map(result => result?.[0]?.transcript || "")
+      .join(" ")
+      .trim();
+    developerAIUserIsSpeaking = false;
+    if (transcript) queueDeveloperAIUserSpeech(transcript);
+  };
+  recognition.onerror = event => {
+    if (!developerAICallMode || !developerAIFreeCallMode) return;
+    const code = String(event?.error || "");
+    if (code === "not-allowed" || code === "service-not-allowed") {
+      updateDeveloperAICallWindow("Microphone blocked", "Allow microphone and speech recognition in iPhone Settings.");
+      return;
+    }
+    restartDeveloperAIListening(500);
+  };
+  recognition.onend = () => {
+    if (developerAICallMode && developerAIFreeCallMode && !developerAISpeaking) {
+      restartDeveloperAIListening(350);
+    }
+  };
+
+  try { recognition.start(); } catch (_) {}
+  updateDeveloperAICallWindow("Listening…", "No credits required • Speaker on");
+  if (status) status.textContent = "Developer AI no-credit call connected.";
+}
+
 async function toggleDeveloperAICall() {
   if (!developerAIIsAllowed()) return;
 
@@ -6527,14 +6749,14 @@ async function toggleDeveloperAICall() {
   }
 
   try {
-    await startDeveloperAIRealtimeCall();
+    await startDeveloperAIFreeCall();
   } catch (error) {
-    const message = String(error?.message || "Realtime voice could not start.");
+    const message = String(error?.message || "No-credit voice could not start.");
     stopDeveloperAICall();
     openDeveloperAICallWindow();
     updateDeveloperAICallWindow("Couldn’t connect", message);
     const status = $("developer-ai-status");
-    if (status) status.textContent = "Realtime Developer AI unavailable — " + message;
+    if (status) status.textContent = "No-credit Developer AI unavailable — " + message;
   }
 }
 
