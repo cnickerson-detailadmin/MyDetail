@@ -5482,8 +5482,8 @@ async function installMyServiceApp() {
 
 /* =========================================================
    MYSERVICE MOBILE INSTALL REDIRECT
-   Mobile browsers are routed to the install screen unless
-   MyService is installed or desktop access was explicitly requested.
+   Mobile browsers go to the install screen unless the PWA
+   is already running in standalone mode.
    ========================================================= */
 (function () {
   const isStandalone =
@@ -5491,25 +5491,17 @@ async function installMyServiceApp() {
     window.navigator.standalone === true;
 
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  const params = new URLSearchParams(location.search);
 
-  if (params.get("desktop") === "1") {
-    localStorage.setItem("myservice_desktop_access", "1");
-    params.delete("desktop");
-    const clean = location.pathname + (params.toString() ? "?" + params.toString() : "") + location.hash;
-    history.replaceState({}, "", clean);
+  // Remove any old desktop-access bypass saved by earlier builds.
+  if (isMobile) {
+    localStorage.removeItem("myservice_desktop_access");
   }
-
-  const desktopAccess = localStorage.getItem("myservice_desktop_access") === "1";
 
   if (
     isMobile &&
     !isStandalone &&
-    !desktopAccess &&
     !location.pathname.endsWith("/install.html")
   ) {
-    const target = new URL("./install.html", location.href);
-    target.searchParams.set("continue", location.pathname + location.search + location.hash);
-    location.replace(target.href);
+    location.replace(new URL("./install.html", location.href).href);
   }
 })();
