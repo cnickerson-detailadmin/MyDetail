@@ -2703,6 +2703,7 @@ function installDeveloperExperience() {
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
           <button id="developer-ai-call" class="outline-button" type="button" onclick="toggleDeveloperAICall()" style="border-radius:18px;">☎ CALL</button>
           <button id="developer-ai-image" class="outline-button" type="button" onclick="generateDeveloperAIImage()" style="border-radius:18px;">▧ IMAGE</button>
+          <button id="developer-ai-code-push" class="outline-button" type="button" onclick="toggleDeveloperAICodePush()" style="border-radius:18px;">CODE PUSH: OFF</button>
         </div>
         <small id="developer-ai-status" style="display:block;margin-top:8px;color:#61728c;">Developer-only. Sensitive or destructive actions still require confirmation.</small>
         <small style="display:block;margin-top:4px;color:#7b8aa0;">Voice is AI-generated. Call mode uses speech recognition when supported by your device.</small>
@@ -5803,6 +5804,7 @@ function openDeveloperAI() {
     if (send) send.style.pointerEvents = "auto";
 
     renderDeveloperAIChat();
+    renderDeveloperAICodePushState();
     setTimeout(() => $("developer-ai-input")?.focus(), 120);
   }, 120);
 
@@ -5838,6 +5840,47 @@ function getDeveloperAISafeContext() {
   };
 }
 
+
+
+const DEVELOPER_AI_CODE_PUSH_KEY = "myservice_developer_ai_code_push_session";
+
+function developerAICodePushEnabled() {
+  return sessionStorage.getItem(DEVELOPER_AI_CODE_PUSH_KEY) === "1";
+}
+
+function renderDeveloperAICodePushState() {
+  const button = $("developer-ai-code-push");
+  if (!button) return;
+  const enabled = developerAICodePushEnabled();
+  button.textContent = enabled ? "CODE PUSH: ON" : "CODE PUSH: OFF";
+  button.style.borderColor = enabled ? "#1677f2" : "";
+  button.style.background = enabled ? "#eaf3ff" : "";
+  button.style.color = enabled ? "#0f5fc7" : "";
+}
+
+function toggleDeveloperAICodePush() {
+  if (!developerAIIsAllowed()) return;
+
+  if (developerAICodePushEnabled()) {
+    sessionStorage.removeItem(DEVELOPER_AI_CODE_PUSH_KEY);
+    renderDeveloperAICodePushState();
+    const status = $("developer-ai-status");
+    if (status) status.textContent = "Code push permission is OFF for this session.";
+    return;
+  }
+
+  const ok = window.confirm(
+    "Allow Developer AI to push approved MyService code during this session?\n\n" +
+    "You will still have to explicitly confirm each code push. Sensitive changes remain blocked."
+  );
+
+  if (!ok) return;
+
+  sessionStorage.setItem(DEVELOPER_AI_CODE_PUSH_KEY, "1");
+  renderDeveloperAICodePushState();
+  const status = $("developer-ai-status");
+  if (status) status.textContent = "Code push permission is ON for this session. Each push still requires confirmation.";
+}
 
 let developerAICallMode = false;
 let developerAIRecognition = null;
@@ -5977,7 +6020,8 @@ async function sendDeveloperAIMessage(event) {
       action: "chat",
       messages: history.slice(-12),
       context: getDeveloperAISafeContext(),
-      voice: developerAICallMode === true
+      voice: developerAICallMode === true,
+      allowCodePush: developerAICodePushEnabled()
     });
 
     history.push({
@@ -6012,7 +6056,10 @@ async function sendDeveloperAIMessage(event) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  setTimeout(renderDeveloperAIChat, 0);
+  setTimeout(() => {
+    renderDeveloperAIChat();
+    renderDeveloperAICodePushState();
+  }, 0);
 });
 
 
