@@ -1,9 +1,16 @@
 {
-  "name": "MyService — 5 Star Restaurant",
+  "name": "MyService",
   "short_name": "MyService",
+  "id": "./",
   "start_url": "./",
+  "scope": "./",
   "display": "standalone",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
   "background_color": "#f3f7fc",
   "theme_color": "#f7f8fa",
-  "description": "MyService business management system for 5 Star Restaurant"
+  "description": "MyService business management platform",
+  "orientation": "any"
 }
