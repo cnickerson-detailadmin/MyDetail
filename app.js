@@ -6018,6 +6018,10 @@ let developerAISpeaking = false;
 let developerAIAudioContext = null;
 let developerAIAudioSource = null;
 let developerAIListenTimer = null;
+let developerAIRealtimePc = null;
+let developerAIRealtimeStream = null;
+let developerAIRealtimeAudio = null;
+let developerAIRealtimeChannel = null;
 let developerAISpeechBuffer = "";
 let developerAISpeechDebounce = null;
 let developerAIPendingVoiceReply = null;
@@ -6132,19 +6136,33 @@ function stopDeveloperAIAudio() {
 
 function stopDeveloperAICall() {
   developerAICallMode = false;
+
   if (developerAIListenTimer) clearTimeout(developerAIListenTimer);
   developerAIListenTimer = null;
 
+  try { developerAIRecognition?.abort?.(); } catch (_) {}
+  try { developerAIRecognition?.stop?.(); } catch (_) {}
+  developerAIRecognition = null;
+
+  try { developerAIRealtimeChannel?.close?.(); } catch (_) {}
+  developerAIRealtimeChannel = null;
+
+  try { developerAIRealtimePc?.close?.(); } catch (_) {}
+  developerAIRealtimePc = null;
+
   try {
-    if (developerAIRecognition) {
-      developerAIRecognition.onresult = null;
-      developerAIRecognition.onerror = null;
-      developerAIRecognition.onend = null;
-      developerAIRecognition.abort?.();
-      developerAIRecognition.stop?.();
+    developerAIRealtimeStream?.getTracks?.().forEach(track => track.stop());
+  } catch (_) {}
+  developerAIRealtimeStream = null;
+
+  try {
+    if (developerAIRealtimeAudio) {
+      developerAIRealtimeAudio.pause();
+      developerAIRealtimeAudio.srcObject = null;
+      developerAIRealtimeAudio.remove();
     }
   } catch (_) {}
-  developerAIRecognition = null;
+  developerAIRealtimeAudio = null;
 
   if (developerAISpeechDebounce) clearTimeout(developerAISpeechDebounce);
   developerAISpeechDebounce = null;
@@ -6165,7 +6183,6 @@ function stopDeveloperAICall() {
   }
   if (status) status.textContent = "Developer AI call ended.";
 }
-
 function restartDeveloperAIListening(delay = 350) {
   if (!developerAICallMode || !developerAIRecognition) return;
   if (developerAIListenTimer) clearTimeout(developerAIListenTimer);
@@ -6351,7 +6368,157 @@ function updateDeveloperAICallWindow(statusText, captionText = "") {
   if (caption) caption.textContent = captionText || "";
 }
 
-function toggleDeveloperAICall() {
+async function waitForRealtimeIce(pc, timeoutMs = 2200) {
+  if (pc.iceGatheringState === "complete") return;
+  await Promise.race([
+    new Promise(resolve => {
+      const handler = () => {
+        if (pc.iceGatheringState === "complete") {
+          pc.removeEventListener("icegatheringstatechange", handler);
+          resolve();
+        }
+      };
+      pc.addEventListener("icegatheringstatechange", handler);
+    }),
+    new Promise(resolve => setTimeout(resolve, timeoutMs))
+  ]);
+}
+
+function handleDeveloperAIRealtimeEvent(event) {
+  let data = null;
+  try { data = JSON.parse(event.data); } catch (_) { return; }
+  const type = String(data?.type || "");
+
+  if (type === "input_audio_buffer.speech_started") {
+    developerAIUserIsSpeaking = true;
+    updateDeveloperAICallWindow("Listening…", "Go ahead — I won’t interrupt.");
+    return;
+  }
+
+  if (type === "input_audio_buffer.speech_stopped") {
+    developerAIUserIsSpeaking = false;
+    updateDeveloperAICallWindow("Thinking…", "");
+    return;
+  }
+
+  if (
+    type === "response.output_audio_transcript.delta" ||
+    type === "response.audio_transcript.delta"
+  ) {
+    const delta = String(data?.delta || "");
+    if (delta) {
+      const caption = $("developer-ai-call-window-caption");
+      if (caption) caption.textContent = (caption.textContent + delta).slice(-500);
+    }
+    return;
+  }
+
+  if (type === "output_audio_buffer.started") {
+    updateDeveloperAICallWindow("Speaking…", "Developer AI");
+    return;
+  }
+
+  if (type === "output_audio_buffer.stopped" || type === "response.done") {
+    updateDeveloperAICallWindow("Listening…", "Your turn");
+    return;
+  }
+
+  if (type === "error") {
+    const message = String(data?.error?.message || "Realtime voice error.");
+    updateDeveloperAICallWindow("Call issue", message);
+    const status = $("developer-ai-status");
+    if (status) status.textContent = "Developer AI realtime error — " + message;
+  }
+}
+
+async function startDeveloperAIRealtimeCall() {
+  if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) {
+    throw new Error("Realtime voice is not supported by this browser.");
+  }
+
+  developerAICallMode = true;
+  openDeveloperAICallWindow();
+  updateDeveloperAICallWindow("Connecting…", "Starting realtime voice");
+  setDeveloperAICallScrollSafe();
+  $("developer-ai-input")?.blur?.();
+
+  const button = $("developer-ai-call");
+  const status = $("developer-ai-status");
+  if (button) button.textContent = "■ END CALL";
+  if (status) status.textContent = "Starting realtime Developer AI call…";
+
+  developerAIRealtimeStream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true
+    }
+  });
+
+  const pc = new RTCPeerConnection();
+  developerAIRealtimePc = pc;
+
+  developerAIRealtimeAudio = document.createElement("audio");
+  developerAIRealtimeAudio.autoplay = true;
+  developerAIRealtimeAudio.playsInline = true;
+  developerAIRealtimeAudio.volume = 1;
+  developerAIRealtimeAudio.style.display = "none";
+  document.body.appendChild(developerAIRealtimeAudio);
+
+  pc.ontrack = event => {
+    const remote = event.streams?.[0];
+    if (!remote) return;
+    developerAIRealtimeAudio.srcObject = remote;
+    developerAIRealtimeAudio.play().catch(() => {
+      updateDeveloperAICallWindow("Audio blocked", "Tap the call screen once, then keep talking.");
+    });
+  };
+
+  pc.onconnectionstatechange = () => {
+    const state = pc.connectionState;
+    if (state === "connected") {
+      updateDeveloperAICallWindow("Listening…", "Realtime voice connected");
+      if (status) status.textContent = "Developer AI realtime call connected.";
+    } else if (state === "failed" || state === "disconnected") {
+      updateDeveloperAICallWindow("Connection interrupted", "Trying again may help.");
+      if (status) status.textContent = "Developer AI realtime call connection interrupted.";
+    }
+  };
+
+  developerAIRealtimeStream.getTracks().forEach(track => {
+    pc.addTrack(track, developerAIRealtimeStream);
+  });
+
+  const dc = pc.createDataChannel("oai-events");
+  developerAIRealtimeChannel = dc;
+  dc.onmessage = handleDeveloperAIRealtimeEvent;
+  dc.onopen = () => {
+    updateDeveloperAICallWindow("Listening…", "Realtime voice connected");
+  };
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  await waitForRealtimeIce(pc);
+
+  const sdp = pc.localDescription?.sdp || offer.sdp;
+  const answer = await callMyServiceEdgeFunction("developer-ai", {
+    action: "realtime_offer",
+    sdp
+  });
+
+  if (!answer?.sdp) throw new Error("Realtime voice returned no connection answer.");
+
+  await pc.setRemoteDescription({
+    type: "answer",
+    sdp: answer.sdp
+  });
+
+  unlockDeveloperAIAudio();
+  updateDeveloperAICallWindow("Listening…", "Talk naturally — I’ll wait for you to finish.");
+  if (status) status.textContent = "Developer AI realtime voice ready.";
+}
+
+async function toggleDeveloperAICall() {
   if (!developerAIIsAllowed()) return;
 
   if (developerAICallMode) {
@@ -6359,90 +6526,15 @@ function toggleDeveloperAICall() {
     return;
   }
 
-  developerAICallMode = true;
-  openDeveloperAICallWindow();
-  updateDeveloperAICallWindow("Connecting…", "Preparing secure voice call");
-  unlockDeveloperAIAudio();
-  setDeveloperAICallScrollSafe();
-
-  // Keep iOS from trapping the page around the text keyboard during call mode.
-  $("developer-ai-input")?.blur?.();
-
-  const button = $("developer-ai-call");
-  const status = $("developer-ai-status");
-  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-  if (button) button.textContent = "■ END CALL";
-
-  if (!Recognition) {
-    if (status) status.textContent = "Call mode is on. Voice input is unavailable on this device, but AI replies can still play aloud.";
-    return;
-  }
-
-  developerAIRecognition = new Recognition();
-  developerAIRecognition.lang = "en-US";
-  developerAIRecognition.interimResults = true;
-  developerAIRecognition.continuous = true;
-
-  developerAIRecognition.onspeechstart = () => {
-    if (!developerAICallMode) return;
-    developerAIUserIsSpeaking = true;
-    pauseDeveloperAIForUserSpeech();
-    updateDeveloperAICallWindow("Listening…", "Go ahead — I won’t interrupt.");
-  };
-
-  developerAIRecognition.onresult = event => {
-    if (!developerAICallMode) return;
-
-    let finalText = "";
-    let interimText = "";
-
-    for (let i = event.resultIndex || 0; i < event.results.length; i++) {
-      const piece = String(event.results[i]?.[0]?.transcript || "").trim();
-      if (!piece) continue;
-      if (event.results[i].isFinal) finalText += (finalText ? " " : "") + piece;
-      else interimText += (interimText ? " " : "") + piece;
-    }
-
-    const preview = [developerAISpeechBuffer, finalText, interimText].filter(Boolean).join(" ").trim();
-    if (preview) updateDeveloperAICallWindow("Listening…", preview);
-
-    if (finalText) queueDeveloperAIUserSpeech(finalText);
-  };
-
-  developerAIRecognition.onspeechend = () => {
-    if (!developerAICallMode) return;
-    // Final transcript is sent only after the debounce window, so short pauses
-    // don't cause Developer AI to talk over the user.
-  };
-
-  developerAIRecognition.onerror = event => {
-    if (!developerAICallMode) return;
-    const liveStatus = $("developer-ai-status");
-    if (liveStatus && event?.error !== "aborted") {
-      liveStatus.textContent = "Voice input paused. Call is still active.";
-    }
-  };
-
-  developerAIRecognition.onend = () => {
-    if (!developerAICallMode) return;
-    restartDeveloperAIListening(220);
-  };
-
   try {
-    developerAIRecognition.start();
-    if (status) {
-      const q = getDeveloperAINetworkQuality();
-      status.textContent = q === "good"
-        ? "Call mode active — listening…"
-        : "Call mode active — low-bandwidth mode enabled.";
-      updateDeveloperAICallWindow(
-        q === "good" ? "Listening…" : "Listening…",
-        q === "good" ? "Developer AI is ready" : "Low-bandwidth mode enabled"
-      );
-    }
-  } catch (_) {
-    if (status) status.textContent = "Call mode is active. Tap END CALL to stop.";
+    await startDeveloperAIRealtimeCall();
+  } catch (error) {
+    const message = String(error?.message || "Realtime voice could not start.");
+    stopDeveloperAICall();
+    openDeveloperAICallWindow();
+    updateDeveloperAICallWindow("Couldn’t connect", message);
+    const status = $("developer-ai-status");
+    if (status) status.textContent = "Realtime Developer AI unavailable — " + message;
   }
 }
 
