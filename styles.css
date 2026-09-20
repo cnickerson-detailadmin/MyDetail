@@ -1308,3 +1308,169 @@ td {
 
 /* END MYSERVICE STYLES */
  
+
+
+/* =========================================================
+   MYSERVICE PROFESSIONAL DESKTOP EXPERIENCE
+   Desktop-only visual refinement.
+   ========================================================= */
+@media (min-width: 1024px) {
+  body {
+    background:
+      radial-gradient(circle at top left, rgba(22,119,255,.08), transparent 34rem),
+      linear-gradient(180deg, #f7faff 0%, #eef4fb 100%);
+  }
+
+  .topbar {
+    height: 76px;
+    padding: 0 28px;
+    border-bottom: 1px solid rgba(16,33,61,.08);
+    box-shadow: 0 8px 28px rgba(16,33,61,.06);
+    backdrop-filter: blur(18px);
+  }
+
+  .brand-name {
+    font-size: 22px;
+    letter-spacing: -.5px;
+  }
+
+  .company-name {
+    font-size: 12px;
+    opacity: .72;
+  }
+
+  .app-layout {
+    min-height: calc(100vh - 76px);
+  }
+
+  #sidebar {
+    width: 260px;
+    padding: 20px 14px 24px;
+    background: rgba(255,255,255,.94);
+    border-right: 1px solid rgba(16,33,61,.08);
+    box-shadow: 14px 0 36px rgba(16,33,61,.04);
+  }
+
+  .nav-section {
+    margin-bottom: 18px;
+  }
+
+  .nav-title {
+    padding: 0 12px 8px;
+    font-size: 10px;
+    letter-spacing: 1.3px;
+    color: #8a99ad;
+  }
+
+  .nav {
+    min-height: 44px;
+    border-radius: 12px;
+    padding: 0 12px;
+    margin: 3px 0;
+    font-weight: 650;
+    transition: transform .15s ease, background .15s ease, box-shadow .15s ease;
+  }
+
+  .nav:hover {
+    transform: translateX(2px);
+    background: #f2f7ff;
+  }
+
+  .nav.active {
+    background: linear-gradient(135deg, #eaf3ff 0%, #f4f8ff 100%);
+    color: #0f66d9;
+    box-shadow: inset 3px 0 0 #1677ff;
+  }
+
+  .main-content {
+    max-width: none;
+    padding: 34px 38px 56px;
+  }
+
+  .page {
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  .page-header {
+    margin-bottom: 24px;
+    align-items: center;
+  }
+
+  .page-header h1 {
+    font-size: 34px;
+    letter-spacing: -1px;
+  }
+
+  .page-header p {
+    font-size: 14px;
+    color: #6f7f95;
+  }
+
+  .stats-grid {
+    gap: 18px;
+    grid-template-columns: repeat(4, minmax(0,1fr));
+  }
+
+  .dashboard-grid {
+    gap: 20px;
+    grid-template-columns: repeat(2, minmax(0,1fr));
+  }
+
+  .panel,
+  .stat-card,
+  .clock-card,
+  .notification-card,
+  .permission-banner {
+    border: 1px solid rgba(16,33,61,.08);
+    box-shadow: 0 12px 36px rgba(16,33,61,.06);
+  }
+
+  .panel {
+    border-radius: 18px;
+    padding: 22px;
+  }
+
+  .stat-card {
+    border-radius: 16px;
+    padding: 20px;
+    background: linear-gradient(180deg,#fff 0%,#fbfdff 100%);
+  }
+
+  .stat-card strong {
+    font-size: 27px;
+  }
+
+  .primary-button,
+  .outline-button,
+  .icon-button,
+  .profile-button {
+    border-radius: 12px;
+  }
+
+  table {
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  thead th {
+    position: sticky;
+    top: 0;
+    background: #f7faff;
+    z-index: 1;
+  }
+
+  tbody tr:hover {
+    background: #f9fbff;
+  }
+
+  input, select, textarea {
+    border-radius: 12px;
+    border: 1px solid #d7e2ef;
+    background: #fff;
+  }
+
+  .mobile-menu {
+    display: none !important;
+  }
+}
