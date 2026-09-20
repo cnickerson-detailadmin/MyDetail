@@ -3534,7 +3534,7 @@ function quickPinPadMarkup(prefix) {
         if (!key) return '<span></span>';
         const safe = key === "⌫" ? "backspace" : key;
         return '<button type="button" data-pin-key="' + safe + '" data-pin-prefix="' + prefix + '" ' +
-          'style="width:72px;height:58px;border-radius:14px;border:1px solid #d8e1ed;background:#fff;color:#16304f;font-size:22px;font-weight:800;box-shadow:0 3px 10px rgba(15,35,65,.05);touch-action:manipulation;">' +
+          'style="position:relative;z-index:2147483647;width:72px;height:58px;border-radius:14px;border:1px solid #d8e1ed;background:#fff;color:#16304f;font-size:22px;font-weight:800;box-shadow:0 3px 10px rgba(15,35,65,.05);touch-action:manipulation;pointer-events:auto;-webkit-tap-highlight-color:rgba(22,119,242,.18);">' +
           key + '</button>';
       }).join("")}
     </div>
@@ -3577,19 +3577,43 @@ function renderQuickPinDisplay(prefix, value, shown) {
 }
 
 function bindQuickPinPad(prefix, getValue, setValue, onComplete) {
+  let lastTapAt = 0;
+  let completing = false;
+
+  function handlePinPress(button, event) {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+
+    const now = Date.now();
+    if (now - lastTapAt < 120) return;
+    lastTapAt = now;
+
+    const key = button.getAttribute("data-pin-key");
+    let value = String(getValue() || "");
+
+    if (key === "backspace") value = value.slice(0, -1);
+    else if (/^\d$/.test(key) && value.length < 4) value += key;
+    else return;
+
+    setValue(value);
+
+    if (value.length === 4 && typeof onComplete === "function" && !completing) {
+      completing = true;
+      setTimeout(async () => {
+        try {
+          await onComplete(value);
+        } finally {
+          completing = false;
+        }
+      }, 90);
+    }
+  }
+
   document.querySelectorAll('[data-pin-prefix="' + prefix + '"]').forEach(button => {
-    button.onclick = function () {
-      const key = this.getAttribute("data-pin-key");
-      let value = String(getValue() || "");
-
-      if (key === "backspace") value = value.slice(0, -1);
-      else if (/^\d$/.test(key) && value.length < 4) value += key;
-
-      setValue(value);
-      if (value.length === 4 && typeof onComplete === "function") {
-        setTimeout(() => onComplete(value), 90);
-      }
-    };
+    button.disabled = false;
+    button.style.pointerEvents = "auto";
+    button.addEventListener("pointerup", event => handlePinPress(button, event), { passive: false });
+    button.addEventListener("click", event => handlePinPress(button, event), { passive: false });
   });
 }
 
@@ -3671,7 +3695,7 @@ function showQuickPinSetupScreen(accessToken, userId) {
   }
 
   document.body.innerHTML = `
-    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:#1677f2;box-sizing:border-box;">
+    <div id="myservice-pin-screen" style="position:fixed;inset:0;z-index:2147483647;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:#1677f2;box-sizing:border-box;pointer-events:auto;overflow:auto;-webkit-overflow-scrolling:touch;">
       <div style="width:100%;max-width:390px;background:white;padding:24px;border-radius:20px;box-shadow:0 12px 36px rgba(16,42,76,.08);box-sizing:border-box;text-align:center;">
         <div style="font-size:12px;font-weight:900;letter-spacing:1.4px;color:#1677f2;margin-bottom:6px;">MYSERVICE LOGIN CODE</div>
         <h1 id="quickPinSetupTitle" style="margin:0;color:#0d2345;font-size:27px;"></h1>
@@ -3691,7 +3715,7 @@ function showQuickPinVerificationScreen(accessToken, userId) {
   let showPin = false;
 
   document.body.innerHTML = `
-    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:#1677f2;box-sizing:border-box;">
+    <div id="myservice-pin-screen" style="position:fixed;inset:0;z-index:2147483647;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:#1677f2;box-sizing:border-box;pointer-events:auto;overflow:auto;-webkit-overflow-scrolling:touch;">
       <div style="width:100%;max-width:390px;background:white;padding:24px;border-radius:20px;box-shadow:0 12px 36px rgba(16,42,76,.08);box-sizing:border-box;text-align:center;">
         <div style="font-size:12px;font-weight:900;letter-spacing:1.4px;color:#1677f2;margin-bottom:6px;">MYSERVICE LOGIN CODE</div>
         <h1 style="margin:0;color:#0d2345;font-size:27px;">Enter your 4-digit login code</h1>
