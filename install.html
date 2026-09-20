@@ -10,21 +10,89 @@
   <title>Install MyService</title>
   <style>
     *{box-sizing:border-box}
-    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f4f8ff;color:#10213d;min-height:100vh;display:grid;place-items:center;padding:24px}
-    .card{width:min(460px,100%);background:#fff;border:1px solid #dbe8f8;border-radius:28px;padding:30px;box-shadow:0 18px 50px rgba(20,70,140,.12);text-align:center}
-    .logo{font-size:38px;font-weight:800;letter-spacing:-1.5px;margin:4px 0 8px}.logo span{color:#1677ff}
-    h1{font-size:25px;margin:12px 0 8px}p{line-height:1.5;color:#60738f;margin:0 0 22px}
-    button,a.action{width:100%;border:0;border-radius:16px;padding:15px 18px;font-size:16px;font-weight:750;cursor:pointer;text-decoration:none;display:block}
-    #installBtn{background:#1677ff;color:#fff}.secondary{margin-top:10px;background:#eef5ff;color:#145ec1}
-    .ios{display:none;text-align:left;background:#f7faff;border-radius:16px;padding:16px;margin-top:16px;color:#334b68;line-height:1.55}
-    .small{font-size:13px;margin-top:16px;color:#8797aa}
-    .platform-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:6px 0 14px}
-    .platform-card{border:1px solid #dbe8f8;background:#fff;border-radius:18px;padding:16px 12px;display:flex;align-items:center;gap:11px;text-align:left;box-shadow:0 8px 22px rgba(20,70,140,.08);min-height:82px}
+    body{
+      margin:0;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      background:#f7f9fc;
+      color:#10213d;
+      min-height:100vh;
+      display:grid;
+      place-items:center;
+      padding:24px;
+    }
+    .card{
+      width:min(520px,100%);
+      background:#fff;
+      border:1px solid #dbe3ee;
+      padding:32px;
+      box-shadow:0 10px 28px rgba(16,33,61,.08);
+      text-align:center;
+    }
+    .logo{font-size:36px;font-weight:800;letter-spacing:-1.4px;margin:0 0 10px}
+    .logo span{color:#1677ff}
+    h1{font-size:24px;margin:10px 0 8px}
+    p{line-height:1.5;color:#66778e;margin:0 0 24px}
+
+    .platform-grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px;
+      margin:0 0 14px;
+    }
+    .platform-card{
+      border:1px solid #cfd9e6;
+      background:#fff;
+      padding:15px 14px;
+      display:flex;
+      align-items:center;
+      gap:12px;
+      text-align:left;
+      min-height:72px;
+      cursor:pointer;
+      transition:background .15s ease,border-color .15s ease;
+    }
+    .platform-card:hover{background:#f7faff;border-color:#9fbce5}
+    .platform-card:active{background:#eef5ff}
     .platform-card strong{display:block;font-size:15px;color:#10213d}
-    .platform-card span{display:block;font-size:12px;color:#73849b;margin-top:3px}
-    .platform-icon{width:38px;height:38px;display:grid;place-items:center;border-radius:12px;font-size:22px;font-weight:800;flex:0 0 38px}
+    .platform-card span{display:block;font-size:12px;color:#73849b;margin-top:2px}
+
+    .platform-icon{
+      width:34px;
+      height:34px;
+      display:grid;
+      place-items:center;
+      font-size:20px;
+      font-weight:800;
+      flex:0 0 34px;
+    }
     .apple-mark{background:#111;color:#fff}
-    .android-mark{background:#eaf8ef;color:#198754}
+    .android-mark{background:#eaf6ee;color:#177245}
+
+    .ios{
+      display:none;
+      text-align:left;
+      background:#f7f9fc;
+      border:1px solid #dbe3ee;
+      padding:14px;
+      margin-top:12px;
+      color:#334b68;
+      line-height:1.5;
+    }
+
+    a.action,button.action{
+      width:100%;
+      border:1px solid #cfd9e6;
+      background:#fff;
+      color:#145ec1;
+      padding:13px 16px;
+      font-size:15px;
+      font-weight:700;
+      cursor:pointer;
+      text-decoration:none;
+      display:block;
+      margin-top:10px;
+    }
+    .small{font-size:12px;margin-top:14px;color:#8797aa}
     @media (max-width:380px){.platform-grid{grid-template-columns:1fr}}
   </style>
 </head>
@@ -32,13 +100,13 @@
   <main class="card">
     <div class="logo">My<span>Service</span></div>
     <h1>Install MyService</h1>
-    <p>Use MyService from your Home Screen like an app.</p>
+    <p>Choose your device for the fastest install option.</p>
 
     <div class="platform-grid">
       <button id="iosInstallBtn" class="platform-card" type="button" aria-label="Install MyService on iOS">
         <div class="platform-icon apple-mark">●</div>
         <div>
-          <strong>Install on iOS</strong>
+          <strong>Quick install on iOS</strong>
           <span>iPhone & iPad</span>
         </div>
       </button>
@@ -46,22 +114,20 @@
       <button id="androidInstallBtn" class="platform-card" type="button" aria-label="Install MyService on Android">
         <div class="platform-icon android-mark">◉</div>
         <div>
-          <strong>Install on Android</strong>
+          <strong>Quick install on Android</strong>
           <span>Android devices</span>
         </div>
       </button>
     </div>
 
     <div id="iosHelp" class="ios">
-      <strong>Install on iPhone or iPad</strong><br>
-      1. Tap the <strong>Share</strong> button in Safari.<br>
-      2. Tap <strong>Add to Home Screen</strong>.<br>
-      3. Tap <strong>Add</strong>.
+      <strong>iPhone quick install</strong><br>
+      Tap <strong>Share</strong> → <strong>Add to Home Screen</strong> → <strong>Add</strong>.
     </div>
 
     <div id="androidHelp" class="ios">
-      <strong>Install on Android</strong><br>
-      Open this page in Chrome, tap the browser menu, then choose <strong>Install app</strong> or <strong>Add to Home screen</strong>.
+      <strong>Android quick install</strong><br>
+      Tap your browser menu → <strong>Install app</strong>.
     </div>
 
     <a id="continueBtn" class="action secondary" href="./">Continue in browser</a>
