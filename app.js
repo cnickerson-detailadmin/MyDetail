@@ -3528,14 +3528,18 @@ function isQuickPinVerified(userId) {
 
 const quickPinPadHandlers = new Map();
 let quickPinLastFallbackTap = 0;
+let quickPinLastKey = "";
 
 function quickPinFallbackPress(button, event) {
   event?.preventDefault?.();
   event?.stopPropagation?.();
 
   const now = Date.now();
-  if (now - quickPinLastFallbackTap < 90) return false;
+  const keyName = String(button?.getAttribute?.("data-pin-prefix") || "") + ":" +
+    String(button?.getAttribute?.("data-pin-key") || "");
+  if (keyName === quickPinLastKey && now - quickPinLastFallbackTap < 180) return false;
   quickPinLastFallbackTap = now;
+  quickPinLastKey = keyName;
 
   const prefix = button?.getAttribute?.("data-pin-prefix") || "";
   const handler = quickPinPadHandlers.get(prefix);
@@ -3644,7 +3648,8 @@ function installGlobalQuickPinTapCapture() {
     quickPinFallbackPress(target, event);
   };
 
-  document.addEventListener("touchend", handle, true);
+  document.addEventListener("touchstart", handle, { capture: true, passive: false });
+  document.addEventListener("touchend", handle, { capture: true, passive: false });
   document.addEventListener("pointerup", handle, true);
   document.addEventListener("click", handle, true);
 }
@@ -3672,16 +3677,16 @@ function installQuickPinInteractionWatchdog() {
     const verifyPad = document.querySelector('[data-pin-prefix="verify"]');
     const setupPad = document.querySelector('[data-pin-prefix="setup"]');
 
-    if (verifyPad && !quickPinPadHandlers.has("verify")) {
-      const retry = document.getElementById("pinLogoutButton");
-      if (retry) retry.insertAdjacentHTML("beforebegin",
-        '<div style="margin:8px 0;color:#b91c1c;font-size:13px;font-weight:700;">Keypad repaired automatically. Try the numbers again.</div>'
-      );
+    const ctx = window.__myservicePinScreenContext || null;
+
+    if (verifyPad && !quickPinPadHandlers.has("verify") && ctx?.mode === "verify") {
+      showQuickPinVerificationScreen(ctx.accessToken, ctx.userId);
+      return;
     }
 
-    if (setupPad && !quickPinPadHandlers.has("setup")) {
-      const msg = document.getElementById("quickPinSetupMessage");
-      if (msg) msg.textContent = "Keypad repaired automatically. Try the numbers again.";
+    if (setupPad && !quickPinPadHandlers.has("setup") && ctx?.mode === "setup") {
+      showQuickPinSetupScreen(ctx.accessToken, ctx.userId);
+      return;
     }
   }, 500);
 }
@@ -3689,6 +3694,7 @@ function installQuickPinInteractionWatchdog() {
 installQuickPinInteractionWatchdog();
 
 function showQuickPinSetupScreen(accessToken, userId) {
+  window.__myservicePinScreenContext = { mode: "setup", accessToken, userId };
   let firstPin = "";
   let confirmPin = "";
   let stage = "first";
@@ -3782,6 +3788,7 @@ function showQuickPinSetupScreen(accessToken, userId) {
 }
 
 function showQuickPinVerificationScreen(accessToken, userId) {
+  window.__myservicePinScreenContext = { mode: "verify", accessToken, userId };
   let pin = "";
   let showPin = false;
 
