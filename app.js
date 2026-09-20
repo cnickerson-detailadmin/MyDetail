@@ -2705,6 +2705,7 @@ function installDeveloperExperience() {
           <button id="developer-ai-image" class="outline-button" type="button" onclick="generateDeveloperAIImage()" style="border-radius:18px;">▧ IMAGE</button>
           <button id="developer-ai-code-push" class="outline-button" type="button" onclick="toggleDeveloperAICodePush()" style="border-radius:18px;">CODE PUSH: OFF</button>
         </div>
+        <small style="display:block;margin-top:8px;">Gemini free tier has limits. Messages go to Google; keep private business data out. Audio follows your iPhone output selection.</small>
         <small id="developer-ai-status" style="display:block;margin-top:8px;color:#61728c;">Developer-only. Sensitive or destructive actions still require confirmation.</small>
         <small style="display:block;margin-top:4px;color:#7b8aa0;">Voice is AI-generated. Call mode uses speech recognition when supported by your device.</small>
       </section>
@@ -6041,6 +6042,8 @@ let developerAIUserIsSpeaking = false;
 let developerAIFreeCallMode = false;
 let developerAISpeakerMode = true;
 let developerAISpeechUtterance = null;
+let developerAIFreeRequestBusy = false;
+let developerAILastSpokenReply = "";
 let developerAIPendingWebsiteChange = "";
 
 function setDeveloperAICallScrollSafe() {
@@ -6208,7 +6211,7 @@ function stopDeveloperAICall() {
   if (status) status.textContent = "Developer AI call ended.";
 }
 function restartDeveloperAIListening(delay = 350) {
-  if (!developerAICallMode || !developerAIRecognition) return;
+  if (!developerAICallMode || !developerAIRecognition || developerAIFreeRequestBusy || developerAISpeaking) return;
   if (developerAIListenTimer) clearTimeout(developerAIListenTimer);
 
   developerAIListenTimer = setTimeout(() => {
@@ -6355,11 +6358,12 @@ function openDeveloperAICallWindow() {
       </div>
     </div>
 
+    <button id="developer-ai-play-reply" type="button" style="padding:12px;margin-bottom:12px;border:0;border-radius:14px;">Play reply / test audio</button>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
       <button id="developer-ai-call-mute" type="button"
         style="min-height:54px;border:0;border-radius:18px;background:rgba(255,255,255,.16);color:white;font-weight:850;">MUTE</button>
       <button id="developer-ai-call-speaker" type="button"
-        style="min-height:54px;border:0;border-radius:18px;background:white;color:#0f5fc7;font-weight:900;">🔊 SPEAKER</button>
+        style="min-height:54px;border:0;border-radius:18px;background:white;color:#0f5fc7;font-weight:900;">🔊 LOUD</button>
       <button id="developer-ai-call-end" type="button"
         style="min-height:54px;border:0;border-radius:18px;background:#d92d20;color:white;font-weight:900;">END</button>
     </div>
@@ -6367,10 +6371,13 @@ function openDeveloperAICallWindow() {
 
   document.body.appendChild(wrap);
 
+  $("developer-ai-play-reply").onclick = () => {
+    try { developerAIRecognition?.abort(); } catch (_) {}
+    speakDeveloperAIFreeReply(developerAILastSpokenReply || "Audio test. Can you hear me?").catch(() => {});
+  };
   $("developer-ai-call-end").onclick = () => stopDeveloperAICall();
   $("developer-ai-call-close").onclick = () => {
-    wrap.remove();
-    setDeveloperAICallScrollSafe();
+    stopDeveloperAICall();
   };
 
   let muted = false;
@@ -6393,7 +6400,7 @@ function openDeveloperAICallWindow() {
     developerAISpeakerMode = !developerAISpeakerMode;
     if (developerAIRealtimeAudio) developerAIRealtimeAudio.volume = developerAISpeakerMode ? 1 : 0.45;
     if (developerAIAudio) developerAIAudio.volume = developerAISpeakerMode ? 1 : 0.45;
-    this.textContent = developerAISpeakerMode ? "🔊 SPEAKER" : "🔉 QUIET";
+    this.textContent = developerAISpeakerMode ? "🔊 LOUD" : "🔉 QUIET";
     this.style.background = developerAISpeakerMode ? "white" : "rgba(255,255,255,.16)";
     this.style.color = developerAISpeakerMode ? "#0f5fc7" : "white";
   };
@@ -6699,7 +6706,7 @@ function speakDeveloperAIFreeReply(reply) {
     utterance.onend = () => {
       developerAISpeaking = false;
       developerAISpeechUtterance = null;
-      updateDeveloperAICallWindow("Listening…", "No-credit voice connected");
+      updateDeveloperAICallWindow("Listening…", "Voice input ready");
       restartDeveloperAIListening(250);
       resolve();
     };
@@ -6715,17 +6722,35 @@ function speakDeveloperAIFreeReply(reply) {
 }
 
 async function answerDeveloperAIFreeCall(message) {
+  if (!developerAIIsAllowed() || developerAIFreeRequestBusy) return;
+  developerAIFreeRequestBusy = true;
+  try { developerAIRecognition?.abort(); } catch (_) {}
   const history = getDeveloperAIHistory();
-  const reply = cleanDeveloperAIFreeReply(buildDeveloperAIFreeReply(message));
-  history.push({ role: "user", content: String(message || "").trim() });
-  history.push({ role: "assistant", content: reply });
+  history.push({ role: "user", content: String(message).slice(0,5000) });
   saveDeveloperAIHistory(history);
-  renderDeveloperAIChat();
-
-  updateDeveloperAICallWindow("Thinking…", String(message || "").trim());
-  const status = $("developer-ai-status");
-  if (status) status.textContent = "Developer AI • no-credit call mode";
-  await speakDeveloperAIFreeReply(reply);
+  if ($("developer-ai-input")) $("developer-ai-input").value = "";
+  updateDeveloperAICallWindow("Thinking…", message);
+  try {
+    const response = await callMyServiceEdgeFunction("developer-ai", {
+      action: "gemini_chat", messages: history.slice(-12), voice: true
+    });
+    const reply = cleanDeveloperAIFreeReply(response.reply);
+    history.push({ role: "assistant", content: reply });
+    saveDeveloperAIHistory(history);
+    renderDeveloperAIChat();
+    developerAILastSpokenReply = reply;
+    if (developerAICallMode) {
+      updateDeveloperAICallWindow("Reply ready", reply);
+      await speakDeveloperAIFreeReply(reply);
+    }
+  } catch (error) {
+    const message = String(error.message || "AI connection failed.");
+    updateDeveloperAICallWindow("AI unavailable", message);
+    if ($("developer-ai-status")) $("developer-ai-status").textContent = message;
+  } finally {
+    developerAIFreeRequestBusy = false;
+    if (developerAICallMode) restartDeveloperAIListening(350);
+  }
 }
 
 async function startDeveloperAIFreeCall() {
@@ -6734,6 +6759,8 @@ async function startDeveloperAIFreeCall() {
     throw new Error("This device does not support the free voice-call mode.");
   }
 
+  const setup = await callMyServiceEdgeFunction("developer-ai", { action: "gemini_status" });
+  if (!setup.configured) throw new Error("Google AI needs its server key before calls can start.");
   developerAICallMode = true;
   developerAIFreeCallMode = true;
   developerAISpeakerMode = true;
@@ -6758,7 +6785,7 @@ async function startDeveloperAIFreeCall() {
 
   recognition.onstart = () => {
     developerAIUserIsSpeaking = false;
-    updateDeveloperAICallWindow("Listening…", "No-credit voice connected");
+    updateDeveloperAICallWindow("Listening…", "Voice input ready");
   };
   recognition.onspeechstart = () => {
     developerAIUserIsSpeaking = true;
@@ -6783,13 +6810,13 @@ async function startDeveloperAIFreeCall() {
     restartDeveloperAIListening(500);
   };
   recognition.onend = () => {
-    if (developerAICallMode && developerAIFreeCallMode && !developerAISpeaking) {
+    if (developerAICallMode && developerAIFreeCallMode && !developerAISpeaking && !developerAIFreeRequestBusy) {
       restartDeveloperAIListening(350);
     }
   };
 
   try { recognition.start(); } catch (_) {}
-  updateDeveloperAICallWindow("Listening…", "No credits required • Speaker on");
+  updateDeveloperAICallWindow("Listening…", "Voice input ready");
   if (status) status.textContent = "Developer AI no-credit call connected.";
 }
 
@@ -6880,9 +6907,8 @@ async function sendDeveloperAIMessage(event) {
 
   try {
     const response = await callMyServiceEdgeFunction("developer-ai", {
-      action: "chat",
+      action: "gemini_chat",
       messages: history.slice(-12),
-      context: getDeveloperAISafeContext(),
       voice: developerAICallMode === true,
       voiceNetwork: developerAICallMode ? developerAIVoiceModeForNetwork() : null,
       allowCodePush: developerAICodePushEnabled()
@@ -6910,8 +6936,8 @@ async function sendDeveloperAIMessage(event) {
           playDeveloperAIAudio(response.audioBase64, response.audioMimeType || "audio/mpeg");
         }
       } else {
-        updateDeveloperAICallWindow("Reply received", "Voice audio was not returned. The text reply is in Developer AI.");
-        restartDeveloperAIListening();
+        developerAILastSpokenReply = String(response.reply || "");
+        await speakDeveloperAIFreeReply(developerAILastSpokenReply);
       }
     }
 
