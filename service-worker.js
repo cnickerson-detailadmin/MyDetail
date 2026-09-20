@@ -1,5 +1,5 @@
-const CACHE_NAME = "myservice-cache-v29";
-const BUILD_ID = "44-free-voice-approval";
+const CACHE_NAME = "myservice-cache-v30";
+const BUILD_ID = "45-developer-ai-tap-fix";
 
 const APP_SHELL = [
   "./styles.css?v=4-pro-desktop",
