@@ -4203,3 +4203,623 @@ installDeveloperExperience = function () {
   originalInstallDeveloperExperience();
   installDeveloperSupplierMarketplace();
 };
+
+
+/* =========================================================
+   MYSERVICE ADVANCED OPERATIONS SUITE
+   Functional frontend foundation for finance, inventory,
+   staffing, intelligence, onboarding and integrations.
+   External POS/payroll/weather/event connections remain
+   connection-ready until provider credentials/APIs are added.
+   ========================================================= */
+
+const MYSERVICE_ADVANCED_KEY = "myservice_advanced_suite_v1";
+
+function advancedDefaultState() {
+  return {
+    finance: {
+      dailySales: [],
+      weeklyNotes: [],
+      monthlyNotes: []
+    },
+    inventory: [],
+    inventoryActivity: [],
+    goals: [],
+    correctiveActions: [],
+    events: [],
+    integrationSettings: {
+      posProvider: "",
+      payrollProvider: "",
+      posConnected: false,
+      payrollConnected: false
+    },
+    forecastSettings: {
+      laborTargetPercent: 25,
+      softwareLaborLow: 22,
+      softwareLaborHigh: 30,
+      eventRadiusMiles: 15
+    },
+    onboarding: {
+      businessCreated: true,
+      posConnected: false,
+      payrollConnected: false,
+      employeesImported: false,
+      settingsReviewed: false,
+      dashboardCustomized: false,
+      intelligenceEnabled: true
+    },
+    supplierDetails: {}
+  };
+}
+
+function getAdvancedState() {
+  try {
+    const raw = localStorage.getItem(MYSERVICE_ADVANCED_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    const base = advancedDefaultState();
+    return {
+      ...base,
+      ...parsed,
+      finance: {...base.finance, ...(parsed.finance || {})},
+      integrationSettings: {...base.integrationSettings, ...(parsed.integrationSettings || {})},
+      forecastSettings: {...base.forecastSettings, ...(parsed.forecastSettings || {})},
+      onboarding: {...base.onboarding, ...(parsed.onboarding || {})},
+      supplierDetails: {...base.supplierDetails, ...(parsed.supplierDetails || {})},
+      inventory: Array.isArray(parsed.inventory) ? parsed.inventory : [],
+      inventoryActivity: Array.isArray(parsed.inventoryActivity) ? parsed.inventoryActivity : [],
+      goals: Array.isArray(parsed.goals) ? parsed.goals : [],
+      correctiveActions: Array.isArray(parsed.correctiveActions) ? parsed.correctiveActions : [],
+      events: Array.isArray(parsed.events) ? parsed.events : []
+    };
+  } catch {
+    return advancedDefaultState();
+  }
+}
+
+function saveAdvancedState(value) {
+  localStorage.setItem(MYSERVICE_ADVANCED_KEY, JSON.stringify(value));
+}
+
+function advancedMoney(value) {
+  return Number(value || 0).toLocaleString("en-US", {style:"currency", currency:"USD"});
+}
+
+function advancedDateKey(date = new Date()) {
+  return dateKey(date);
+}
+
+function advancedWeekStart(input = new Date()) {
+  const d = new Date(input);
+  const day = d.getDay();
+  const diff = (day + 6) % 7;
+  d.setDate(d.getDate() - diff);
+  d.setHours(0,0,0,0);
+  return d;
+}
+
+function advancedMonthStart(input = new Date()) {
+  const d = new Date(input);
+  d.setDate(1);
+  d.setHours(0,0,0,0);
+  return d;
+}
+
+function advancedCompletedSalesBetween(start, end) {
+  return (state.jobs || []).filter(job => {
+    const when = job.completedAt || job.createdAt || job.date || job.time;
+    if (!when) return false;
+    const d = new Date(when);
+    return !Number.isNaN(d.getTime()) && d >= start && d <= end && String(job.status || "").toLowerCase() === "completed";
+  }).reduce((sum, job) => sum + Number(job.price || 0), 0);
+}
+
+function advancedPunchLaborBetween(start, end) {
+  return (state.punches || []).reduce((sum, punch) => {
+    const when = punch.clockIn ? new Date(punch.clockIn) : null;
+    if (!when || when < start || when > end) return sum;
+    const hours = calculatePunchHours(punch, true);
+    const rate = Number(punch.hourlyRate || TEST_HOURLY_RATE || 0);
+    return sum + (hours * rate);
+  }, 0);
+}
+
+function advancedInventoryCostBetween(start, end) {
+  const adv = getAdvancedState();
+  return adv.inventoryActivity.reduce((sum, row) => {
+    const d = row.time ? new Date(row.time) : null;
+    if (!d || d < start || d > end) return sum;
+    if (!["purchase","waste","used"].includes(row.type)) return sum;
+    return sum + Number(row.cost || 0);
+  }, 0);
+}
+
+function advancedFinancialSnapshot(start, end) {
+  const adv = getAdvancedState();
+  const manualSales = adv.finance.dailySales.reduce((sum, row) => {
+    const d = new Date(row.date + "T12:00:00");
+    if (d < start || d > end) return sum;
+    return sum + Number(row.sales || 0);
+  }, 0);
+  const automatedSales = advancedCompletedSalesBetween(start, end);
+  const sales = automatedSales > 0 ? automatedSales : manualSales;
+  const labor = advancedPunchLaborBetween(start, end);
+  const supplies = advancedInventoryCostBetween(start, end);
+  const kept = sales - labor - supplies;
+  return {sales, labor, supplies, kept};
+}
+
+function advancedTodayRange() {
+  const start = new Date();
+  start.setHours(0,0,0,0);
+  const end = new Date();
+  end.setHours(23,59,59,999);
+  return {start,end};
+}
+
+function advancedWeekRange() {
+  const start = advancedWeekStart(new Date());
+  const end = new Date(start);
+  end.setDate(end.getDate()+6);
+  end.setHours(23,59,59,999);
+  return {start,end};
+}
+
+function advancedMonthRange() {
+  const start = advancedMonthStart(new Date());
+  const end = new Date(start);
+  end.setMonth(end.getMonth()+1);
+  end.setMilliseconds(-1);
+  return {start,end};
+}
+
+function recordDailySalesTotal() {
+  if (!canManageEmployees()) return;
+  const value = prompt("Enter today's total sales:");
+  if (value === null) return;
+  const sales = Number(value);
+  if (!Number.isFinite(sales) || sales < 0) {
+    alert("Enter a valid sales total.");
+    return;
+  }
+  const adv = getAdvancedState();
+  const key = advancedDateKey();
+  const existing = adv.finance.dailySales.find(x => x.date === key);
+  if (existing) existing.sales = sales;
+  else adv.finance.dailySales.push({date:key, sales});
+  saveAdvancedState(adv);
+  renderAll();
+}
+
+function addInventoryItemAdvanced() {
+  if (!canManageEmployees()) return;
+  const name = prompt("Supply / inventory item:");
+  if (!name?.trim()) return;
+  const qty = Number(prompt("Current quantity:", "0"));
+  const reorderAt = Number(prompt("Low-stock alert quantity:", "5"));
+  const unitCost = Number(prompt("Cost per unit:", "0"));
+  const adv = getAdvancedState();
+  adv.inventory.push({
+    id: uid("inv"),
+    name: name.trim(),
+    qty: Number.isFinite(qty) ? qty : 0,
+    reorderAt: Number.isFinite(reorderAt) ? reorderAt : 5,
+    unitCost: Number.isFinite(unitCost) ? unitCost : 0,
+    updatedAt: new Date().toISOString()
+  });
+  saveAdvancedState(adv);
+  renderAll();
+}
+
+function recordInventoryActivityAdvanced() {
+  if (!canManageEmployees()) return;
+  const adv = getAdvancedState();
+  if (!adv.inventory.length) {
+    alert("Add an inventory item first.");
+    return;
+  }
+  const item = adv.inventory[adv.inventory.length - 1];
+  const type = prompt("Type: purchase, used, or waste", "purchase");
+  if (!["purchase","used","waste"].includes(String(type || "").toLowerCase())) return;
+  const qty = Number(prompt("Quantity:", "1"));
+  if (!Number.isFinite(qty) || qty <= 0) return;
+  const normalized = String(type).toLowerCase();
+  if (normalized === "purchase") item.qty += qty;
+  else item.qty = Math.max(0, item.qty - qty);
+  const cost = qty * Number(item.unitCost || 0);
+  adv.inventoryActivity.push({
+    id: uid("invlog"),
+    itemId: item.id,
+    itemName: item.name,
+    type: normalized,
+    qty,
+    cost,
+    time: new Date().toISOString()
+  });
+  item.updatedAt = new Date().toISOString();
+  saveAdvancedState(adv);
+  renderAll();
+}
+
+function addCorrectiveActionAdvanced() {
+  if (!canManageEmployees()) return;
+  const employee = prompt("Employee name:");
+  if (!employee?.trim()) return;
+  const reason = prompt("Corrective action reason:");
+  if (!reason?.trim()) return;
+  const followUp = prompt("Follow-up date (optional, YYYY-MM-DD):", "");
+  const adv = getAdvancedState();
+  adv.correctiveActions.unshift({
+    id: uid("corrective"),
+    employee: employee.trim(),
+    reason: reason.trim(),
+    outcome: "Open",
+    acknowledged: false,
+    followUp: followUp || "",
+    createdAt: new Date().toISOString()
+  });
+  saveAdvancedState(adv);
+  renderAll();
+}
+
+function addPlanningEventAdvanced() {
+  if (!canManageEmployees()) return;
+  const name = prompt("Event name:");
+  if (!name?.trim()) return;
+  const venue = prompt("Venue / place:", "");
+  const date = prompt("Event date (YYYY-MM-DD):", advancedDateKey());
+  const startTime = prompt("Start time (example 7:00 PM):", "");
+  const estimatedEndTime = prompt("Estimated end time:", "");
+  const demand = prompt("Demand hint: Low, Normal, or High", "High");
+  const adv = getAdvancedState();
+  adv.events.unshift({
+    id: uid("event"),
+    name: name.trim(),
+    venue: venue || "",
+    date: date || advancedDateKey(),
+    startTime: startTime || "",
+    estimatedEndTime: estimatedEndTime || "",
+    demand: ["low","normal","high"].includes(String(demand).toLowerCase()) ? String(demand).toLowerCase() : "normal",
+    source: "Manual planning entry",
+    updatedAt: new Date().toISOString()
+  });
+  saveAdvancedState(adv);
+  renderAll();
+}
+
+function addBusinessGoalAdvanced() {
+  if (!canManageEmployees()) return;
+  const name = prompt("Goal name:");
+  if (!name?.trim()) return;
+  const target = Number(prompt("Target value:", "0"));
+  const current = Number(prompt("Current value:", "0"));
+  const adv = getAdvancedState();
+  adv.goals.unshift({
+    id: uid("goal"),
+    name: name.trim(),
+    target: Number.isFinite(target) ? target : 0,
+    current: Number.isFinite(current) ? current : 0,
+    createdAt: new Date().toISOString()
+  });
+  saveAdvancedState(adv);
+  renderAll();
+}
+
+function runWhatIfAdvanced() {
+  const sales = Number(prompt("Projected sales:", "10000"));
+  const labor = Number(prompt("Projected labor cost:", "2500"));
+  const supplies = Number(prompt("Projected supply cost:", "1500"));
+  if (![sales,labor,supplies].every(Number.isFinite)) return;
+  const kept = sales - labor - supplies;
+  alert("Projected money kept: " + advancedMoney(kept) + "\nProjected cost ratio: " +
+    (sales > 0 ? (((labor + supplies) / sales) * 100).toFixed(1) : "0.0") + "%");
+}
+
+function businessAdvisorAdvanced(snapshot) {
+  const notes = [];
+  if (snapshot.sales <= 0) notes.push("No sales are recorded for this period yet.");
+  if (snapshot.sales > 0) {
+    const laborPct = snapshot.labor / snapshot.sales * 100;
+    const suppliesPct = snapshot.supplies / snapshot.sales * 100;
+    if (laborPct > 30) notes.push("Labor is above the software baseline range for this period.");
+    else if (laborPct < 15) notes.push("Labor is unusually low relative to sales; confirm staffing and punch data are complete.");
+    if (suppliesPct > 25) notes.push("Supply costs are taking a large share of sales; review purchasing and waste.");
+    if (snapshot.kept < 0) notes.push("Recorded costs exceed recorded sales for this period.");
+    if (snapshot.kept > 0) notes.push("Recorded sales currently exceed labor and supply costs.");
+  }
+  return notes;
+}
+
+function anomalyNotesAdvanced() {
+  const adv = getAdvancedState();
+  const rows = [...adv.finance.dailySales].sort((a,b) => a.date.localeCompare(b.date)).slice(-8);
+  if (rows.length < 3) return ["Not enough daily sales history yet for anomaly detection."];
+  const values = rows.map(r => Number(r.sales || 0));
+  const avg = values.slice(0,-1).reduce((a,b)=>a+b,0) / Math.max(1, values.length-1);
+  const latest = values[values.length-1];
+  const diff = avg ? ((latest-avg)/avg)*100 : 0;
+  if (Math.abs(diff) >= 30) return ["Latest recorded sales are " + Math.abs(diff).toFixed(0) + "% " + (diff > 0 ? "above" : "below") + " the recent average."];
+  return ["No large sales anomaly detected from the available daily totals."];
+}
+
+function forecastNotesAdvanced() {
+  const adv = getAdvancedState();
+  const rows = [...adv.finance.dailySales].sort((a,b) => a.date.localeCompare(b.date)).slice(-7);
+  if (rows.length < 2) return {text:"Not enough sales history for a data-based forecast.", confidence:"Not enough data"};
+  const avg = rows.reduce((s,r)=>s+Number(r.sales||0),0)/rows.length;
+  const nextWeek = avg * 7;
+  const confidence = rows.length >= 7 ? "Medium" : "Low";
+  return {text:"Current run-rate projects about " + advancedMoney(nextWeek) + " in weekly sales if recent activity holds.", confidence};
+}
+
+function staffingRecommendationAdvanced() {
+  const range = advancedWeekRange();
+  const snap = advancedFinancialSnapshot(range.start, range.end);
+  const adv = getAdvancedState();
+  const targetPct = Number(adv.forecastSettings.laborTargetPercent || 25) / 100;
+  const targetLaborDollars = snap.sales * targetPct;
+  const rate = Number(TEST_HOURLY_RATE || 17.5);
+  const targetHours = rate > 0 ? targetLaborDollars / rate : 0;
+  const actualHours = (state.punches || []).reduce((sum,p) => {
+    const when = p.clockIn ? new Date(p.clockIn) : null;
+    if (!when || when < range.start || when > range.end) return sum;
+    return sum + calculatePunchHours(p,true);
+  },0);
+  return {
+    targetHours,
+    actualHours,
+    delta: targetHours - actualHours,
+    targetPct: Number(adv.forecastSettings.laborTargetPercent || 25)
+  };
+}
+
+function inventoryForecastMarkupAdvanced() {
+  const adv = getAdvancedState();
+  if (!adv.inventory.length) return '<p style="margin:0;color:#61728c;">No inventory items yet. Add supplies to enable low-stock and order forecasting.</p>';
+  return adv.inventory.map(item => {
+    const low = Number(item.qty || 0) <= Number(item.reorderAt || 0);
+    const useRows = adv.inventoryActivity.filter(x => x.itemId === item.id && ["used","waste"].includes(x.type)).slice(-10);
+    const averageUse = useRows.length ? useRows.reduce((s,x)=>s+Number(x.qty||0),0)/useRows.length : 0;
+    const remainingEvents = averageUse > 0 ? Number(item.qty||0)/averageUse : null;
+    return '<div class="list-row"><div><strong>' + escapeHTML(item.name) + '</strong><small>' +
+      Number(item.qty||0) + ' on hand • Low alert at ' + Number(item.reorderAt||0) +
+      (remainingEvents ? ' • Roughly ' + remainingEvents.toFixed(1) + ' usage cycles remaining' : '') +
+      '</small></div><span class="pill" style="' + (low ? 'background:#fee2e2;color:#b91c1c;' : 'background:#ecfdf5;color:#166534;') + '">' +
+      (low ? 'LOW STOCK' : 'OK') + '</span></div>';
+  }).join("");
+}
+
+function supplierScorecardsAdvanced() {
+  if (typeof getSupplierMarketplaceState !== "function") return '<p>Supplier marketplace not loaded.</p>';
+  const market = getSupplierMarketplaceState();
+  const adv = getAdvancedState();
+  if (!market.suppliers.length) return '<p style="margin:0;color:#61728c;">No suppliers added yet.</p>';
+  return market.suppliers.map(s => {
+    const detail = adv.supplierDetails[s.id] || {};
+    return '<div class="list-row"><div><strong>' + escapeHTML(s.name) + '</strong><small>' +
+      escapeHTML(detail.serviceArea || "Service area not set") + ' • On-time ' + Number(detail.onTimeRate ?? 100) + '% • Issue rate ' +
+      Number(detail.issueRate ?? 0) + '% • Returns ' + Number(detail.returnRate ?? 0) + '%</small></div><span class="pill">' +
+      escapeHTML(detail.verification || s.status || "Pending") + '</span></div>';
+  }).join("");
+}
+
+function configureSupplierAdvanced() {
+  if (!isDeveloperLogin() || getDeveloperView() !== "Developer") return;
+  if (typeof getSupplierMarketplaceState !== "function") return;
+  const market = getSupplierMarketplaceState();
+  if (!market.suppliers.length) { alert("Add a supplier first."); return; }
+  const s = market.suppliers[market.suppliers.length - 1];
+  const adv = getAdvancedState();
+  const current = adv.supplierDetails[s.id] || {};
+  current.serviceArea = prompt("Supplier service area:", current.serviceArea || "Western New York") || "";
+  current.onTimeRate = Number(prompt("On-time delivery %:", String(current.onTimeRate ?? 100)));
+  current.issueRate = Number(prompt("Issue / damaged delivery %:", String(current.issueRate ?? 0)));
+  current.returnRate = Number(prompt("Return rate %:", String(current.returnRate ?? 0)));
+  current.verification = prompt("Verification status:", current.verification || "Pending verification") || "Pending verification";
+  adv.supplierDetails[s.id] = current;
+  saveAdvancedState(adv);
+  renderAll();
+}
+
+function setIntegrationAdvanced(kind) {
+  if (!canManageEmployees()) return;
+  const adv = getAdvancedState();
+  const provider = prompt((kind === "pos" ? "POS" : "Payroll") + " provider name:", kind === "pos" ? "Square" : "Gusto");
+  if (!provider?.trim()) return;
+  if (kind === "pos") {
+    adv.integrationSettings.posProvider = provider.trim();
+    adv.integrationSettings.posConnected = false;
+    adv.onboarding.posConnected = false;
+  } else {
+    adv.integrationSettings.payrollProvider = provider.trim();
+    adv.integrationSettings.payrollConnected = false;
+    adv.onboarding.payrollConnected = false;
+  }
+  saveAdvancedState(adv);
+  alert("Provider saved. Real data sync requires that provider's API authorization.");
+  renderAll();
+}
+
+function markOnboardingAdvanced(key) {
+  const adv = getAdvancedState();
+  if (Object.prototype.hasOwnProperty.call(adv.onboarding, key)) {
+    adv.onboarding[key] = !adv.onboarding[key];
+    saveAdvancedState(adv);
+    renderAll();
+  }
+}
+
+function advancedOperationsMarkup() {
+  if (!canManageEmployees()) return "";
+  const today = advancedTodayRange();
+  const week = advancedWeekRange();
+  const month = advancedMonthRange();
+  const daySnap = advancedFinancialSnapshot(today.start,today.end);
+  const weekSnap = advancedFinancialSnapshot(week.start,week.end);
+  const monthSnap = advancedFinancialSnapshot(month.start,month.end);
+  const adv = getAdvancedState();
+  const forecast = forecastNotesAdvanced();
+  const staffing = staffingRecommendationAdvanced();
+  const advisor = businessAdvisorAdvanced(weekSnap);
+  const anomalies = anomalyNotesAdvanced();
+  const eventRows = adv.events.slice(0,5).map(e =>
+    '<div class="list-row"><div><strong>' + escapeHTML(e.name) + '</strong><small>' +
+    escapeHTML(e.venue || "Location TBD") + ' • ' + escapeHTML(e.date) + ' • ' +
+    escapeHTML(e.startTime || "Start TBD") + ' — ' + escapeHTML(e.estimatedEndTime || "Estimated end TBD") +
+    ' • Source: ' + escapeHTML(e.source || "Manual") + '</small></div><span class="pill">' +
+    escapeHTML(String(e.demand || "normal").toUpperCase()) + '</span></div>'
+  ).join("");
+
+  const goals = adv.goals.slice(0,5).map(g => {
+    const pct = Number(g.target) ? Math.min(100, Math.max(0, Number(g.current||0)/Number(g.target)*100)) : 0;
+    return '<div class="list-row"><div><strong>' + escapeHTML(g.name) + '</strong><small>' +
+      Number(g.current||0) + ' / ' + Number(g.target||0) + ' • ' + pct.toFixed(0) + '%</small></div></div>';
+  }).join("");
+
+  const corrective = adv.correctiveActions.slice(0,5).map(c =>
+    '<div class="list-row"><div><strong>' + escapeHTML(c.employee) + '</strong><small>' +
+    escapeHTML(c.reason) + ' • ' + escapeHTML(c.outcome) +
+    (c.followUp ? ' • Follow-up ' + escapeHTML(c.followUp) : '') + '</small></div></div>'
+  ).join("");
+
+  const onboardingKeys = [
+    ["businessCreated","Business created"],
+    ["posConnected","POS connected"],
+    ["payrollConnected","Payroll connected"],
+    ["employeesImported","Employees imported"],
+    ["settingsReviewed","Key settings reviewed"],
+    ["dashboardCustomized","Dashboard customized"],
+    ["intelligenceEnabled","Business intelligence enabled"]
+  ];
+
+  return `
+    <section class="panel" id="advanced-financials" style="border:2px solid rgba(22,119,255,.14);">
+      <div class="panel-header">
+        <div><div class="eyebrow">BUSINESS SNAPSHOT</div><h2>Daily / Weekly / Monthly Financials</h2>
+        <p>Sales vs labor and supply costs. POS data will supersede manual totals when connected.</p></div>
+        <button class="outline-button" type="button" onclick="recordDailySalesTotal()">ENTER TODAY'S SALES</button>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card"><span>Today Sales</span><strong>${advancedMoney(daySnap.sales)}</strong><small>Daily sales view</small></div>
+        <div class="stat-card"><span>This Week Kept</span><strong>${advancedMoney(weekSnap.kept)}</strong><small>Sales − labor − supplies</small></div>
+        <div class="stat-card"><span>This Month Sales</span><strong>${advancedMoney(monthSnap.sales)}</strong><small>Month-to-date</small></div>
+        <div class="stat-card"><span>This Month Kept</span><strong>${advancedMoney(monthSnap.kept)}</strong><small>Before taxes / other expenses</small></div>
+      </div>
+      <div class="dashboard-grid">
+        <div class="panel" style="box-shadow:none;margin:0;"><h3>Weekly breakdown</h3>
+          <div class="money-lines" style="margin-top:12px;">
+            <div><span>Sales</span><strong>${advancedMoney(weekSnap.sales)}</strong></div>
+            <div><span>Labor</span><strong>${advancedMoney(weekSnap.labor)}</strong></div>
+            <div><span>Supplies</span><strong>${advancedMoney(weekSnap.supplies)}</strong></div>
+            <div><span>Money kept</span><strong>${advancedMoney(weekSnap.kept)}</strong></div>
+          </div>
+        </div>
+        <div class="panel" style="box-shadow:none;margin:0;"><h3>Business health</h3>
+          <div style="display:grid;gap:7px;margin-top:12px;">${advisor.map(n=>'<div>• '+escapeHTML(n)+'</div>').join("")}</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="advanced-inventory">
+      <div class="panel-header"><div><div class="eyebrow">INVENTORY</div><h2>Inventory Forecast & Supply Alerts</h2>
+      <p>Track purchases, usage, waste, low-stock alerts and estimated remaining usage.</p></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="outline-button" onclick="addInventoryItemAdvanced()">+ ITEM</button><button class="outline-button" onclick="recordInventoryActivityAdvanced()">RECORD ACTIVITY</button></div></div>
+      ${inventoryForecastMarkupAdvanced()}
+    </section>
+
+    <section class="panel" id="advanced-staffing">
+      <div class="panel-header"><div><div class="eyebrow">LABOR PLANNING</div><h2>Demand & Staffing Forecast</h2>
+      <p>Compares actual labor with the business target and software baseline.</p></div></div>
+      <div class="stats-grid">
+        <div class="stat-card"><span>Your labor target</span><strong>${staffing.targetPct.toFixed(0)}%</strong><small>Business-selected goal</small></div>
+        <div class="stat-card"><span>Recommended hours</span><strong>${staffing.targetHours.toFixed(1)}</strong><small>Based on recorded sales and target</small></div>
+        <div class="stat-card"><span>Hours recorded</span><strong>${staffing.actualHours.toFixed(1)}</strong><small>This week</small></div>
+        <div class="stat-card"><span>Suggested adjustment</span><strong>${Math.abs(staffing.delta).toFixed(1)}h</strong><small>${staffing.delta >= 0 ? "More capacity available" : "Above target labor hours"}</small></div>
+      </div>
+      <div class="notification-card"><strong>Software baseline</strong><p>${adv.forecastSettings.softwareLaborLow}%–${adv.forecastSettings.softwareLaborHigh}% labor-to-sales range. Your target remains separate and under your control.</p></div>
+    </section>
+
+    <section class="panel" id="advanced-events">
+      <div class="panel-header"><div><div class="eyebrow">SCHEDULING INTELLIGENCE</div><h2>Weather & Nearby Event Planning</h2>
+      <p>Admin planning hints only. Never blocks scheduling.</p></div><button class="outline-button" onclick="addPlanningEventAdvanced()">+ PLANNING EVENT</button></div>
+      <div class="notification-card"><strong>Connection-ready</strong><p>Real nearby events and weather require approved event/weather data providers. Until connected, manual planning entries are available.</p></div>
+      ${eventRows || '<p style="color:#61728c;">No planning events added yet.</p>'}
+    </section>
+
+    <section class="panel" id="advanced-intelligence">
+      <div class="panel-header"><div><div class="eyebrow">BUSINESS INTELLIGENCE</div><h2>Advisor, Anomalies, Forecasts, Goals & What-If</h2>
+      <p>Uses the business's recorded data. Forecasts are estimates, not guarantees.</p></div><button class="outline-button" onclick="runWhatIfAdvanced()">WHAT-IF CALCULATOR</button></div>
+      <div class="dashboard-grid">
+        <div class="panel" style="box-shadow:none;margin:0;"><h3>Business Advisor</h3><div style="display:grid;gap:7px;margin-top:10px;">${advisor.map(n=>'<div>• '+escapeHTML(n)+'</div>').join("")}</div></div>
+        <div class="panel" style="box-shadow:none;margin:0;"><h3>Anomaly Detection</h3><div style="display:grid;gap:7px;margin-top:10px;">${anomalies.map(n=>'<div>• '+escapeHTML(n)+'</div>').join("")}</div></div>
+        <div class="panel" style="box-shadow:none;margin:0;"><h3>Forecast</h3><p>${escapeHTML(forecast.text)}</p><span class="pill">Confidence: ${escapeHTML(forecast.confidence)}</span></div>
+        <div class="panel" style="box-shadow:none;margin:0;"><h3>Goals</h3>${goals || '<p>No goals yet.</p>'}<button class="outline-button" onclick="addBusinessGoalAdvanced()">+ GOAL</button></div>
+      </div>
+    </section>
+
+    <section class="panel" id="advanced-employee-actions">
+      <div class="panel-header"><div><div class="eyebrow">EMPLOYEE MANAGEMENT</div><h2>Corrective Action Log</h2>
+      <p>Document coaching, corrective action, acknowledgment and follow-up.</p></div><button class="outline-button" onclick="addCorrectiveActionAdvanced()">+ CORRECTIVE ACTION</button></div>
+      ${corrective || '<p style="color:#61728c;">No corrective actions recorded.</p>'}
+    </section>
+
+    <section class="panel" id="advanced-integrations">
+      <div class="panel-header"><div><div class="eyebrow">INTEGRATIONS</div><h2>POS & Payroll Connections</h2>
+      <p>Keep the customer's current POS/payroll and connect MyService around them.</p></div></div>
+      <div class="dashboard-grid">
+        <div class="panel" style="box-shadow:none;margin:0;"><h3>POS</h3><p>${escapeHTML(adv.integrationSettings.posProvider || "No provider selected")}</p><span class="pill">${adv.integrationSettings.posConnected ? "CONNECTED" : "AUTHORIZATION REQUIRED"}</span><br><br><button class="outline-button" onclick="setIntegrationAdvanced('pos')">SET POS PROVIDER</button></div>
+        <div class="panel" style="box-shadow:none;margin:0;"><h3>Payroll</h3><p>${escapeHTML(adv.integrationSettings.payrollProvider || "No provider selected")}</p><span class="pill">${adv.integrationSettings.payrollConnected ? "CONNECTED" : "AUTHORIZATION REQUIRED"}</span><br><br><button class="outline-button" onclick="setIntegrationAdvanced('payroll')">SET PAYROLL PROVIDER</button></div>
+      </div>
+      <div class="notification-card"><strong>Security boundary</strong><p>MyService should send only the minimum required approved data (for example approved hours) and should not store bank-account, SSN or payroll-provider secrets in this frontend.</p></div>
+    </section>
+
+    <section class="panel" id="advanced-onboarding">
+      <div class="panel-header"><div><div class="eyebrow">ONBOARDING</div><h2>Adaptive Business Setup</h2>
+      <p>Autosaved checklist. Businesses can skip integrations they do not use.</p></div></div>
+      <div style="display:grid;gap:8px;">${onboardingKeys.map(([key,label]) =>
+        '<button class="list-row" type="button" onclick="markOnboardingAdvanced(\''+key+'\')" style="width:100%;text-align:left;cursor:pointer;"><div><strong>'+escapeHTML(label)+'</strong><small>Tap to toggle completion</small></div><span class="pill">'+(adv.onboarding[key] ? "DONE" : "PENDING")+'</span></button>'
+      ).join("")}</div>
+    </section>
+  `;
+}
+
+function installAdvancedOperationsSuite() {
+  const dashboard = $("dashboard");
+  if (!dashboard || !canManageEmployees()) {
+    $("myservice-advanced-suite")?.remove();
+    return;
+  }
+
+  let suite = $("myservice-advanced-suite");
+  if (!suite) {
+    suite = document.createElement("div");
+    suite.id = "myservice-advanced-suite";
+    dashboard.appendChild(suite);
+  }
+
+  if (isDeveloperLogin() && getDeveloperView() === "Developer") {
+    suite.hidden = false;
+    suite.innerHTML = advancedOperationsMarkup() + `
+      <section class="panel" id="advanced-supplier-scorecards">
+        <div class="panel-header"><div><div class="eyebrow">DEVELOPER ONLY</div><h2>Supplier Reliability & Service Areas</h2>
+        <p>Verification, delivery reliability, damage/issue rates, returns and service area.</p></div>
+        <button class="outline-button" onclick="configureSupplierAdvanced()">CONFIGURE LATEST SUPPLIER</button></div>
+        ${supplierScorecardsAdvanced()}
+      </section>
+    `;
+    return;
+  }
+
+  if (getCurrentUser()?.role === "Admin" || getCurrentUser()?.role === "Manager") {
+    suite.hidden = false;
+    suite.innerHTML = advancedOperationsMarkup();
+    return;
+  }
+
+  suite.hidden = true;
+}
+
+const originalRenderAllAdvancedSuite = renderAll;
+renderAll = function () {
+  originalRenderAllAdvancedSuite();
+  installAdvancedOperationsSuite();
+};
