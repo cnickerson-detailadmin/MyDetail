@@ -4,7 +4,8 @@ const APP_SHELL = [
   "./index.html",
   "./styles.css?v=3",
   "./app.js?v=16-pwa-install",
-  "./manifest.json"
+  "./manifest.json",
+  "./install.html"
 ];
 
 self.addEventListener("install", (event) => {
