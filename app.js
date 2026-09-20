@@ -3526,6 +3526,23 @@ function isQuickPinVerified(userId) {
 }
 
 
+const quickPinPadHandlers = new Map();
+let quickPinLastFallbackTap = 0;
+
+function quickPinFallbackPress(button, event) {
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+
+  const now = Date.now();
+  if (now - quickPinLastFallbackTap < 90) return false;
+  quickPinLastFallbackTap = now;
+
+  const prefix = button?.getAttribute?.("data-pin-prefix") || "";
+  const handler = quickPinPadHandlers.get(prefix);
+  if (typeof handler === "function") handler(button);
+  return false;
+}
+
 function quickPinPadMarkup(prefix) {
   const keys = ["1","2","3","4","5","6","7","8","9","","0","⌫"];
   return `
@@ -3534,6 +3551,7 @@ function quickPinPadMarkup(prefix) {
         if (!key) return '<span></span>';
         const safe = key === "⌫" ? "backspace" : key;
         return '<button type="button" data-pin-key="' + safe + '" data-pin-prefix="' + prefix + '" ' +
+          'onpointerup="return quickPinFallbackPress(this,event)" onclick="return quickPinFallbackPress(this,event)" ' +
           'style="position:relative;z-index:2147483647;width:72px;height:58px;border-radius:14px;border:1px solid #d8e1ed;background:#fff;color:#16304f;font-size:22px;font-weight:800;box-shadow:0 3px 10px rgba(15,35,65,.05);touch-action:manipulation;pointer-events:auto;-webkit-tap-highlight-color:rgba(22,119,242,.18);">' +
           key + '</button>';
       }).join("")}
@@ -3577,17 +3595,9 @@ function renderQuickPinDisplay(prefix, value, shown) {
 }
 
 function bindQuickPinPad(prefix, getValue, setValue, onComplete) {
-  let lastTapAt = 0;
   let completing = false;
 
-  function handlePinPress(button, event) {
-    event?.preventDefault?.();
-    event?.stopPropagation?.();
-
-    const now = Date.now();
-    if (now - lastTapAt < 120) return;
-    lastTapAt = now;
-
+  const press = function (button) {
     const key = button.getAttribute("data-pin-key");
     let value = String(getValue() || "");
 
@@ -3607,15 +3617,37 @@ function bindQuickPinPad(prefix, getValue, setValue, onComplete) {
         }
       }, 90);
     }
-  }
+  };
+
+  quickPinPadHandlers.set(prefix, press);
 
   document.querySelectorAll('[data-pin-prefix="' + prefix + '"]').forEach(button => {
     button.disabled = false;
     button.style.pointerEvents = "auto";
-    button.addEventListener("pointerup", event => handlePinPress(button, event), { passive: false });
-    button.addEventListener("click", event => handlePinPress(button, event), { passive: false });
   });
 }
+
+function installQuickPinInteractionWatchdog() {
+  if (window.__myservicePinWatchdogInstalled) return;
+  window.__myservicePinWatchdogInstalled = true;
+
+  setInterval(() => {
+    const screen = document.getElementById("myservice-pin-screen");
+    if (!screen) return;
+
+    screen.style.pointerEvents = "auto";
+    screen.style.zIndex = "2147483647";
+
+    document.querySelectorAll("[data-pin-key]").forEach(button => {
+      button.disabled = false;
+      button.style.pointerEvents = "auto";
+      button.style.position = "relative";
+      button.style.zIndex = "2147483647";
+    });
+  }, 700);
+}
+
+installQuickPinInteractionWatchdog();
 
 function showQuickPinSetupScreen(accessToken, userId) {
   let firstPin = "";
