@@ -5117,3 +5117,181 @@ renderAll = function () {
   originalRenderAllLiveApiBridge();
   installLiveApiBridge();
 };
+
+
+/* =========================================================
+   MYSERVICE PRINTING AND LABELS
+   Browser-print foundation for office/receipt/label printers.
+   Dedicated printer SDK/local bridge can be added later for
+   direct thermal-printer control.
+   ========================================================= */
+
+const MYSERVICE_PRINTING_KEY = "myservice_printing_labels_v1";
+
+function getPrintingState() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(MYSERVICE_PRINTING_KEY) || "{}");
+    return {
+      defaultPrinterName: parsed.defaultPrinterName || "",
+      defaultLabelSize: parsed.defaultLabelSize || "2x1",
+      templates: Array.isArray(parsed.templates) ? parsed.templates : [
+        {
+          id: "inventory",
+          name: "Inventory Label",
+          fields: ["item","date","employee","barcode"]
+        },
+        {
+          id: "prep",
+          name: "Prep / Date Label",
+          fields: ["item","prepared","expires","employee"]
+        },
+        {
+          id: "job",
+          name: "Order / Job Label",
+          fields: ["job","customer","date","qr"]
+        }
+      ]
+    };
+  } catch {
+    return { defaultPrinterName:"", defaultLabelSize:"2x1", templates:[] };
+  }
+}
+
+function savePrintingState(value) {
+  localStorage.setItem(MYSERVICE_PRINTING_KEY, JSON.stringify(value));
+}
+
+function configurePrinterAdvanced() {
+  if (!canManageEmployees()) return;
+  const ps = getPrintingState();
+  const printer = prompt("Default printer / label machine name:", ps.defaultPrinterName || "");
+  if (printer === null) return;
+  const size = prompt("Default label size (example 2x1, 4x2, Letter):", ps.defaultLabelSize || "2x1");
+  if (size === null) return;
+  ps.defaultPrinterName = printer.trim();
+  ps.defaultLabelSize = size.trim() || "2x1";
+  savePrintingState(ps);
+  renderAll();
+}
+
+function createLabelTemplateAdvanced() {
+  if (!canManageEmployees()) return;
+  const ps = getPrintingState();
+  const name = prompt("Template name:");
+  if (!name?.trim()) return;
+  const fieldsRaw = prompt("Fields separated by commas (example: item,date,expires,employee,barcode):", "item,date,employee");
+  if (fieldsRaw === null) return;
+  ps.templates.push({
+    id: uid("labeltemplate"),
+    name: name.trim(),
+    fields: fieldsRaw.split(",").map(x => x.trim()).filter(Boolean)
+  });
+  savePrintingState(ps);
+  renderAll();
+}
+
+function printLabelAdvanced(templateId) {
+  if (!canManageEmployees()) return;
+  const ps = getPrintingState();
+  const template = ps.templates.find(t => t.id === templateId) || ps.templates[0];
+  if (!template) {
+    alert("Create a label template first.");
+    return;
+  }
+
+  const values = {};
+  for (const field of template.fields) {
+    const value = prompt("Value for " + field + ":", "");
+    if (value === null) return;
+    values[field] = value;
+  }
+
+  const rows = template.fields.map(field => {
+    const val = escapeHTML(String(values[field] || ""));
+    if (field.toLowerCase().includes("barcode")) {
+      return '<div style="font-family:monospace;font-size:18px;letter-spacing:2px;margin-top:8px;">' + val + '</div>';
+    }
+    if (field.toLowerCase().includes("qr")) {
+      return '<div style="border:2px solid #111;padding:8px;margin-top:8px;font-size:12px;">QR DATA: ' + val + '</div>';
+    }
+    return '<div style="margin:4px 0;"><strong>' + escapeHTML(field) + ':</strong> ' + val + '</div>';
+  }).join("");
+
+  const win = window.open("", "_blank", "width=500,height=500");
+  if (!win) {
+    alert("Allow pop-ups to print labels.");
+    return;
+  }
+
+  win.document.write(
+    '<!doctype html><html><head><title>' + escapeHTML(template.name) + '</title>' +
+    '<style>@page{margin:6mm;}body{font-family:Arial,sans-serif;margin:0;padding:12px;color:#111}.label{border:1px solid #111;padding:12px;max-width:360px}h2{margin:0 0 8px;font-size:18px}</style>' +
+    '</head><body><div class="label"><h2>' + escapeHTML(template.name) + '</h2>' + rows +
+    '<div style="margin-top:10px;font-size:10px;color:#555;">Printed from MyService</div></div>' +
+    '<script>window.onload=function(){window.print();};<\/script></body></html>'
+  );
+  win.document.close();
+}
+
+function printingLabelsMarkup() {
+  const ps = getPrintingState();
+  return `
+    <section class="panel" id="printing-labels-panel">
+      <div class="panel-header">
+        <div>
+          <div class="eyebrow">PRINTING & LABELS</div>
+          <h2>Printers, Sticker Machines & Label Templates</h2>
+          <p>Print inventory, prep/date, order/job, barcode and QR-code labels.</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="outline-button" type="button" onclick="configurePrinterAdvanced()">PRINTER SETTINGS</button>
+          <button class="outline-button" type="button" onclick="createLabelTemplateAdvanced()">+ TEMPLATE</button>
+        </div>
+      </div>
+
+      <div class="notification-card">
+        <strong>Default printer</strong>
+        <p>${escapeHTML(ps.defaultPrinterName || "Uses the device/browser print dialog")} • Label size: ${escapeHTML(ps.defaultLabelSize || "2x1")}</p>
+      </div>
+
+      <div style="display:grid;gap:8px;">
+        ${ps.templates.map(t => `
+          <div class="list-row">
+            <div>
+              <strong>${escapeHTML(t.name)}</strong>
+              <small>${t.fields.map(escapeHTML).join(" • ")}</small>
+            </div>
+            <button class="outline-button" type="button" onclick="printLabelAdvanced('${String(t.id).replace(/'/g,"\\'")}')">PRINT</button>
+          </div>
+        `).join("")}
+      </div>
+
+      <div class="notification-card" style="margin-top:14px;">
+        <strong>Direct thermal-printer control</strong>
+        <p>Browser printing works now. Zebra, Brother, DYMO and similar printers can later use a vendor SDK or local print bridge for one-tap printing without the browser dialog.</p>
+      </div>
+    </section>
+  `;
+}
+
+function installPrintingLabelsSuite() {
+  const dashboard = $("dashboard");
+  if (!dashboard || !canManageEmployees()) {
+    $("printing-labels-suite")?.remove();
+    return;
+  }
+
+  let wrap = $("printing-labels-suite");
+  if (!wrap) {
+    wrap = document.createElement("div");
+    wrap.id = "printing-labels-suite";
+    dashboard.appendChild(wrap);
+  }
+  wrap.innerHTML = printingLabelsMarkup();
+}
+
+const originalRenderAllPrintingSuite = renderAll;
+renderAll = function () {
+  originalRenderAllPrintingSuite();
+  installPrintingLabelsSuite();
+};
