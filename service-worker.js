@@ -1,5 +1,5 @@
-const CACHE_NAME = "myservice-cache-v27";
-const BUILD_ID = "42-ai-turntaking-call-window";
+const CACHE_NAME = "myservice-cache-v28";
+const BUILD_ID = "43-realtime-webrtc";
 
 const APP_SHELL = [
   "./styles.css?v=4-pro-desktop",
