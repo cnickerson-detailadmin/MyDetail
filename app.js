@@ -2639,7 +2639,7 @@ function installDeveloperExperience() {
         <span>🛟</span>
         Support Tickets
       </button>
-      <button class="nav" type="button" onclick="openDeveloperAI()">
+      <button class="nav" type="button" onclick="return openDeveloperAI()" style="position:relative;z-index:5;pointer-events:auto;">
         <span>✦</span>
         Developer AI
       </button>
@@ -5608,7 +5608,11 @@ function saveDeveloperAIHistory(messages) {
 }
 
 function developerAIIsAllowed() {
-  return String(authenticatedContext?.databaseRole || "").toLowerCase() === "developer";
+  const dbDeveloper =
+    String(authenticatedContext?.databaseRole || "").toLowerCase() === "developer";
+  const uiDeveloper =
+    typeof isDeveloperLogin === "function" && isDeveloperLogin();
+  return dbDeveloper || uiDeveloper;
 }
 
 function renderDeveloperAIChat() {
@@ -5642,19 +5646,37 @@ function renderDeveloperAIChat() {
 function openDeveloperAI() {
   if (!developerAIIsAllowed()) {
     alert("Developer AI is available only to the platform developer account.");
-    return;
+    return false;
   }
 
-  if (getDeveloperView() !== "Developer") {
+  if (typeof getDeveloperView === "function" && getDeveloperView() !== "Developer") {
     switchDeveloperView("Developer");
   }
 
   setTimeout(() => {
     const card = $("developer-ai-card");
-    if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (card) {
+      card.style.pointerEvents = "auto";
+      card.style.position = "relative";
+      card.style.zIndex = "5";
+      card.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    const input = $("developer-ai-input");
+    if (input) {
+      input.disabled = false;
+      input.readOnly = false;
+      input.style.pointerEvents = "auto";
+    }
+
+    const send = $("developer-ai-send");
+    if (send) send.style.pointerEvents = "auto";
+
     renderDeveloperAIChat();
-    $("developer-ai-input")?.focus();
+    input?.focus();
   }, 60);
+
+  return false;
 }
 
 function clearDeveloperAIChat() {
