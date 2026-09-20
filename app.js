@@ -5965,7 +5965,7 @@ function getDeveloperAISafeContext() {
       scheduleEntries: schedule.length,
       openSupportTickets: tickets.filter(ticket => String(ticket.status || "").toLowerCase() === "open").length
     },
-    note: "Only summary counts are automatically supplied. No passwords, PINs, access tokens, or ticket descriptions are sent automatically."
+    note: "Only summary counts are automatically supplied. No passwords, PINs, access tokens, or ticket descriptions are sent automatically. In voice calls, respond naturally and conversationally, with short spoken sentences and minimal formatting."
   };
 }
 
@@ -6018,6 +6018,10 @@ let developerAISpeaking = false;
 let developerAIAudioContext = null;
 let developerAIAudioSource = null;
 let developerAIListenTimer = null;
+let developerAISpeechBuffer = "";
+let developerAISpeechDebounce = null;
+let developerAIPendingVoiceReply = null;
+let developerAIUserIsSpeaking = false;
 
 function setDeveloperAICallScrollSafe() {
   document.documentElement.style.overflowY = "auto";
@@ -6052,6 +6056,68 @@ function unlockDeveloperAIAudio() {
   } catch (_) {}
 }
 
+function pauseDeveloperAIForUserSpeech() {
+  if (!developerAISpeaking) return;
+
+  developerAIUserIsSpeaking = true;
+
+  try {
+    if (developerAIAudio && !developerAIAudio.paused) developerAIAudio.pause();
+  } catch (_) {}
+
+  try {
+    if (developerAIAudioSource) developerAIAudioSource.stop();
+  } catch (_) {}
+
+  developerAIAudioSource = null;
+  developerAISpeaking = false;
+
+  updateDeveloperAICallWindow("Listening…", "I stopped so you can finish.");
+  const status = $("developer-ai-status");
+  if (status) status.textContent = "Developer AI paused — listening to you.";
+}
+
+function resumePendingDeveloperAIVoiceReply() {
+  if (!developerAIPendingVoiceReply || developerAIUserIsSpeaking || !developerAICallMode) return;
+
+  const pending = developerAIPendingVoiceReply;
+  developerAIPendingVoiceReply = null;
+  playDeveloperAIAudio(pending.audioBase64, pending.mimeType || "audio/mpeg");
+}
+
+function queueDeveloperAIUserSpeech(transcript) {
+  const text = String(transcript || "").trim();
+  if (!text) return;
+
+  developerAISpeechBuffer = [developerAISpeechBuffer, text].filter(Boolean).join(" ").trim();
+  developerAIUserIsSpeaking = true;
+  pauseDeveloperAIForUserSpeech();
+
+  updateDeveloperAICallWindow("Listening…", developerAISpeechBuffer);
+
+  if (developerAISpeechDebounce) clearTimeout(developerAISpeechDebounce);
+
+  developerAISpeechDebounce = setTimeout(async () => {
+    const message = developerAISpeechBuffer.trim();
+    developerAISpeechBuffer = "";
+    developerAIUserIsSpeaking = false;
+
+    if (!message || !developerAICallMode) {
+      resumePendingDeveloperAIVoiceReply();
+      return;
+    }
+
+    const input = $("developer-ai-input");
+    if (input) input.value = message;
+
+    updateDeveloperAICallWindow("Thinking…", message);
+    const status = $("developer-ai-status");
+    if (status) status.textContent = "Heard you — working on it…";
+
+    await sendDeveloperAIMessage();
+  }, 1100);
+}
+
 function stopDeveloperAIAudio() {
   try {
     developerAIAudio?.pause?.();
@@ -6080,6 +6146,12 @@ function stopDeveloperAICall() {
   } catch (_) {}
   developerAIRecognition = null;
 
+  if (developerAISpeechDebounce) clearTimeout(developerAISpeechDebounce);
+  developerAISpeechDebounce = null;
+  developerAISpeechBuffer = "";
+  developerAIUserIsSpeaking = false;
+  developerAIPendingVoiceReply = null;
+
   stopDeveloperAIAudio();
   setDeveloperAICallScrollSafe();
 
@@ -6095,11 +6167,11 @@ function stopDeveloperAICall() {
 }
 
 function restartDeveloperAIListening(delay = 350) {
-  if (!developerAICallMode || developerAISpeaking || !developerAIRecognition) return;
+  if (!developerAICallMode || !developerAIRecognition) return;
   if (developerAIListenTimer) clearTimeout(developerAIListenTimer);
 
   developerAIListenTimer = setTimeout(() => {
-    if (!developerAICallMode || developerAISpeaking || !developerAIRecognition) return;
+    if (!developerAICallMode || !developerAIRecognition) return;
     try { developerAIRecognition.start(); } catch (_) {}
   }, delay);
 }
@@ -6134,6 +6206,12 @@ async function playDeveloperAIWebAudio(base64) {
 }
 
 function playDeveloperAIAudio(base64, mimeType = "audio/mpeg") {
+  if (developerAIUserIsSpeaking) {
+    developerAIPendingVoiceReply = { audioBase64: base64, mimeType };
+    updateDeveloperAICallWindow("Listening…", "Reply is ready. I’ll wait until you finish.");
+    return;
+  }
+
   if (!base64) {
     developerAISpeaking = false;
     restartDeveloperAIListening();
@@ -6141,7 +6219,6 @@ function playDeveloperAIAudio(base64, mimeType = "audio/mpeg") {
   }
 
   developerAISpeaking = true;
-  try { developerAIRecognition?.abort?.(); } catch (_) {}
   setDeveloperAICallScrollSafe();
 
   const status = $("developer-ai-status");
@@ -6304,22 +6381,39 @@ function toggleDeveloperAICall() {
 
   developerAIRecognition = new Recognition();
   developerAIRecognition.lang = "en-US";
-  developerAIRecognition.interimResults = false;
-  developerAIRecognition.continuous = false;
+  developerAIRecognition.interimResults = true;
+  developerAIRecognition.continuous = true;
 
-  developerAIRecognition.onresult = async event => {
-    if (!developerAICallMode || developerAISpeaking) return;
-    const transcript = String(event.results?.[0]?.[0]?.transcript || "").trim();
-    if (!transcript) return;
+  developerAIRecognition.onspeechstart = () => {
+    if (!developerAICallMode) return;
+    developerAIUserIsSpeaking = true;
+    pauseDeveloperAIForUserSpeech();
+    updateDeveloperAICallWindow("Listening…", "Go ahead — I won’t interrupt.");
+  };
 
-    const input = $("developer-ai-input");
-    const liveStatus = $("developer-ai-status");
-    if (input) input.value = transcript;
-    if (liveStatus) liveStatus.textContent = "Heard you — working on it…";
-    updateDeveloperAICallWindow("Thinking…", transcript);
+  developerAIRecognition.onresult = event => {
+    if (!developerAICallMode) return;
 
-    try { developerAIRecognition?.abort?.(); } catch (_) {}
-    await sendDeveloperAIMessage();
+    let finalText = "";
+    let interimText = "";
+
+    for (let i = event.resultIndex || 0; i < event.results.length; i++) {
+      const piece = String(event.results[i]?.[0]?.transcript || "").trim();
+      if (!piece) continue;
+      if (event.results[i].isFinal) finalText += (finalText ? " " : "") + piece;
+      else interimText += (interimText ? " " : "") + piece;
+    }
+
+    const preview = [developerAISpeechBuffer, finalText, interimText].filter(Boolean).join(" ").trim();
+    if (preview) updateDeveloperAICallWindow("Listening…", preview);
+
+    if (finalText) queueDeveloperAIUserSpeech(finalText);
+  };
+
+  developerAIRecognition.onspeechend = () => {
+    if (!developerAICallMode) return;
+    // Final transcript is sent only after the debounce window, so short pauses
+    // don't cause Developer AI to talk over the user.
   };
 
   developerAIRecognition.onerror = event => {
@@ -6331,8 +6425,8 @@ function toggleDeveloperAICall() {
   };
 
   developerAIRecognition.onend = () => {
-    if (!developerAICallMode || developerAISpeaking) return;
-    restartDeveloperAIListening(450);
+    if (!developerAICallMode) return;
+    restartDeveloperAIListening(220);
   };
 
   try {
@@ -6437,8 +6531,17 @@ async function sendDeveloperAIMessage(event) {
     if (developerAICallMode) {
       if (response.audioBase64) {
         const callStatus = $("developer-ai-status");
-        if (callStatus) callStatus.textContent = "Developer AI is speaking…";
-        playDeveloperAIAudio(response.audioBase64, response.audioMimeType || "audio/mpeg");
+        if (developerAIUserIsSpeaking) {
+          developerAIPendingVoiceReply = {
+            audioBase64: response.audioBase64,
+            mimeType: response.audioMimeType || "audio/mpeg"
+          };
+          if (callStatus) callStatus.textContent = "Reply ready — waiting for you to finish.";
+          updateDeveloperAICallWindow("Listening…", "Reply ready. I’ll wait until you finish.");
+        } else {
+          if (callStatus) callStatus.textContent = "Developer AI is speaking…";
+          playDeveloperAIAudio(response.audioBase64, response.audioMimeType || "audio/mpeg");
+        }
       } else {
         updateDeveloperAICallWindow("Reply received", "Voice audio was not returned. The text reply is in Developer AI.");
         restartDeveloperAIListening();
