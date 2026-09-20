@@ -3527,36 +3527,17 @@ function isQuickPinVerified(userId) {
 
 
 const quickPinPadHandlers = new Map();
-let quickPinLastFallbackTap = 0;
-let quickPinLastKey = "";
-
-function quickPinFallbackPress(button, event) {
-  event?.preventDefault?.();
-  event?.stopPropagation?.();
-
-  const now = Date.now();
-  const keyName = String(button?.getAttribute?.("data-pin-prefix") || "") + ":" +
-    String(button?.getAttribute?.("data-pin-key") || "");
-  if (keyName === quickPinLastKey && now - quickPinLastFallbackTap < 180) return false;
-  quickPinLastFallbackTap = now;
-  quickPinLastKey = keyName;
-
-  const prefix = button?.getAttribute?.("data-pin-prefix") || "";
-  const handler = quickPinPadHandlers.get(prefix);
-  if (typeof handler === "function") handler(button);
-  return false;
-}
 
 function quickPinPadMarkup(prefix) {
   const keys = ["1","2","3","4","5","6","7","8","9","","0","⌫"];
   return `
-    <div style="display:grid;grid-template-columns:repeat(3,72px);justify-content:center;gap:12px;margin:18px auto 6px;">
+    <div id="${prefix}PinPadKeys" data-pin-pad="${prefix}"
+      style="display:grid;grid-template-columns:repeat(3,72px);justify-content:center;gap:12px;margin:18px auto 6px;touch-action:manipulation;">
       ${keys.map(key => {
         if (!key) return '<span></span>';
         const safe = key === "⌫" ? "backspace" : key;
         return '<button type="button" data-pin-key="' + safe + '" data-pin-prefix="' + prefix + '" ' +
-          'onpointerup="return quickPinFallbackPress(this,event)" onclick="return quickPinFallbackPress(this,event)" ' +
-          'style="position:relative;z-index:2147483647;width:72px;height:58px;border-radius:14px;border:1px solid #d8e1ed;background:#fff;color:#16304f;font-size:22px;font-weight:800;box-shadow:0 3px 10px rgba(15,35,65,.05);touch-action:manipulation;pointer-events:auto;-webkit-tap-highlight-color:rgba(22,119,242,.18);">' +
+          'style="width:72px;height:58px;border-radius:14px;border:1px solid #d8e1ed;background:#fff;color:#16304f;font-size:22px;font-weight:800;box-shadow:0 3px 10px rgba(15,35,65,.05);touch-action:manipulation;pointer-events:auto;-webkit-tap-highlight-color:rgba(22,119,242,.18);">' +
           key + '</button>';
       }).join("")}
     </div>
@@ -3598,6 +3579,22 @@ function renderQuickPinDisplay(prefix, value, shown) {
   if (toggle) toggle.textContent = shown ? "Hide" : "Show";
 }
 
+function attachQuickPinPad(prefix) {
+  const entry = quickPinPadHandlers.get(prefix);
+  const pad = document.getElementById(prefix + "PinPadKeys");
+  if (!entry || !pad || pad.dataset.pinBound === "1") return;
+
+  pad.dataset.pinBound = "1";
+  pad.addEventListener("pointerdown", event => {
+    const button = event.target.closest?.("[data-pin-key]");
+    if (!button || !pad.contains(button)) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    entry.press(button);
+  }, { passive: false });
+}
+
 function bindQuickPinPad(prefix, getValue, setValue, onComplete) {
   let completing = false;
 
@@ -3623,38 +3620,9 @@ function bindQuickPinPad(prefix, getValue, setValue, onComplete) {
     }
   };
 
-  quickPinPadHandlers.set(prefix, press);
-
-  document.querySelectorAll('[data-pin-prefix="' + prefix + '"]').forEach(button => {
-    button.disabled = false;
-    button.style.pointerEvents = "auto";
-  });
+  quickPinPadHandlers.set(prefix, { press });
+  attachQuickPinPad(prefix);
 }
-
-function installGlobalQuickPinTapCapture() {
-  if (window.__myservicePinCaptureInstalled) return;
-  window.__myservicePinCaptureInstalled = true;
-
-  const handle = event => {
-    const target = event.target?.closest?.("[data-pin-key]");
-    if (!target) return;
-
-    const screen = document.getElementById("myservice-pin-screen");
-    if (!screen || !screen.contains(target)) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    quickPinFallbackPress(target, event);
-  };
-
-  document.addEventListener("touchstart", handle, { capture: true, passive: false });
-  document.addEventListener("touchend", handle, { capture: true, passive: false });
-  document.addEventListener("pointerup", handle, true);
-  document.addEventListener("click", handle, true);
-}
-
-installGlobalQuickPinTapCapture();
 
 function installQuickPinInteractionWatchdog() {
   if (window.__myservicePinWatchdogInstalled) return;
@@ -3667,27 +3635,19 @@ function installQuickPinInteractionWatchdog() {
     screen.style.pointerEvents = "auto";
     screen.style.zIndex = "2147483647";
 
-    document.querySelectorAll("[data-pin-key]").forEach(button => {
-      button.disabled = false;
-      button.style.pointerEvents = "auto";
-      button.style.position = "relative";
-      button.style.zIndex = "2147483647";
+    ["verify", "setup"].forEach(prefix => {
+      const pad = document.getElementById(prefix + "PinPadKeys");
+      if (!pad) return;
+
+      pad.querySelectorAll("[data-pin-key]").forEach(button => {
+        button.disabled = false;
+        button.style.pointerEvents = "auto";
+      });
+
+      if (quickPinPadHandlers.has(prefix) && pad.dataset.pinBound !== "1") {
+        attachQuickPinPad(prefix);
+      }
     });
-
-    const verifyPad = document.querySelector('[data-pin-prefix="verify"]');
-    const setupPad = document.querySelector('[data-pin-prefix="setup"]');
-
-    const ctx = window.__myservicePinScreenContext || null;
-
-    if (verifyPad && !quickPinPadHandlers.has("verify") && ctx?.mode === "verify") {
-      showQuickPinVerificationScreen(ctx.accessToken, ctx.userId);
-      return;
-    }
-
-    if (setupPad && !quickPinPadHandlers.has("setup") && ctx?.mode === "setup") {
-      showQuickPinSetupScreen(ctx.accessToken, ctx.userId);
-      return;
-    }
   }, 500);
 }
 
