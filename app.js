@@ -6013,68 +6013,190 @@ let developerAICallMode = false;
 let developerAIRecognition = null;
 let developerAIAudio = null;
 let developerAISpeaking = false;
+let developerAIAudioContext = null;
+let developerAIAudioSource = null;
+let developerAIListenTimer = null;
+
+function setDeveloperAICallScrollSafe() {
+  document.documentElement.style.overflowY = "auto";
+  document.documentElement.style.touchAction = "pan-y";
+  document.body.style.overflowY = "auto";
+  document.body.style.touchAction = "pan-y";
+  document.body.style.webkitOverflowScrolling = "touch";
+
+  const card = $("developer-ai-card");
+  if (card) {
+    card.style.touchAction = "pan-y";
+    card.style.overflow = "visible";
+  }
+}
+
+function unlockDeveloperAIAudio() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    if (!developerAIAudioContext) developerAIAudioContext = new AudioCtx();
+    if (developerAIAudioContext.state === "suspended") {
+      developerAIAudioContext.resume().catch(() => {});
+    }
+
+    // Play a nearly silent buffer during the user's CALL tap so iOS grants
+    // audio playback permission for the later AI response.
+    const buffer = developerAIAudioContext.createBuffer(1, 1, 22050);
+    const source = developerAIAudioContext.createBufferSource();
+    source.buffer = buffer;
+    source.connect(developerAIAudioContext.destination);
+    source.start(0);
+  } catch (_) {}
+}
+
+function stopDeveloperAIAudio() {
+  try {
+    developerAIAudio?.pause?.();
+    if (developerAIAudio) developerAIAudio.src = "";
+  } catch (_) {}
+  developerAIAudio = null;
+
+  try { developerAIAudioSource?.stop?.(); } catch (_) {}
+  developerAIAudioSource = null;
+  developerAISpeaking = false;
+}
+
+function stopDeveloperAICall() {
+  developerAICallMode = false;
+  if (developerAIListenTimer) clearTimeout(developerAIListenTimer);
+  developerAIListenTimer = null;
+
+  try {
+    if (developerAIRecognition) {
+      developerAIRecognition.onresult = null;
+      developerAIRecognition.onerror = null;
+      developerAIRecognition.onend = null;
+      developerAIRecognition.abort?.();
+      developerAIRecognition.stop?.();
+    }
+  } catch (_) {}
+  developerAIRecognition = null;
+
+  stopDeveloperAIAudio();
+  setDeveloperAICallScrollSafe();
+
+  const button = $("developer-ai-call");
+  const status = $("developer-ai-status");
+  if (button) {
+    button.textContent = "☎ CALL";
+    button.disabled = false;
+  }
+  if (status) status.textContent = "Developer AI call ended.";
+}
 
 function restartDeveloperAIListening(delay = 350) {
   if (!developerAICallMode || developerAISpeaking || !developerAIRecognition) return;
-  setTimeout(() => {
-    if (!developerAICallMode || developerAISpeaking) return;
+  if (developerAIListenTimer) clearTimeout(developerAIListenTimer);
+
+  developerAIListenTimer = setTimeout(() => {
+    if (!developerAICallMode || developerAISpeaking || !developerAIRecognition) return;
     try { developerAIRecognition.start(); } catch (_) {}
   }, delay);
 }
 
+async function playDeveloperAIWebAudio(base64) {
+  if (!developerAIAudioContext || !base64) throw new Error("Web Audio unavailable.");
+
+  if (developerAIAudioContext.state === "suspended") {
+    await developerAIAudioContext.resume();
+  }
+
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+  const decoded = await developerAIAudioContext.decodeAudioData(bytes.buffer.slice(0));
+  const source = developerAIAudioContext.createBufferSource();
+  developerAIAudioSource = source;
+  source.buffer = decoded;
+  source.connect(developerAIAudioContext.destination);
+
+  source.onended = () => {
+    if (developerAIAudioSource !== source) return;
+    developerAIAudioSource = null;
+    developerAISpeaking = false;
+    const status = $("developer-ai-status");
+    if (developerAICallMode && status) status.textContent = "Call mode active — listening…";
+    restartDeveloperAIListening(250);
+  };
+
+  source.start(0);
+}
+
 function playDeveloperAIAudio(base64, mimeType = "audio/mpeg") {
   if (!base64) {
+    developerAISpeaking = false;
     restartDeveloperAIListening();
     return;
   }
 
-  try {
-    developerAISpeaking = true;
-    try { developerAIRecognition?.stop(); } catch (_) {}
-    if (developerAIAudio) developerAIAudio.pause();
+  developerAISpeaking = true;
+  try { developerAIRecognition?.abort?.(); } catch (_) {}
+  setDeveloperAICallScrollSafe();
 
-    developerAIAudio = new Audio("data:" + mimeType + ";base64," + base64);
-    developerAIAudio.onended = () => {
-      developerAISpeaking = false;
-      const status = $("developer-ai-status");
-      if (developerAICallMode && status) status.textContent = "Call mode active — listening…";
-      restartDeveloperAIListening(250);
-    };
-    developerAIAudio.onerror = () => {
-      developerAISpeaking = false;
-      restartDeveloperAIListening(250);
-    };
+  const status = $("developer-ai-status");
+  if (status) status.textContent = "Developer AI is speaking…";
 
-    developerAIAudio.play().catch(() => {
+  // Web Audio is preferred on iPhone because CALL unlocks its audio context.
+  playDeveloperAIWebAudio(base64).catch(() => {
+    try {
+      developerAIAudio = new Audio("data:" + mimeType + ";base64," + base64);
+      developerAIAudio.playsInline = true;
+      developerAIAudio.volume = 1;
+
+      developerAIAudio.onended = () => {
+        developerAISpeaking = false;
+        if (developerAICallMode && status) status.textContent = "Call mode active — listening…";
+        restartDeveloperAIListening(250);
+      };
+
+      developerAIAudio.onerror = () => {
+        developerAISpeaking = false;
+        if (status) status.textContent = "Voice playback failed. AI reply is still shown in chat.";
+        restartDeveloperAIListening(250);
+      };
+
+      developerAIAudio.play().catch(() => {
+        developerAISpeaking = false;
+        if (status) status.textContent = "Tap CALL once to re-enable iPhone audio, then try again.";
+        restartDeveloperAIListening(250);
+      });
+    } catch (_) {
       developerAISpeaking = false;
       restartDeveloperAIListening(250);
-    });
-  } catch (_) {
-    developerAISpeaking = false;
-    restartDeveloperAIListening(250);
-  }
+    }
+  });
 }
 
 function toggleDeveloperAICall() {
   if (!developerAIIsAllowed()) return;
 
-  const button = $("developer-ai-call");
-  const status = $("developer-ai-status");
-  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
   if (developerAICallMode) {
-    developerAICallMode = false;
-    try { developerAIRecognition?.stop(); } catch (_) {}
-    if (button) button.textContent = "☎ CALL";
-    if (status) status.textContent = "Developer AI call ended.";
+    stopDeveloperAICall();
     return;
   }
 
   developerAICallMode = true;
+  unlockDeveloperAIAudio();
+  setDeveloperAICallScrollSafe();
+
+  // Keep iOS from trapping the page around the text keyboard during call mode.
+  $("developer-ai-input")?.blur?.();
+
+  const button = $("developer-ai-call");
+  const status = $("developer-ai-status");
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
   if (button) button.textContent = "■ END CALL";
 
   if (!Recognition) {
-    if (status) status.textContent = "Call mode is on. Voice input is not supported on this device, but AI replies can still play aloud.";
+    if (status) status.textContent = "Call mode is on. Voice input is unavailable on this device, but AI replies can still play aloud.";
     return;
   }
 
@@ -6083,20 +6205,26 @@ function toggleDeveloperAICall() {
   developerAIRecognition.interimResults = false;
   developerAIRecognition.continuous = false;
 
-  developerAIRecognition.onresult = async (event) => {
+  developerAIRecognition.onresult = async event => {
     if (!developerAICallMode || developerAISpeaking) return;
     const transcript = String(event.results?.[0]?.[0]?.transcript || "").trim();
     if (!transcript) return;
+
     const input = $("developer-ai-input");
-    const status = $("developer-ai-status");
+    const liveStatus = $("developer-ai-status");
     if (input) input.value = transcript;
-    if (status) status.textContent = "Heard you — working on it…";
-    try { developerAIRecognition?.stop(); } catch (_) {}
+    if (liveStatus) liveStatus.textContent = "Heard you — working on it…";
+
+    try { developerAIRecognition?.abort?.(); } catch (_) {}
     await sendDeveloperAIMessage();
   };
 
-  developerAIRecognition.onerror = () => {
-    if (status) status.textContent = "Voice input could not start. You can still type while call mode is on.";
+  developerAIRecognition.onerror = event => {
+    if (!developerAICallMode) return;
+    const liveStatus = $("developer-ai-status");
+    if (liveStatus && event?.error !== "aborted") {
+      liveStatus.textContent = "Voice input paused. Call is still active.";
+    }
   };
 
   developerAIRecognition.onend = () => {
@@ -6108,7 +6236,7 @@ function toggleDeveloperAICall() {
     developerAIRecognition.start();
     if (status) status.textContent = "Call mode active — listening…";
   } catch (_) {
-    if (status) status.textContent = "Call mode is on. Tap CALL again to restart if voice input does not begin.";
+    if (status) status.textContent = "Call mode is active. Tap END CALL to stop.";
   }
 }
 
