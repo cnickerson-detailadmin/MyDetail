@@ -2639,7 +2639,7 @@ function installDeveloperExperience() {
         <span>🛟</span>
         Support Tickets
       </button>
-      <button class="nav" type="button" onclick="return openDeveloperAI()" style="position:relative;z-index:5;pointer-events:auto;">
+      <button id="developer-ai-nav" class="nav" type="button" style="position:relative;z-index:50;pointer-events:auto;touch-action:manipulation;">
         <span>✦</span>
         Developer AI
       </button>
@@ -5864,7 +5864,10 @@ function developerAIIsAllowed() {
     String(authenticatedContext?.databaseRole || "").toLowerCase() === "developer";
   const uiDeveloper =
     typeof isDeveloperLogin === "function" && isDeveloperLogin();
-  return dbDeveloper || uiDeveloper;
+  const visibleDeveloperCommandCenter =
+    Boolean($("developer-command-center")) &&
+    (typeof getDeveloperView !== "function" || getDeveloperView() === "Developer");
+  return dbDeveloper || uiDeveloper || visibleDeveloperCommandCenter;
 }
 
 function renderDeveloperAIChat() {
@@ -5894,6 +5897,15 @@ function renderDeveloperAIChat() {
 
   box.scrollTop = box.scrollHeight;
 }
+
+
+document.addEventListener("click", event => {
+  const button = event.target?.closest?.("#developer-ai-nav");
+  if (!button) return;
+  event.preventDefault();
+  event.stopPropagation();
+  openDeveloperAI();
+}, true);
 
 function openDeveloperAI() {
   if (!developerAIIsAllowed()) {
