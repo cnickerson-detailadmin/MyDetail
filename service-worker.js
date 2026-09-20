@@ -1,9 +1,8 @@
-const CACHE_NAME = "myservice-cache-v10";
+const CACHE_NAME = "myservice-cache-v11";
+const BUILD_ID = "26-pin-keypad-force";
+
 const APP_SHELL = [
-  "./",
-  "./index.html",
-  "./styles.css?v=3",
-  "./app.js?v=25-onscreen-pin-pad",
+  "./styles.css?v=4-pro-desktop",
   "./manifest.json",
   "./install.html"
 ];
@@ -17,25 +16,57 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    caches.keys()
-      .then((names) => Promise.all(
-        names.filter((name) => name !== CACHE_NAME).map((name) => caches.delete(name))
-      ))
-      .then(() => self.clients.claim())
-  );
+  event.waitUntil((async () => {
+    const names = await caches.keys();
+    await Promise.all(
+      names.filter((name) => name !== CACHE_NAME).map((name) => caches.delete(name))
+    );
+
+    await self.clients.claim();
+
+    const clients = await self.clients.matchAll({
+      type: "window",
+      includeUncontrolled: true
+    });
+
+    for (const client of clients) {
+      try {
+        const url = new URL(client.url);
+        if (!url.pathname.endsWith("/install.html")) {
+          url.searchParams.set("build", BUILD_ID);
+          await client.navigate(url.href);
+        }
+      } catch (_) {}
+    }
+  })());
 });
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
 
+  const url = new URL(event.request.url);
+  const sameOrigin = url.origin === self.location.origin;
+
+  // Never serve stale HTML or JavaScript for the app.
+  if (
+    event.request.mode === "navigate" ||
+    (sameOrigin && (url.pathname.endsWith("/index.html") || url.pathname.endsWith("/app.js") || url.pathname.endsWith("/")))
+  ) {
+    event.respondWith(
+      fetch(event.request, { cache: "no-store" }).catch(() => caches.match("./install.html"))
+    );
+    return;
+  }
+
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        if (sameOrigin && response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        }
         return response;
       })
-      .catch(() => caches.match(event.request).then((cached) => cached || caches.match("./")))
+      .catch(() => caches.match(event.request))
   );
 });
