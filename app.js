@@ -2680,8 +2680,8 @@ function installDeveloperExperience() {
         </div>
       </section>
 
-      <section id="developer-ai-card" class="card" style="padding:18px;border:1px solid rgba(22,119,242,.22);background:linear-gradient(145deg,#ffffff,#f6f9ff);">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px;">
+      <section id="developer-ai-card" class="card" style="padding:12px;border:1px solid rgba(22,119,242,.22);background:#f7f9fc;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px;">
           <div>
             <div class="eyebrow">PRIVATE DEVELOPER COPILOT</div>
             <h2 style="margin:4px 0;">Developer AI</h2>
@@ -2690,18 +2690,15 @@ function installDeveloperExperience() {
           <button class="outline-button" type="button" onclick="clearDeveloperAIChat()">Clear</button>
         </div>
 
-        <div id="developer-ai-messages" style="display:grid;gap:10px;max-height:420px;overflow:auto;padding:4px 2px 12px;">
-          <div style="padding:12px 14px;border-radius:12px;background:#f3f7ff;color:#34445f;">
+        <div id="developer-ai-messages" style="display:grid;gap:6px;max-height:300px;overflow:auto;padding:2px 0 8px;">
+          <div style="padding:8px 12px;border-radius:8px;background:#ffffff;border:1px solid #dbe4f0;color:#34445f;">
             Ask about staffing, scheduling, support tickets, operations, inventory, labor, sales, or MyService troubleshooting.
           </div>
         </div>
 
-        <form onsubmit="sendDeveloperAIMessage(event)" style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;">
-          <div>
-            <label for="developer-ai-input" style="display:block;font-size:12px;font-weight:800;margin-bottom:6px;">MESSAGE DEVELOPER AI</label>
-            <textarea id="developer-ai-input" rows="3" maxlength="5000" placeholder="Example: An employee cannot clock in. What should I check first?" style="width:100%;resize:vertical;"></textarea>
-          </div>
-          <button id="developer-ai-send" class="primary-button" type="submit" style="min-height:44px;">SEND</button>
+        <form onsubmit="sendDeveloperAIMessage(event)" style="display:flex;gap:8px;align-items:center;">
+          <textarea id="developer-ai-input" rows="1" maxlength="5000" placeholder="Message Developer AI…" style="width:100%;min-height:42px;max-height:90px;resize:vertical;padding:9px 11px;box-sizing:border-box;"></textarea>
+          <button id="developer-ai-send" class="primary-button" type="submit" style="min-height:42px;flex:0 0 auto;">SEND</button>
         </form>
         <small id="developer-ai-status" style="display:block;margin-top:8px;color:#61728c;">Developer-only. Sensitive or destructive actions still require confirmation.</small>
       </section>
@@ -5621,7 +5618,7 @@ function renderDeveloperAIChat() {
   const messages = getDeveloperAIHistory();
   if (!messages.length) {
     box.innerHTML = `
-      <div style="padding:12px 14px;border-radius:12px;background:#f3f7ff;color:#34445f;">
+      <div style="padding:8px 12px;border-radius:8px;background:#ffffff;border:1px solid #dbe4f0;color:#34445f;">
         Ask about staffing, scheduling, support tickets, operations, inventory, labor, sales, or MyService troubleshooting.
       </div>
     `;
@@ -5631,9 +5628,9 @@ function renderDeveloperAIChat() {
   box.innerHTML = messages.map(message => {
     const mine = message.role === "user";
     return `
-      <div style="padding:12px 14px;border-radius:12px;white-space:pre-wrap;line-height:1.45;
-        ${mine ? "background:#eaf3ff;margin-left:36px;" : "background:#f6f7f9;margin-right:36px;"}">
-        <strong style="display:block;margin-bottom:5px;">${mine ? "You" : "Developer AI"}</strong>
+      <div style="padding:8px 12px;border-radius:8px;white-space:pre-wrap;line-height:1.4;width:100%;box-sizing:border-box;
+        ${mine ? "background:#1677f2;color:#ffffff;" : "background:#ffffff;color:#24364d;border:1px solid #dbe4f0;"}">
+        <strong style="display:block;margin-bottom:3px;">${mine ? "You" : "Developer AI"}</strong>
         ${escapeHTML(message.content)}
       </div>
     `;
