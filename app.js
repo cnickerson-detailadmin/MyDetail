@@ -3627,6 +3627,30 @@ function bindQuickPinPad(prefix, getValue, setValue, onComplete) {
   });
 }
 
+function installGlobalQuickPinTapCapture() {
+  if (window.__myservicePinCaptureInstalled) return;
+  window.__myservicePinCaptureInstalled = true;
+
+  const handle = event => {
+    const target = event.target?.closest?.("[data-pin-key]");
+    if (!target) return;
+
+    const screen = document.getElementById("myservice-pin-screen");
+    if (!screen || !screen.contains(target)) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    quickPinFallbackPress(target, event);
+  };
+
+  document.addEventListener("touchend", handle, true);
+  document.addEventListener("pointerup", handle, true);
+  document.addEventListener("click", handle, true);
+}
+
+installGlobalQuickPinTapCapture();
+
 function installQuickPinInteractionWatchdog() {
   if (window.__myservicePinWatchdogInstalled) return;
   window.__myservicePinWatchdogInstalled = true;
@@ -3644,7 +3668,22 @@ function installQuickPinInteractionWatchdog() {
       button.style.position = "relative";
       button.style.zIndex = "2147483647";
     });
-  }, 700);
+
+    const verifyPad = document.querySelector('[data-pin-prefix="verify"]');
+    const setupPad = document.querySelector('[data-pin-prefix="setup"]');
+
+    if (verifyPad && !quickPinPadHandlers.has("verify")) {
+      const retry = document.getElementById("pinLogoutButton");
+      if (retry) retry.insertAdjacentHTML("beforebegin",
+        '<div style="margin:8px 0;color:#b91c1c;font-size:13px;font-weight:700;">Keypad repaired automatically. Try the numbers again.</div>'
+      );
+    }
+
+    if (setupPad && !quickPinPadHandlers.has("setup")) {
+      const msg = document.getElementById("quickPinSetupMessage");
+      if (msg) msg.textContent = "Keypad repaired automatically. Try the numbers again.";
+    }
+  }, 500);
 }
 
 installQuickPinInteractionWatchdog();
