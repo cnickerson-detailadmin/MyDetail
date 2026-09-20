@@ -3519,92 +3519,207 @@ function isQuickPinVerified(userId) {
   return sessionStorage.getItem(PIN_VERIFIED_KEY) === String(userId || "");
 }
 
+
+function quickPinPadMarkup(prefix) {
+  const keys = ["1","2","3","4","5","6","7","8","9","","0","⌫"];
+  return `
+    <div style="display:grid;grid-template-columns:repeat(3,72px);justify-content:center;gap:12px;margin:18px auto 6px;">
+      ${keys.map(key => {
+        if (!key) return '<span></span>';
+        const safe = key === "⌫" ? "backspace" : key;
+        return '<button type="button" data-pin-key="' + safe + '" data-pin-prefix="' + prefix + '" ' +
+          'style="width:72px;height:58px;border-radius:14px;border:1px solid #d8e1ed;background:#fff;color:#16304f;font-size:22px;font-weight:800;box-shadow:0 3px 10px rgba(15,35,65,.05);touch-action:manipulation;">' +
+          key + '</button>';
+      }).join("")}
+    </div>
+  `;
+}
+
+function quickPinDisplayMarkup(prefix, label) {
+  return `
+    <div style="margin-top:16px;">
+      <div style="font-size:12px;font-weight:800;color:#61728c;margin-bottom:8px;">${label}</div>
+      <div id="${prefix}PinDots" style="display:flex;justify-content:center;gap:12px;min-height:20px;"></div>
+      <div id="${prefix}PinShown" style="display:none;margin-top:8px;font-size:22px;font-weight:850;letter-spacing:8px;color:#0d2345;"></div>
+      <button id="${prefix}ShowPin" type="button" style="margin-top:8px;border:0;background:transparent;color:#1677f2;font-weight:800;font-size:13px;cursor:pointer;">
+        Show
+      </button>
+    </div>
+  `;
+}
+
+function renderQuickPinDisplay(prefix, value, shown) {
+  const dots = $(prefix + "PinDots");
+  const text = $(prefix + "PinShown");
+  const toggle = $(prefix + "ShowPin");
+  const length = String(value || "").length;
+
+  if (dots) {
+    dots.style.display = shown ? "none" : "flex";
+    dots.innerHTML = [0,1,2,3].map(i =>
+      '<span style="width:14px;height:14px;border-radius:50%;display:inline-block;border:2px solid #9fb0c5;background:' +
+      (i < length ? '#1677f2' : '#fff') + ';"></span>'
+    ).join("");
+  }
+
+  if (text) {
+    text.style.display = shown ? "block" : "none";
+    text.textContent = shown ? String(value || "") : "";
+  }
+
+  if (toggle) toggle.textContent = shown ? "Hide" : "Show";
+}
+
+function bindQuickPinPad(prefix, getValue, setValue, onComplete) {
+  document.querySelectorAll('[data-pin-prefix="' + prefix + '"]').forEach(button => {
+    button.onclick = function () {
+      const key = this.getAttribute("data-pin-key");
+      let value = String(getValue() || "");
+
+      if (key === "backspace") value = value.slice(0, -1);
+      else if (/^\d$/.test(key) && value.length < 4) value += key;
+
+      setValue(value);
+      if (value.length === 4 && typeof onComplete === "function") {
+        setTimeout(() => onComplete(value), 90);
+      }
+    };
+  });
+}
+
 function showQuickPinSetupScreen(accessToken, userId) {
+  let firstPin = "";
+  let confirmPin = "";
+  let stage = "first";
+  let showPin = false;
+
+  function renderStage() {
+    const title = $("quickPinSetupTitle");
+    const subtitle = $("quickPinSetupSubtitle");
+    const display = $("quickPinSetupDisplay");
+    const pad = $("quickPinSetupPad");
+    const message = $("quickPinSetupMessage");
+
+    if (message) message.textContent = "";
+    if (stage === "first") {
+      if (title) title.textContent = "Create your 4-digit login code";
+      if (subtitle) subtitle.textContent = "Use the numbers below. Your iPhone keyboard will not open.";
+    } else {
+      if (title) title.textContent = "Confirm your login code";
+      if (subtitle) subtitle.textContent = "Enter the same 4 digits again.";
+    }
+
+    if (display) display.innerHTML = quickPinDisplayMarkup("setup", stage === "first" ? "Login code" : "Confirm code");
+    if (pad) pad.innerHTML = quickPinPadMarkup("setup");
+
+    const currentValue = () => stage === "first" ? firstPin : confirmPin;
+    renderQuickPinDisplay("setup", currentValue(), showPin);
+
+    $("setupShowPin").onclick = function () {
+      showPin = !showPin;
+      renderQuickPinDisplay("setup", currentValue(), showPin);
+    };
+
+    bindQuickPinPad("setup", currentValue, value => {
+      if (stage === "first") firstPin = value;
+      else confirmPin = value;
+      renderQuickPinDisplay("setup", value, showPin);
+    }, async value => {
+      if (stage === "first") {
+        firstPin = value;
+        stage = "confirm";
+        showPin = false;
+        renderStage();
+        return;
+      }
+
+      confirmPin = value;
+      if (firstPin !== confirmPin) {
+        if (message) message.textContent = "Those codes do not match. Try again.";
+        confirmPin = "";
+        renderQuickPinDisplay("setup", confirmPin, showPin);
+        return;
+      }
+
+      const response = await fetch(
+        SUPABASE_URL + "/rest/v1/rpc/set_my_quick_pin",
+        {
+          method: "POST",
+          headers: {
+            "apikey": SUPABASE_KEY,
+            "Authorization": "Bearer " + accessToken,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ new_pin: firstPin })
+        }
+      );
+
+      if (!response.ok) {
+        if (message) message.textContent = "Login code could not be saved. Please try again.";
+        return;
+      }
+
+      sessionStorage.setItem(PIN_VERIFIED_KEY, String(userId || ""));
+      location.reload();
+    });
+  }
+
   document.body.innerHTML = `
     <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:#f3f7fc;box-sizing:border-box;">
-      <div style="width:100%;max-width:420px;background:white;padding:28px;border-radius:24px;box-shadow:0 12px 36px rgba(16,42,76,.08);box-sizing:border-box;">
-        <h1 style="margin:0;color:#0d2345;">Create your 4-digit PIN</h1>
-        <p style="color:#61728c;line-height:1.45;">Required before you can continue to MyService.</p>
-
-        <input id="newQuickPin" type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="4"
-          autocomplete="off" autocapitalize="off" spellcheck="false" name="myservice-quick-pin-new" placeholder="4-digit PIN"
-          style="display:block;width:100%;box-sizing:border-box;padding:15px;margin:18px 0 10px;border:1px solid #d6dfeb;border-radius:14px;font-size:20px;text-align:center;letter-spacing:8px;">
-
-        <input id="confirmQuickPin" type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="4"
-          autocomplete="off" autocapitalize="off" spellcheck="false" name="myservice-quick-pin-confirm" placeholder="Confirm PIN"
-          style="display:block;width:100%;box-sizing:border-box;padding:15px;margin:0 0 16px;border:1px solid #d6dfeb;border-radius:14px;font-size:20px;text-align:center;letter-spacing:8px;">
-
-        <button id="saveQuickPin" type="button" class="primary-button"
-          style="width:100%;min-height:54px;border-radius:14px;font-weight:800;">
-          CREATE PIN
-        </button>
+      <div style="width:100%;max-width:390px;background:white;padding:24px;border-radius:20px;box-shadow:0 12px 36px rgba(16,42,76,.08);box-sizing:border-box;text-align:center;">
+        <div style="font-size:12px;font-weight:900;letter-spacing:1.4px;color:#1677f2;margin-bottom:6px;">MYSERVICE LOGIN CODE</div>
+        <h1 id="quickPinSetupTitle" style="margin:0;color:#0d2345;font-size:27px;"></h1>
+        <p id="quickPinSetupSubtitle" style="color:#61728c;line-height:1.45;margin:8px 0 0;"></p>
+        <div id="quickPinSetupDisplay"></div>
+        <div id="quickPinSetupMessage" style="min-height:22px;margin-top:10px;color:#b91c1c;font-size:14px;"></div>
+        <div id="quickPinSetupPad"></div>
       </div>
     </div>
   `;
 
-  $("saveQuickPin").onclick = async function () {
-    const pin = $("newQuickPin").value.trim();
-    const confirmPin = $("confirmQuickPin").value.trim();
-
-    if (!/^\d{4}$/.test(pin)) {
-      alert("Your PIN must be exactly 4 digits.");
-      return;
-    }
-    if (pin !== confirmPin) {
-      alert("PINs do not match.");
-      return;
-    }
-
-    const response = await fetch(
-      SUPABASE_URL + "/rest/v1/rpc/set_my_quick_pin",
-      {
-        method: "POST",
-        headers: {
-          "apikey": SUPABASE_KEY,
-          "Authorization": "Bearer " + accessToken,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ new_pin: pin })
-      }
-    );
-
-    if (!response.ok) {
-      alert("PIN could not be saved. Please try again.");
-      return;
-    }
-
-    sessionStorage.setItem(PIN_VERIFIED_KEY, String(userId || ""));
-    location.reload();
-  };
+  renderStage();
 }
 
 function showQuickPinVerificationScreen(accessToken, userId) {
+  let pin = "";
+  let showPin = false;
+
   document.body.innerHTML = `
     <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:#f3f7fc;box-sizing:border-box;">
-      <div style="width:100%;max-width:420px;background:white;padding:28px;border-radius:24px;box-shadow:0 12px 36px rgba(16,42,76,.08);box-sizing:border-box;">
-        <h1 style="margin:0;color:#0d2345;">Enter your 4-digit PIN</h1>
-        <p style="color:#61728c;line-height:1.45;">Verify it is you before opening MyService.</p>
-        <input id="verifyQuickPin" type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="4"
-          autocomplete="off" autocapitalize="off" spellcheck="false" name="myservice-quick-pin-verify" placeholder="4-digit PIN"
-          style="display:block;width:100%;box-sizing:border-box;padding:15px;margin:18px 0 10px;border:1px solid #d6dfeb;border-radius:14px;font-size:20px;text-align:center;letter-spacing:8px;">
-        <div id="pinVerifyMessage" style="min-height:22px;margin-bottom:10px;color:#b91c1c;font-size:14px;"></div>
-        <button id="verifyQuickPinButton" type="button" class="primary-button"
-          style="width:100%;min-height:54px;border-radius:14px;font-weight:800;">UNLOCK</button>
+      <div style="width:100%;max-width:390px;background:white;padding:24px;border-radius:20px;box-shadow:0 12px 36px rgba(16,42,76,.08);box-sizing:border-box;text-align:center;">
+        <div style="font-size:12px;font-weight:900;letter-spacing:1.4px;color:#1677f2;margin-bottom:6px;">MYSERVICE LOGIN CODE</div>
+        <h1 style="margin:0;color:#0d2345;font-size:27px;">Enter your 4-digit login code</h1>
+        <p style="color:#61728c;line-height:1.45;margin:8px 0 0;">Verify it is you before opening MyService.</p>
+
+        <div id="verifyQuickPinDisplay">
+          ${quickPinDisplayMarkup("verify", "Login code")}
+        </div>
+
+        <div id="pinVerifyMessage" style="min-height:22px;margin-top:10px;color:#b91c1c;font-size:14px;"></div>
+        <div id="verifyQuickPinPad">${quickPinPadMarkup("verify")}</div>
+
         <button id="pinLogoutButton" type="button" class="outline-button"
-          style="width:100%;min-height:48px;margin-top:10px;border-radius:14px;font-weight:800;">LOG OUT</button>
+          style="width:100%;min-height:46px;margin-top:12px;border-radius:12px;font-weight:800;">LOG OUT</button>
       </div>
     </div>
   `;
 
-  $("pinLogoutButton").onclick = logoutTestUser;
-  $("verifyQuickPinButton").onclick = async function () {
-    const pin = $("verifyQuickPin").value.trim();
-    const message = $("pinVerifyMessage");
+  renderQuickPinDisplay("verify", pin, showPin);
 
-    if (!/^\d{4}$/.test(pin)) {
-      message.textContent = "Enter exactly 4 digits.";
-      return;
-    }
+  $("verifyShowPin").onclick = function () {
+    showPin = !showPin;
+    renderQuickPinDisplay("verify", pin, showPin);
+  };
+
+  $("pinLogoutButton").onclick = logoutTestUser;
+
+  bindQuickPinPad("verify", () => pin, value => {
+    pin = value;
+    renderQuickPinDisplay("verify", pin, showPin);
+    const message = $("pinVerifyMessage");
+    if (message) message.textContent = "";
+  }, async value => {
+    const message = $("pinVerifyMessage");
 
     const response = await fetch(SUPABASE_URL + "/rest/v1/rpc/verify_my_quick_pin", {
       method: "POST",
@@ -3613,11 +3728,11 @@ function showQuickPinVerificationScreen(accessToken, userId) {
         "Authorization": "Bearer " + accessToken,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ candidate_pin: pin })
+      body: JSON.stringify({ candidate_pin: value })
     });
 
     if (!response.ok) {
-      message.textContent = "PIN could not be verified. Please try again.";
+      if (message) message.textContent = "Login code could not be verified. Please try again.";
       return;
     }
 
@@ -3633,14 +3748,14 @@ function showQuickPinVerificationScreen(accessToken, userId) {
       const until = result.locked_until
         ? new Date(result.locked_until).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
         : "15 minutes";
-      message.textContent = "Too many attempts. Try again after " + until + ".";
+      if (message) message.textContent = "Too many attempts. Try again after " + until + ".";
       return;
     }
 
-    message.textContent = "Incorrect PIN. " + Number(result?.remaining_attempts || 0) + " attempt(s) remaining.";
-    $("verifyQuickPin").value = "";
-    $("verifyQuickPin").focus();
-  };
+    if (message) message.textContent = "Incorrect login code. " + Number(result?.remaining_attempts || 0) + " attempt(s) remaining.";
+    pin = "";
+    renderQuickPinDisplay("verify", pin, showPin);
+  });
 }
 
 function logoutTestUser() {
