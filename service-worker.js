@@ -1,5 +1,5 @@
-const CACHE_NAME = "myservice-cache-v20";
-const BUILD_ID = "35-pin-capture";
+const CACHE_NAME = "myservice-cache-v21";
+const BUILD_ID = "36-boot-self-heal";
 
 const APP_SHELL = [
   "./styles.css?v=4-pro-desktop",
