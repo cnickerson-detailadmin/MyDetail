@@ -1,5 +1,5 @@
-const CACHE_NAME = "myservice-cache-v24";
-const BUILD_ID = "39-ai-low-bandwidth";
+const CACHE_NAME = "myservice-cache-v25";
+const BUILD_ID = "40-pin-simple-events";
 
 const APP_SHELL = [
   "./styles.css?v=4-pro-desktop",
