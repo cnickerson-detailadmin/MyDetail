@@ -4120,19 +4120,94 @@ function activateLoginScreen() {
   };
 }
 
+function withAuthStartupTimeout(promise, ms = 8000) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("AUTH_STARTUP_TIMEOUT")), ms)
+    )
+  ]);
+}
+
 document.addEventListener(
   "DOMContentLoaded",
   async function () {
-    const recoverySession = getRecoverySessionFromUrl();
+    try {
+      const recoverySession = getRecoverySessionFromUrl();
 
-    if (recoverySession) {
-      showPasswordRecoveryScreen(recoverySession.accessToken);
-      return;
-    }
+      if (recoverySession) {
+        showPasswordRecoveryScreen(recoverySession.accessToken);
+        return;
+      }
 
-    const loggedIn = await restoreAuthenticatedContext();
+      const loggedIn = await withAuthStartupTimeout(restoreAuthenticatedContext());
 
-    if (!loggedIn) {
+      if (!loggedIn) {
+        [
+          LOGIN_KEY,
+          ACCESS_TOKEN_KEY,
+          REFRESH_TOKEN_KEY,
+          USER_ID_KEY
+        ].forEach(key => {
+          localStorage.removeItem(key);
+          sessionStorage.removeItem(key);
+        });
+        showLoginScreen();
+        activateLoginScreen();
+        return;
+      }
+
+      activateCompanyStorage(loggedIn.companyId);
+      state.companyName = loggedIn.companyName;
+
+      const accessToken = getStoredAuthItem(ACCESS_TOKEN_KEY);
+      const userId = loggedIn.id;
+      const hasQuickPin = await withAuthStartupTimeout(userHasQuickPin(accessToken));
+
+      if (!hasQuickPin) {
+        showQuickPinSetupScreen(accessToken, userId);
+        return;
+      }
+
+      if (!isQuickPinVerified(userId)) {
+        showQuickPinVerificationScreen(accessToken, userId);
+        return;
+      }
+
+      const activeRole =
+        loggedIn.role === "Developer"
+          ? getDeveloperView()
+          : loggedIn.role;
+
+      state.currentUser = {
+        id: userId,
+        email: loggedIn.email,
+        name: activeRole === "Developer"
+          ? loggedIn.name
+          : loggedIn.name + " (" + activeRole + " Preview)",
+        role: activeRole,
+        companyId: loggedIn.companyId
+      };
+
+      const currentEmployee = getCurrentEmployee();
+      currentEmployee.name = state.currentUser.name;
+      currentEmployee.role = activeRole;
+
+      saveState();
+      updateDateTime();
+
+      document.getElementById("myservice-auth-boot")?.remove();
+
+      const savedPage = localStorage.getItem(ACTIVE_PAGE_KEY);
+
+      showSection(
+        savedPage &&
+        $(savedPage)?.classList.contains("page")
+          ? savedPage
+          : "dashboard"
+      );
+    } catch (error) {
+      console.error("MyService auth startup failed:", error);
       [
         LOGIN_KEY,
         ACCESS_TOKEN_KEY,
@@ -4144,57 +4219,7 @@ document.addEventListener(
       });
       showLoginScreen();
       activateLoginScreen();
-      return;
     }
-
-    activateCompanyStorage(loggedIn.companyId);
-    state.companyName = loggedIn.companyName;
-
-    const accessToken = getStoredAuthItem(ACCESS_TOKEN_KEY);
-    const userId = loggedIn.id;
-
-    if (!(await userHasQuickPin(accessToken))) {
-      showQuickPinSetupScreen(accessToken, userId);
-      return;
-    }
-
-    if (!isQuickPinVerified(userId)) {
-      showQuickPinVerificationScreen(accessToken, userId);
-      return;
-    }
-
-    const activeRole =
-      loggedIn.role === "Developer"
-        ? getDeveloperView()
-        : loggedIn.role;
-
-    state.currentUser = {
-      id: userId,
-      email: loggedIn.email,
-      name: activeRole === "Developer"
-        ? loggedIn.name
-        : loggedIn.name + " (" + activeRole + " Preview)",
-      role: activeRole,
-      companyId: loggedIn.companyId
-    };
-
-    const currentEmployee = getCurrentEmployee();
-    currentEmployee.name = state.currentUser.name;
-    currentEmployee.role = activeRole;
-
-    saveState();
-    updateDateTime();
-
-    document.getElementById("myservice-auth-boot")?.remove();
-
-    const savedPage = localStorage.getItem(ACTIVE_PAGE_KEY);
-
-    showSection(
-      savedPage &&
-      $(savedPage)?.classList.contains("page")
-        ? savedPage
-        : "dashboard"
-    );
   }
 );
 
