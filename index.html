@@ -51,30 +51,60 @@
 </div>
 
 <script>
-  // Independent auth watchdog: never leave the installed iPhone app trapped
-  // behind the blue startup screen if app initialization fails or stalls.
-  window.setTimeout(function () {
-    var boot = document.getElementById("myservice-auth-boot");
-    if (!boot) return;
+  // Independent boot watchdog that does not depend on app.js.
+  // It gives the auth flow a moment to finish, then exposes a recovery path
+  // instead of leaving the installed iPhone app on a permanent blue screen.
+  (function () {
+    var retriedKey = "myservice_boot_retry_once";
 
-    try {
-      if (typeof window.showLoginScreen === "function") {
-        window.showLoginScreen();
-        if (typeof window.activateLoginScreen === "function") {
-          window.activateLoginScreen();
+    window.setTimeout(function () {
+      var boot = document.getElementById("myservice-auth-boot");
+      if (!boot) return;
+
+      var inner = boot.firstElementChild;
+      if (inner && !document.getElementById("myservice-boot-status")) {
+        inner.insertAdjacentHTML(
+          "beforeend",
+          '<div id="myservice-boot-status" style="margin-top:16px;font-size:12px;font-weight:700;opacity:.92;">Still securing your session…</div>' +
+          '<button id="myservice-boot-retry" type="button" ' +
+          'style="display:none;margin:18px auto 0;padding:12px 20px;border:0;border-radius:14px;background:white;color:#1677f2;font-weight:900;font-size:15px;">RETRY SIGN-IN</button>'
+        );
+
+        var retry = document.getElementById("myservice-boot-retry");
+        if (retry) {
+          retry.onclick = function () {
+            try { sessionStorage.removeItem(retriedKey); } catch (_) {}
+            var url = new URL(location.href);
+            url.searchParams.set("boot", Date.now().toString());
+            location.replace(url.href);
+          };
         }
+      }
+    }, 3000);
+
+    window.setTimeout(function () {
+      var boot = document.getElementById("myservice-auth-boot");
+      if (!boot) {
+        try { sessionStorage.removeItem(retriedKey); } catch (_) {}
         return;
       }
-    } catch (_) {}
 
-    boot.innerHTML =
-      '<div style="text-align:center;padding:28px;">' +
-      '<div style="font-size:34px;font-weight:900;">MyService</div>' +
-      '<div style="margin-top:10px;font-size:15px;font-weight:700;">Sign-in did not finish loading.</div>' +
-      '<button type="button" onclick="location.reload()" ' +
-      'style="margin-top:20px;padding:13px 22px;border:0;border-radius:14px;background:white;color:#1677f2;font-weight:900;font-size:16px;">RETRY</button>' +
-      '</div>';
-  }, 8500);
+      var status = document.getElementById("myservice-boot-status");
+      var retry = document.getElementById("myservice-boot-retry");
+      if (status) status.textContent = "Sign-in is taking longer than expected.";
+      if (retry) retry.style.display = "block";
+
+      var alreadyRetried = false;
+      try { alreadyRetried = sessionStorage.getItem(retriedKey) === "1"; } catch (_) {}
+
+      if (!alreadyRetried) {
+        try { sessionStorage.setItem(retriedKey, "1"); } catch (_) {}
+        var url = new URL(location.href);
+        url.searchParams.set("boot", Date.now().toString());
+        location.replace(url.href);
+      }
+    }, 9000);
+  })();
 </script>
 
 <header class="topbar">
@@ -1808,7 +1838,7 @@
 </div>
 
 
-<script src="app.js?v=35-pin-capture"></script>
+<script src="app.js?v=36-boot-self-heal"></script>
 
 </body>
 </html>
