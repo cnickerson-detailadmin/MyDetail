@@ -18,6 +18,14 @@
     #installBtn{background:#1677ff;color:#fff}.secondary{margin-top:10px;background:#eef5ff;color:#145ec1}
     .ios{display:none;text-align:left;background:#f7faff;border-radius:16px;padding:16px;margin-top:16px;color:#334b68;line-height:1.55}
     .small{font-size:13px;margin-top:16px;color:#8797aa}
+    .platform-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:6px 0 14px}
+    .platform-card{border:1px solid #dbe8f8;background:#fff;border-radius:18px;padding:16px 12px;display:flex;align-items:center;gap:11px;text-align:left;box-shadow:0 8px 22px rgba(20,70,140,.08);min-height:82px}
+    .platform-card strong{display:block;font-size:15px;color:#10213d}
+    .platform-card span{display:block;font-size:12px;color:#73849b;margin-top:3px}
+    .platform-icon{width:38px;height:38px;display:grid;place-items:center;border-radius:12px;font-size:22px;font-weight:800;flex:0 0 38px}
+    .apple-mark{background:#111;color:#fff}
+    .android-mark{background:#eaf8ef;color:#198754}
+    @media (max-width:380px){.platform-grid{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
@@ -26,7 +34,24 @@
     <h1>Install MyService</h1>
     <p>Use MyService from your Home Screen like an app.</p>
 
-    <button id="installBtn" type="button">Install MyService</button>
+    <div class="platform-grid">
+      <button id="iosInstallBtn" class="platform-card" type="button" aria-label="Install MyService on iOS">
+        <div class="platform-icon apple-mark">●</div>
+        <div>
+          <strong>Install on iOS</strong>
+          <span>iPhone & iPad</span>
+        </div>
+      </button>
+
+      <button id="androidInstallBtn" class="platform-card" type="button" aria-label="Install MyService on Android">
+        <div class="platform-icon android-mark">◉</div>
+        <div>
+          <strong>Install on Android</strong>
+          <span>Android devices</span>
+        </div>
+      </button>
+    </div>
+
     <div id="iosHelp" class="ios">
       <strong>Install on iPhone or iPad</strong><br>
       1. Tap the <strong>Share</strong> button in Safari.<br>
@@ -34,19 +59,34 @@
       3. Tap <strong>Add</strong>.
     </div>
 
+    <div id="androidHelp" class="ios">
+      <strong>Install on Android</strong><br>
+      Open this page in Chrome, tap the browser menu, then choose <strong>Install app</strong> or <strong>Add to Home screen</strong>.
+    </div>
+
     <a id="continueBtn" class="action secondary" href="./">Continue in browser</a>
-    <button id="desktopAccessBtn" class="action secondary" type="button">Request desktop access</button>
-    <div class="small">Desktop visitors are not redirected here.</div>
+
+    <div id="desktopAccessWrap" style="display:none">
+      <button id="desktopAccessBtn" class="action secondary" type="button">Open desktop version</button>
+    </div>
+
+    <div class="small">MyService installs as a web app directly from your browser.</div>
   </main>
 
   <script>
     let deferredPrompt = null;
-    const installBtn = document.getElementById("installBtn");
+
+    const iosInstallBtn = document.getElementById("iosInstallBtn");
+    const androidInstallBtn = document.getElementById("androidInstallBtn");
     const iosHelp = document.getElementById("iosHelp");
+    const androidHelp = document.getElementById("androidHelp");
     const continueBtn = document.getElementById("continueBtn");
+    const desktopAccessWrap = document.getElementById("desktopAccessWrap");
     const desktopAccessBtn = document.getElementById("desktopAccessBtn");
+
     const isiOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
     const isAndroid = /Android/i.test(navigator.userAgent);
+    const isMobile = isiOS || isAndroid;
 
     const params = new URLSearchParams(location.search);
     const continueTarget = params.get("continue");
@@ -54,12 +94,9 @@
       continueBtn.href = continueTarget;
     }
 
-    if (isiOS) {
-      installBtn.textContent = "Show iPhone install steps";
-    } else if (isAndroid) {
-      installBtn.textContent = "Install MyService";
-    } else {
-      installBtn.textContent = "Continue to MyService";
+    // Desktop-only access control: never show this option on phones/tablets.
+    if (!isMobile) {
+      desktopAccessWrap.style.display = "block";
     }
 
     window.addEventListener("beforeinstallprompt", (event) => {
@@ -67,7 +104,14 @@
       deferredPrompt = event;
     });
 
-    installBtn.addEventListener("click", async () => {
+    iosInstallBtn.addEventListener("click", () => {
+      iosHelp.style.display = "block";
+      androidHelp.style.display = "none";
+    });
+
+    androidInstallBtn.addEventListener("click", async () => {
+      iosHelp.style.display = "none";
+
       if (deferredPrompt) {
         deferredPrompt.prompt();
         await deferredPrompt.userChoice;
@@ -75,20 +119,17 @@
         return;
       }
 
-      if (isiOS) {
-        iosHelp.style.display = "block";
-        return;
-      }
-
-      location.href = continueBtn.href;
+      androidHelp.style.display = "block";
     });
 
-    desktopAccessBtn.addEventListener("click", () => {
-      localStorage.setItem("myservice_desktop_access", "1");
-      const target = new URL(continueBtn.href, location.href);
-      target.searchParams.set("desktop", "1");
-      location.href = target.href;
-    });
+    if (desktopAccessBtn) {
+      desktopAccessBtn.addEventListener("click", () => {
+        localStorage.setItem("myservice_desktop_access", "1");
+        const target = new URL(continueBtn.href, location.href);
+        target.searchParams.set("desktop", "1");
+        location.href = target.href;
+      });
+    }
 
     window.addEventListener("appinstalled", () => {
       location.href = continueBtn.href;
