@@ -42,6 +42,7 @@
     .platform-card{
       border:1px solid #cfd9e6;
       background:#fff;
+      border-radius:12px;
       padding:15px 14px;
       display:flex;
       align-items:center;
@@ -65,8 +66,20 @@
       font-weight:800;
       flex:0 0 34px;
     }
-    .apple-mark{background:#111;color:#fff}
-    .android-mark{background:#eaf6ee;color:#177245}
+    .apple-mark{
+      background:#111;color:#fff;border-radius:9px;
+      font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;
+      font-size:23px;
+    }
+    .android-mark{
+      background:#edf8f0;color:#1f8f4e;border-radius:9px;position:relative;
+    }
+    .android-head{position:relative;display:block;width:23px;height:16px;background:#3ddc84;border-radius:10px 10px 5px 5px}
+    .android-head:before,.android-head:after{content:"";position:absolute;top:-5px;width:2px;height:7px;background:#3ddc84;border-radius:2px}
+    .android-head:before{left:5px;transform:rotate(-28deg)}
+    .android-head:after{right:5px;transform:rotate(28deg)}
+    .android-head i{position:absolute;top:6px;width:2px;height:2px;border-radius:50%;background:#fff}
+    .android-head i:first-child{left:6px}.android-head i:last-child{right:6px}
 
     .ios{
       display:none;
@@ -104,7 +117,7 @@
 
     <div class="platform-grid">
       <button id="iosInstallBtn" class="platform-card" type="button" aria-label="Install MyService on iOS">
-        <div class="platform-icon apple-mark">●</div>
+        <div class="platform-icon apple-mark" aria-hidden="true"></div>
         <div>
           <strong>Quick install on iOS</strong>
           <span>iPhone & iPad</span>
@@ -112,7 +125,7 @@
       </button>
 
       <button id="androidInstallBtn" class="platform-card" type="button" aria-label="Install MyService on Android">
-        <div class="platform-icon android-mark">◉</div>
+        <div class="platform-icon android-mark" aria-hidden="true"><span class="android-head"><i></i><i></i></span></div>
         <div>
           <strong>Quick install on Android</strong>
           <span>Android devices</span>
@@ -129,41 +142,15 @@
       <strong>Android quick install</strong><br>
       Tap your browser menu → <strong>Install app</strong>.
     </div>
-
-    <a id="continueBtn" class="action secondary" href="./">Continue in browser</a>
-
-    <div id="desktopAccessWrap" style="display:none">
-      <button id="desktopAccessBtn" class="action secondary" type="button">Open desktop version</button>
-    </div>
-
-    <div class="small">MyService installs as a web app directly from your browser.</div>
+    <div class="small">Install MyService directly from your browser.</div>
   </main>
 
   <script>
     let deferredPrompt = null;
-
     const iosInstallBtn = document.getElementById("iosInstallBtn");
     const androidInstallBtn = document.getElementById("androidInstallBtn");
     const iosHelp = document.getElementById("iosHelp");
     const androidHelp = document.getElementById("androidHelp");
-    const continueBtn = document.getElementById("continueBtn");
-    const desktopAccessWrap = document.getElementById("desktopAccessWrap");
-    const desktopAccessBtn = document.getElementById("desktopAccessBtn");
-
-    const isiOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-    const isAndroid = /Android/i.test(navigator.userAgent);
-    const isMobile = isiOS || isAndroid;
-
-    const params = new URLSearchParams(location.search);
-    const continueTarget = params.get("continue");
-    if (continueTarget && continueTarget.startsWith("/")) {
-      continueBtn.href = continueTarget;
-    }
-
-    // Desktop-only access control: never show this option on phones/tablets.
-    if (!isMobile) {
-      desktopAccessWrap.style.display = "block";
-    }
 
     window.addEventListener("beforeinstallprompt", (event) => {
       event.preventDefault();
@@ -171,8 +158,8 @@
     });
 
     iosInstallBtn.addEventListener("click", () => {
-      iosHelp.style.display = "block";
       androidHelp.style.display = "none";
+      iosHelp.style.display = "block";
     });
 
     androidInstallBtn.addEventListener("click", async () => {
@@ -186,19 +173,6 @@
       }
 
       androidHelp.style.display = "block";
-    });
-
-    if (desktopAccessBtn) {
-      desktopAccessBtn.addEventListener("click", () => {
-        localStorage.setItem("myservice_desktop_access", "1");
-        const target = new URL(continueBtn.href, location.href);
-        target.searchParams.set("desktop", "1");
-        location.href = target.href;
-      });
-    }
-
-    window.addEventListener("appinstalled", () => {
-      location.href = continueBtn.href;
     });
   </script>
 </body>
