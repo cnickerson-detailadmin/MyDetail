@@ -5653,7 +5653,15 @@ function openDeveloperAI() {
     switchDeveloperView("Developer");
   }
 
+  // Developer AI lives inside the dashboard/command center.
+  // Always activate that page first so the card is actually visible.
+  if ($("dashboard")) {
+    showSection("dashboard");
+  }
+
   setTimeout(() => {
+    // renderAll/showSection may have rebuilt the command center, so resolve
+    // the elements only after the dashboard is active.
     const card = $("developer-ai-card");
     if (card) {
       card.style.pointerEvents = "auto";
@@ -5673,8 +5681,8 @@ function openDeveloperAI() {
     if (send) send.style.pointerEvents = "auto";
 
     renderDeveloperAIChat();
-    input?.focus();
-  }, 60);
+    setTimeout(() => $("developer-ai-input")?.focus(), 120);
+  }, 120);
 
   return false;
 }
