@@ -2700,7 +2700,12 @@ function installDeveloperExperience() {
           <textarea id="developer-ai-input" rows="1" maxlength="5000" placeholder="Message Developer AI…" style="width:100%;min-height:42px;max-height:90px;resize:vertical;padding:9px 12px;box-sizing:border-box;border-radius:18px;"></textarea>
           <button id="developer-ai-send" class="primary-button" type="submit" style="min-height:42px;flex:0 0 auto;border-radius:18px;">SEND</button>
         </form>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+          <button id="developer-ai-call" class="outline-button" type="button" onclick="toggleDeveloperAICall()" style="border-radius:18px;">☎ CALL</button>
+          <button id="developer-ai-image" class="outline-button" type="button" onclick="generateDeveloperAIImage()" style="border-radius:18px;">▧ IMAGE</button>
+        </div>
         <small id="developer-ai-status" style="display:block;margin-top:8px;color:#61728c;">Developer-only. Sensitive or destructive actions still require confirmation.</small>
+        <small style="display:block;margin-top:4px;color:#7b8aa0;">Voice is AI-generated. Call mode uses speech recognition when supported by your device.</small>
       </section>
 
       <section id="developer-code-alerts" class="card" style="padding:18px;background:#f8fbff;">
@@ -5833,6 +5838,117 @@ function getDeveloperAISafeContext() {
   };
 }
 
+
+let developerAICallMode = false;
+let developerAIRecognition = null;
+let developerAIAudio = null;
+
+function playDeveloperAIAudio(base64, mimeType = "audio/mpeg") {
+  if (!base64) return;
+  try {
+    if (developerAIAudio) developerAIAudio.pause();
+    developerAIAudio = new Audio("data:" + mimeType + ";base64," + base64);
+    developerAIAudio.play().catch(() => {});
+  } catch (_) {}
+}
+
+function toggleDeveloperAICall() {
+  if (!developerAIIsAllowed()) return;
+
+  const button = $("developer-ai-call");
+  const status = $("developer-ai-status");
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if (developerAICallMode) {
+    developerAICallMode = false;
+    try { developerAIRecognition?.stop(); } catch (_) {}
+    if (button) button.textContent = "☎ CALL";
+    if (status) status.textContent = "Developer AI call ended.";
+    return;
+  }
+
+  developerAICallMode = true;
+  if (button) button.textContent = "■ END CALL";
+
+  if (!Recognition) {
+    if (status) status.textContent = "Call mode is on. Voice input is not supported on this device, but AI replies can still play aloud.";
+    return;
+  }
+
+  developerAIRecognition = new Recognition();
+  developerAIRecognition.lang = "en-US";
+  developerAIRecognition.interimResults = false;
+  developerAIRecognition.continuous = false;
+
+  developerAIRecognition.onresult = async (event) => {
+    const transcript = String(event.results?.[0]?.[0]?.transcript || "").trim();
+    if (!transcript) return;
+    const input = $("developer-ai-input");
+    if (input) input.value = transcript;
+    await sendDeveloperAIMessage();
+  };
+
+  developerAIRecognition.onerror = () => {
+    if (status) status.textContent = "Voice input could not start. You can still type while call mode is on.";
+  };
+
+  developerAIRecognition.onend = () => {
+    if (!developerAICallMode) return;
+    setTimeout(() => {
+      try { developerAIRecognition?.start(); } catch (_) {}
+    }, 450);
+  };
+
+  try {
+    developerAIRecognition.start();
+    if (status) status.textContent = "Call mode active — listening…";
+  } catch (_) {
+    if (status) status.textContent = "Call mode is on. Tap CALL again to restart if voice input does not begin.";
+  }
+}
+
+async function generateDeveloperAIImage() {
+  if (!developerAIIsAllowed()) return;
+  const input = $("developer-ai-input");
+  const status = $("developer-ai-status");
+  const prompt = String(input?.value || "").trim();
+
+  if (!prompt) {
+    if (status) status.textContent = "Type what image you want first.";
+    return;
+  }
+
+  if (status) status.textContent = "Preparing image…";
+
+  try {
+    const response = await callMyServiceEdgeFunction("developer-ai", {
+      action: "generate_image",
+      prompt,
+      context: getDeveloperAISafeContext()
+    });
+
+    const box = $("developer-ai-messages");
+    if (box && response.imageBase64) {
+      const wrap = document.createElement("div");
+      wrap.style.cssText = "padding:9px 13px;border-radius:18px;background:#fff;border:1px solid #dbe4f0;";
+      wrap.innerHTML =
+        '<strong style="display:block;margin-bottom:8px;">Developer AI</strong>' +
+        '<img alt="AI-generated image" style="display:block;width:100%;border-radius:16px;" src="data:image/png;base64,' +
+        response.imageBase64 + '">';
+      box.appendChild(wrap);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    if (input) input.value = "";
+    if (status) status.textContent = "Image ready • AI-generated";
+  } catch (error) {
+    const messageText = String(error?.message || "Image generation failed.");
+    if (status) status.textContent = messageText.includes("OPENAI_API_KEY")
+      ? "Developer AI needs its secure server API key before image generation can run."
+      : "Image generation unavailable — " + messageText;
+  }
+}
+
 async function sendDeveloperAIMessage(event) {
   event?.preventDefault?.();
 
@@ -5858,8 +5974,10 @@ async function sendDeveloperAIMessage(event) {
 
   try {
     const response = await callMyServiceEdgeFunction("developer-ai", {
+      action: "chat",
       messages: history.slice(-12),
-      context: getDeveloperAISafeContext()
+      context: getDeveloperAISafeContext(),
+      voice: developerAICallMode === true
     });
 
     history.push({
@@ -5868,6 +5986,10 @@ async function sendDeveloperAIMessage(event) {
     });
     saveDeveloperAIHistory(history);
     renderDeveloperAIChat();
+
+    if (developerAICallMode && response.audioBase64) {
+      playDeveloperAIAudio(response.audioBase64, response.audioMimeType || "audio/mpeg");
+    }
 
     if (status) {
       status.textContent = "Developer AI ready" + (response.model ? " • " + response.model : "");
