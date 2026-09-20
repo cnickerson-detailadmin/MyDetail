@@ -50,6 +50,33 @@
   </div>
 </div>
 
+<script>
+  // Independent auth watchdog: never leave the installed iPhone app trapped
+  // behind the blue startup screen if app initialization fails or stalls.
+  window.setTimeout(function () {
+    var boot = document.getElementById("myservice-auth-boot");
+    if (!boot) return;
+
+    try {
+      if (typeof window.showLoginScreen === "function") {
+        window.showLoginScreen();
+        if (typeof window.activateLoginScreen === "function") {
+          window.activateLoginScreen();
+        }
+        return;
+      }
+    } catch (_) {}
+
+    boot.innerHTML =
+      '<div style="text-align:center;padding:28px;">' +
+      '<div style="font-size:34px;font-weight:900;">MyService</div>' +
+      '<div style="margin-top:10px;font-size:15px;font-weight:700;">Sign-in did not finish loading.</div>' +
+      '<button type="button" onclick="location.reload()" ' +
+      'style="margin-top:20px;padding:13px 22px;border:0;border-radius:14px;background:white;color:#1677f2;font-weight:900;font-size:16px;">RETRY</button>' +
+      '</div>';
+  }, 8500);
+</script>
+
 <header class="topbar">
 
   <button
@@ -1781,7 +1808,7 @@
 </div>
 
 
-<script src="app.js?v=32-pin-tap-fix"></script>
+<script src="app.js?v=33-auth-watchdog"></script>
 
 </body>
 </html>
