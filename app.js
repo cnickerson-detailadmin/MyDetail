@@ -5295,3 +5295,71 @@ renderAll = function () {
   originalRenderAllPrintingSuite();
   installPrintingLabelsSuite();
 };
+
+
+/* =========================================================
+   MYSERVICE OAUTH CALLBACK HANDLER
+   Completes Square/Gusto OAuth without exposing tokens.
+   ========================================================= */
+
+async function completeMyServiceOAuthCallback() {
+  const params = new URLSearchParams(location.search);
+  const code = params.get("code");
+  const returnedState = params.get("state");
+  if (!code) return;
+
+  const provider = sessionStorage.getItem("myservice_oauth_provider") || "";
+  const expectedState = sessionStorage.getItem("myservice_oauth_state") || "";
+
+  if (!provider) return;
+
+  if (!returnedState || !expectedState || returnedState !== expectedState) {
+    alert("Connection could not be completed because the security state did not match. Please try connecting again.");
+    history.replaceState({}, document.title, location.pathname);
+    sessionStorage.removeItem("myservice_oauth_provider");
+    sessionStorage.removeItem("myservice_oauth_state");
+    return;
+  }
+
+  try {
+    const data = await callMyServiceEdgeFunction("integration-broker", {
+      action: "exchange_code",
+      provider,
+      code
+    });
+
+    if (data?.connected) {
+      const adv = getAdvancedState();
+      adv.integrationSettings = adv.integrationSettings || {};
+      if (provider === "square") {
+        adv.integrationSettings.posProvider = "Square";
+        adv.integrationSettings.posConnected = true;
+        adv.onboarding.posConnected = true;
+      }
+      if (provider === "gusto") {
+        adv.integrationSettings.payrollProvider = "Gusto";
+        adv.integrationSettings.payrollConnected = true;
+        adv.onboarding.payrollConnected = true;
+      }
+      saveAdvancedState(adv);
+      alert((provider === "square" ? "Square" : "Gusto") + " connected successfully.");
+    }
+  } catch (error) {
+    alert(error.message || "Could not complete provider connection.");
+  } finally {
+    sessionStorage.removeItem("myservice_oauth_provider");
+    sessionStorage.removeItem("myservice_oauth_state");
+    history.replaceState({}, document.title, location.pathname);
+    renderAll();
+  }
+}
+
+const originalRenderAllOAuthCallback = renderAll;
+let myServiceOAuthCallbackHandled = false;
+renderAll = function () {
+  originalRenderAllOAuthCallback();
+  if (!myServiceOAuthCallbackHandled) {
+    myServiceOAuthCallbackHandled = true;
+    setTimeout(() => completeMyServiceOAuthCallback(), 0);
+  }
+};
