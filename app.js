@@ -6174,6 +6174,27 @@ function playDeveloperAIAudio(base64, mimeType = "audio/mpeg") {
   });
 }
 
+function getDeveloperAINetworkQuality() {
+  const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  const effectiveType = String(connection?.effectiveType || "");
+  const saveData = connection?.saveData === true;
+  const downlink = Number(connection?.downlink || 0);
+
+  if (saveData) return "poor";
+  if (effectiveType === "slow-2g" || effectiveType === "2g") return "poor";
+  if (effectiveType === "3g" || (downlink > 0 && downlink < 1.5)) return "fair";
+  return "good";
+}
+
+function developerAIVoiceModeForNetwork() {
+  const quality = getDeveloperAINetworkQuality();
+  return {
+    quality,
+    compact: quality !== "good",
+    maxReplyChars: quality === "poor" ? 600 : quality === "fair" ? 1000 : 1800
+  };
+}
+
 function toggleDeveloperAICall() {
   if (!developerAIIsAllowed()) return;
 
@@ -6234,7 +6255,12 @@ function toggleDeveloperAICall() {
 
   try {
     developerAIRecognition.start();
-    if (status) status.textContent = "Call mode active — listening…";
+    if (status) {
+      const q = getDeveloperAINetworkQuality();
+      status.textContent = q === "good"
+        ? "Call mode active — listening…"
+        : "Call mode active — low-bandwidth mode enabled.";
+    }
   } catch (_) {
     if (status) status.textContent = "Call mode is active. Tap END CALL to stop.";
   }
@@ -6311,6 +6337,7 @@ async function sendDeveloperAIMessage(event) {
       messages: history.slice(-12),
       context: getDeveloperAISafeContext(),
       voice: developerAICallMode === true,
+      voiceNetwork: developerAICallMode ? developerAIVoiceModeForNetwork() : null,
       allowCodePush: developerAICodePushEnabled()
     });
 
