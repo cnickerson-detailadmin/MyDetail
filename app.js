@@ -5885,14 +5885,47 @@ function toggleDeveloperAICodePush() {
 let developerAICallMode = false;
 let developerAIRecognition = null;
 let developerAIAudio = null;
+let developerAISpeaking = false;
+
+function restartDeveloperAIListening(delay = 350) {
+  if (!developerAICallMode || developerAISpeaking || !developerAIRecognition) return;
+  setTimeout(() => {
+    if (!developerAICallMode || developerAISpeaking) return;
+    try { developerAIRecognition.start(); } catch (_) {}
+  }, delay);
+}
 
 function playDeveloperAIAudio(base64, mimeType = "audio/mpeg") {
-  if (!base64) return;
+  if (!base64) {
+    restartDeveloperAIListening();
+    return;
+  }
+
   try {
+    developerAISpeaking = true;
+    try { developerAIRecognition?.stop(); } catch (_) {}
     if (developerAIAudio) developerAIAudio.pause();
+
     developerAIAudio = new Audio("data:" + mimeType + ";base64," + base64);
-    developerAIAudio.play().catch(() => {});
-  } catch (_) {}
+    developerAIAudio.onended = () => {
+      developerAISpeaking = false;
+      const status = $("developer-ai-status");
+      if (developerAICallMode && status) status.textContent = "Call mode active — listening…";
+      restartDeveloperAIListening(250);
+    };
+    developerAIAudio.onerror = () => {
+      developerAISpeaking = false;
+      restartDeveloperAIListening(250);
+    };
+
+    developerAIAudio.play().catch(() => {
+      developerAISpeaking = false;
+      restartDeveloperAIListening(250);
+    });
+  } catch (_) {
+    developerAISpeaking = false;
+    restartDeveloperAIListening(250);
+  }
 }
 
 function toggleDeveloperAICall() {
@@ -5924,10 +5957,14 @@ function toggleDeveloperAICall() {
   developerAIRecognition.continuous = false;
 
   developerAIRecognition.onresult = async (event) => {
+    if (!developerAICallMode || developerAISpeaking) return;
     const transcript = String(event.results?.[0]?.[0]?.transcript || "").trim();
     if (!transcript) return;
     const input = $("developer-ai-input");
+    const status = $("developer-ai-status");
     if (input) input.value = transcript;
+    if (status) status.textContent = "Heard you — working on it…";
+    try { developerAIRecognition?.stop(); } catch (_) {}
     await sendDeveloperAIMessage();
   };
 
@@ -5936,10 +5973,8 @@ function toggleDeveloperAICall() {
   };
 
   developerAIRecognition.onend = () => {
-    if (!developerAICallMode) return;
-    setTimeout(() => {
-      try { developerAIRecognition?.start(); } catch (_) {}
-    }, 450);
+    if (!developerAICallMode || developerAISpeaking) return;
+    restartDeveloperAIListening(450);
   };
 
   try {
@@ -6031,8 +6066,14 @@ async function sendDeveloperAIMessage(event) {
     saveDeveloperAIHistory(history);
     renderDeveloperAIChat();
 
-    if (developerAICallMode && response.audioBase64) {
-      playDeveloperAIAudio(response.audioBase64, response.audioMimeType || "audio/mpeg");
+    if (developerAICallMode) {
+      if (response.audioBase64) {
+        const callStatus = $("developer-ai-status");
+        if (callStatus) callStatus.textContent = "Developer AI is speaking…";
+        playDeveloperAIAudio(response.audioBase64, response.audioMimeType || "audio/mpeg");
+      } else {
+        restartDeveloperAIListening();
+      }
     }
 
     if (status) {
