@@ -6029,6 +6029,7 @@ let developerAIUserIsSpeaking = false;
 let developerAIFreeCallMode = false;
 let developerAISpeakerMode = true;
 let developerAISpeechUtterance = null;
+let developerAIPendingWebsiteChange = "";
 
 function setDeveloperAICallScrollSafe() {
   document.documentElement.style.overflowY = "auto";
@@ -6582,6 +6583,46 @@ function buildDeveloperAIFreeReply(message) {
     : [];
 
   if (!text) return "I’m listening.";
+
+  if (/^(confirm change|approve change|yes,? approve|yes,? confirm)$/i.test(text) && developerAIPendingWebsiteChange) {
+    const request = developerAIPendingWebsiteChange;
+    developerAIPendingWebsiteChange = "";
+
+    if (!Array.isArray(state.supportTickets)) state.supportTickets = [];
+    state.supportTickets.unshift({
+      id: "MS-" + String(Date.now()).slice(-6),
+      company: state.companyName || "MyService",
+      user: currentUser?.name || "Developer",
+      subject: "Approved website change request",
+      description: request,
+      priority: "standard",
+      difficulty: "Needs Codex",
+      estimatedMinutes: 0,
+      estimateLabel: "Pending code review",
+      chatgptDifficulty: "Ready for Codex",
+      chatgptEstimateLabel: "Open ChatGPT to apply",
+      mayBeTooSensitiveForChatGPT: false,
+      status: "Approved — awaiting Codex",
+      createdAt: new Date().toISOString()
+    });
+    saveState();
+    renderSupportTickets?.();
+    return "Confirmed. I saved the exact approved website change request. It will not edit or deploy anything silently. Open ChatGPT Codex to apply it.";
+  }
+
+  if (
+    /\b(change|fix|add|remove|update|edit|redesign|move|rename)\b/.test(lower) &&
+    /\b(site|website|app|page|screen|button|menu|dashboard|code)\b/.test(lower)
+  ) {
+    developerAIPendingWebsiteChange = text.slice(0, 500);
+    return "I can queue that website change. I will not touch the site yet. Say confirm change to approve this exact request, or say cancel change.";
+  }
+
+  if (/^(cancel change|do not change|don’t change|never mind)$/i.test(text)) {
+    developerAIPendingWebsiteChange = "";
+    return "Canceled. I did not change or queue anything.";
+  }
+
   if (/\b(hi|hey|hello|yo)\b/.test(lower)) {
     return "Hey Caleb. I’m here. What do you want to check in MyService?";
   }
