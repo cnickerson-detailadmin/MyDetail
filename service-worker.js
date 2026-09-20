@@ -1,4 +1,4 @@
-const CACHE_NAME = "myservice-cache-v16";
+const CACHE_NAME = "myservice-cache-v17";
 const BUILD_ID = "26-pin-keypad-force";
 
 const APP_SHELL = [
