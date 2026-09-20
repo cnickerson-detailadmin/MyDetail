@@ -2355,7 +2355,7 @@ function getDeveloperAlerts() {
         title: "Business planning location is not set",
         area: "Scheduling Intelligence",
         impact: "Weather and nearby-event demand hints cannot target the business location.",
-        fix: "Set the business planning latitude and longitude from Live API Connections."
+        fix: "Select the physical business address in Live API Connections. MyService will find the coordinates automatically."
       });
     }
   } catch {}
@@ -4300,7 +4300,14 @@ function advancedDefaultState() {
       posProvider: "",
       payrollProvider: "",
       posConnected: false,
-      payrollConnected: false
+      payrollConnected: false,
+      businessAddress: "",
+      businessStreet: "",
+      businessCity: "",
+      businessState: "",
+      businessPostalCode: "",
+      businessLat: null,
+      businessLon: null
     },
     forecastSettings: {
       laborTargetPercent: 25,
@@ -4904,6 +4911,11 @@ renderAll = function () {
 function getApiBridgeState() {
   const adv = getAdvancedState();
   adv.integrationSettings = adv.integrationSettings || {};
+  if (typeof adv.integrationSettings.businessAddress !== "string") adv.integrationSettings.businessAddress = "";
+  if (typeof adv.integrationSettings.businessStreet !== "string") adv.integrationSettings.businessStreet = "";
+  if (typeof adv.integrationSettings.businessCity !== "string") adv.integrationSettings.businessCity = "";
+  if (typeof adv.integrationSettings.businessState !== "string") adv.integrationSettings.businessState = "";
+  if (typeof adv.integrationSettings.businessPostalCode !== "string") adv.integrationSettings.businessPostalCode = "";
   if (typeof adv.integrationSettings.businessLat !== "number") adv.integrationSettings.businessLat = null;
   if (typeof adv.integrationSettings.businessLon !== "number") adv.integrationSettings.businessLon = null;
   if (!adv.integrationSettings.apiStatus) adv.integrationSettings.apiStatus = {};
@@ -4934,32 +4946,121 @@ async function callMyServiceEdgeFunction(name, body) {
   return data;
 }
 
-function configurePlanningLocationApi() {
-  if (!canManageEmployees()) return;
-  const adv = getApiBridgeState();
-  const latRaw = prompt(
-    "Business latitude:",
-    adv.integrationSettings.businessLat ?? ""
-  );
-  if (latRaw === null) return;
-  const lonRaw = prompt(
-    "Business longitude:",
-    adv.integrationSettings.businessLon ?? ""
-  );
-  if (lonRaw === null) return;
+let planningAddressSearchTimer = null;
+let planningAddressSessionToken = "";
+let planningAddressSuggestions = [];
 
-  const lat = Number(latRaw);
-  const lon = Number(lonRaw);
-  if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
-    alert("Enter a valid latitude and longitude.");
+function getPlanningAddressSessionToken() {
+  if (!planningAddressSessionToken) {
+    planningAddressSessionToken = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : "address-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+  }
+  return planningAddressSessionToken;
+}
+
+function setPlanningAddressStatus(message, isError = false) {
+  const status = $("business-address-status");
+  if (!status) return;
+  status.textContent = message || "";
+  status.style.color = isError ? "#b91c1c" : "#61728c";
+}
+
+function renderPlanningAddressSuggestions() {
+  const list = $("business-address-suggestions");
+  if (!list) return;
+
+  list.innerHTML = planningAddressSuggestions.map((suggestion, index) => `
+    <button
+      type="button"
+      class="outline-button"
+      onclick="selectPlanningAddressSuggestion(${index})"
+      style="width:100%;text-align:left;justify-content:flex-start;margin-top:8px;white-space:normal;"
+    >
+      ${escapeHTML(suggestion.fullAddress || suggestion.name || "Address")}
+    </button>
+  `).join("");
+}
+
+function schedulePlanningAddressSearch(value) {
+  clearTimeout(planningAddressSearchTimer);
+  const query = String(value || "").trim();
+
+  if (query.length < 4) {
+    planningAddressSuggestions = [];
+    renderPlanningAddressSuggestions();
+    setPlanningAddressStatus(query ? "Keep typing to find the full address." : "");
     return;
   }
 
-  adv.integrationSettings.businessLat = lat;
-  adv.integrationSettings.businessLon = lon;
-  saveAdvancedState(adv);
-  alert("Business planning location saved.");
-  renderAll();
+  setPlanningAddressStatus("Finding nearby addresses…");
+  planningAddressSearchTimer = setTimeout(() => searchPlanningAddressesApi(query), 350);
+}
+
+async function searchPlanningAddressesApi(query) {
+  if (!canManageEmployees()) return;
+  try {
+    const data = await callMyServiceEdgeFunction("address-search", {
+      action: "suggest",
+      query,
+      sessionToken: getPlanningAddressSessionToken()
+    });
+
+    planningAddressSuggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+    renderPlanningAddressSuggestions();
+    setPlanningAddressStatus(
+      planningAddressSuggestions.length
+        ? "Select the complete address below."
+        : "No matching addresses found. Add the city, state, or ZIP and try again.",
+      planningAddressSuggestions.length === 0
+    );
+  } catch (error) {
+    planningAddressSuggestions = [];
+    renderPlanningAddressSuggestions();
+    setPlanningAddressStatus(error.message || "Address search is unavailable.", true);
+  }
+}
+
+async function selectPlanningAddressSuggestion(index) {
+  if (!canManageEmployees()) return;
+  const suggestion = planningAddressSuggestions[index];
+  if (!suggestion?.id) return;
+
+  setPlanningAddressStatus("Saving business location…");
+  try {
+    let location = suggestion.location || null;
+    if (!location) {
+      const data = await callMyServiceEdgeFunction("address-search", {
+        action: "retrieve",
+        mapboxId: suggestion.id,
+        sessionToken: getPlanningAddressSessionToken()
+      });
+      location = data.location || {};
+    }
+    const lat = Number(location.latitude);
+    const lon = Number(location.longitude);
+
+    if (!location.fullAddress || !Number.isFinite(lat) || !Number.isFinite(lon)) {
+      throw new Error("That address did not return a complete location. Choose another suggestion.");
+    }
+
+    const adv = getApiBridgeState();
+    adv.integrationSettings.businessAddress = location.fullAddress;
+    adv.integrationSettings.businessStreet = location.street || "";
+    adv.integrationSettings.businessCity = location.city || "";
+    adv.integrationSettings.businessState = location.state || "";
+    adv.integrationSettings.businessPostalCode = location.postalCode || "";
+    adv.integrationSettings.businessLat = lat;
+    adv.integrationSettings.businessLon = lon;
+    saveAdvancedState(adv);
+
+    planningAddressSuggestions = [];
+    planningAddressSessionToken = "";
+    renderAll();
+    setPlanningAddressStatus("Business location saved.");
+  } catch (error) {
+    setPlanningAddressStatus(error.message || "The business location could not be saved.", true);
+  }
 }
 
 async function loadLivePlanningIntelligenceApi() {
@@ -5146,14 +5247,37 @@ function installLiveApiBridge() {
     <div class="dashboard-grid">
       <div class="panel" style="box-shadow:none;margin:0;">
         <h3>Scheduling Intelligence API</h3>
-        <p>
-          Business location:
-          ${Number.isFinite(adv.integrationSettings.businessLat)
-            ? escapeHTML(String(adv.integrationSettings.businessLat)) + ", " + escapeHTML(String(adv.integrationSettings.businessLon))
-            : "Not set"}
-        </p>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="outline-button" type="button" onclick="configurePlanningLocationApi()">SET BUSINESS LOCATION</button>
+        <p>Start typing the physical business address. MyService will suggest complete nearby addresses and use the selected location in the background for weather and events.</p>
+        <label for="business-address-search" style="display:block;font-weight:750;margin-bottom:6px;">Business address</label>
+        <input
+          id="business-address-search"
+          type="text"
+          autocomplete="street-address"
+          placeholder="Start typing a street address"
+          value="${escapeHTML(adv.integrationSettings.businessAddress || "")}"
+          oninput="schedulePlanningAddressSearch(this.value)"
+          style="width:100%;min-height:50px;padding:12px 14px;border:1px solid #d6dfeb;border-radius:12px;font:inherit;"
+        >
+        <div id="business-address-suggestions" style="display:grid;"></div>
+        <small id="business-address-status" style="display:block;min-height:20px;margin-top:7px;color:#61728c;"></small>
+        <small style="display:block;color:#8a98aa;">Address results may use Mapbox or OpenStreetMap data.</small>
+
+        ${adv.integrationSettings.businessAddress ? `
+          <div class="list-row" style="margin:8px 0 12px;align-items:flex-start;">
+            <div>
+              <strong>Saved business location</strong>
+              <small>${escapeHTML(adv.integrationSettings.businessStreet || adv.integrationSettings.businessAddress)}</small>
+              <small>${escapeHTML([
+                adv.integrationSettings.businessCity,
+                adv.integrationSettings.businessState,
+                adv.integrationSettings.businessPostalCode
+              ].filter(Boolean).join(", "))}</small>
+            </div>
+            <span class="pill" style="background:#ecfdf5;color:#166534;">READY</span>
+          </div>
+        ` : ""}
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
           <button id="load-live-planning-api" class="primary-button" type="button" onclick="loadLivePlanningIntelligenceApi()">LOAD LIVE WEATHER / EVENTS</button>
         </div>
         <small style="display:block;margin-top:10px;color:#7b8aa0;">Last updated: ${escapeHTML(last)}</small>
