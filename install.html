@@ -35,6 +35,7 @@
     </div>
 
     <a id="continueBtn" class="action secondary" href="./">Continue in browser</a>
+    <button id="desktopAccessBtn" class="action secondary" type="button">Request desktop access</button>
     <div class="small">Desktop visitors are not redirected here.</div>
   </main>
 
@@ -43,6 +44,7 @@
     const installBtn = document.getElementById("installBtn");
     const iosHelp = document.getElementById("iosHelp");
     const continueBtn = document.getElementById("continueBtn");
+    const desktopAccessBtn = document.getElementById("desktopAccessBtn");
     const isiOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
     const isAndroid = /Android/i.test(navigator.userAgent);
 
@@ -79,6 +81,13 @@
       }
 
       location.href = continueBtn.href;
+    });
+
+    desktopAccessBtn.addEventListener("click", () => {
+      localStorage.setItem("myservice_desktop_access", "1");
+      const target = new URL(continueBtn.href, location.href);
+      target.searchParams.set("desktop", "1");
+      location.href = target.href;
     });
 
     window.addEventListener("appinstalled", () => {
