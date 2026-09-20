@@ -1,5 +1,5 @@
-const CACHE_NAME = "myservice-cache-v17";
-const BUILD_ID = "26-pin-keypad-force";
+const CACHE_NAME = "myservice-cache-v18";
+const BUILD_ID = "33-auth-watchdog";
 
 const APP_SHELL = [
   "./styles.css?v=4-pro-desktop",
