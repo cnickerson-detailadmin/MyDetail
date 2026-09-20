@@ -5432,3 +5432,49 @@ renderAll = function () {
     setTimeout(() => completeMyServiceOAuthCallback(), 0);
   }
 };
+
+
+/* =========================================================
+   MYSERVICE PWA INSTALL
+   Makes the GitHub Pages build installable as a standalone app.
+   ========================================================= */
+
+let myServiceInstallPrompt = null;
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./service-worker.js").catch((error) => {
+      console.error("MyService service worker registration failed:", error);
+    });
+  });
+}
+
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  myServiceInstallPrompt = event;
+  const installButton = document.getElementById("myservice-install-button");
+  if (installButton) installButton.hidden = false;
+});
+
+window.addEventListener("appinstalled", () => {
+  myServiceInstallPrompt = null;
+  const installButton = document.getElementById("myservice-install-button");
+  if (installButton) installButton.hidden = true;
+});
+
+async function installMyServiceApp() {
+  if (myServiceInstallPrompt) {
+    myServiceInstallPrompt.prompt();
+    await myServiceInstallPrompt.userChoice;
+    myServiceInstallPrompt = null;
+    return;
+  }
+
+  const isiOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  if (isiOS) {
+    alert("On iPhone: tap the Share button in Safari, then tap Add to Home Screen, then Add.");
+    return;
+  }
+
+  alert("Open this site in your browser menu and choose Install App or Add to Home Screen.");
+}
