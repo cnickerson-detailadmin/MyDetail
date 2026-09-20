@@ -5190,21 +5190,33 @@ function getApiBridgeState() {
 }
 
 async function callMyServiceEdgeFunction(name, body) {
-  const token = getStoredAuthItem(ACCESS_TOKEN_KEY);
+  let token = getStoredAuthItem(ACCESS_TOKEN_KEY);
   if (!token) throw new Error("You must be logged in.");
 
-  const response = await fetch(
-    SUPABASE_URL + "/functions/v1/" + encodeURIComponent(name),
-    {
-      method: "POST",
-      headers: {
-        "apikey": SUPABASE_KEY,
-        "Authorization": "Bearer " + token,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(body || {})
+  async function makeRequest(activeToken) {
+    return fetch(
+      SUPABASE_URL + "/functions/v1/" + encodeURIComponent(name),
+      {
+        method: "POST",
+        headers: {
+          "apikey": SUPABASE_KEY,
+          "Authorization": "Bearer " + activeToken,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(body || {})
+      }
+    );
+  }
+
+  let response = await makeRequest(token);
+
+  if (response.status === 401) {
+    const refreshed = await refreshStoredSession().catch(() => null);
+    if (refreshed) {
+      token = refreshed;
+      response = await makeRequest(token);
     }
-  );
+  }
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -6071,6 +6083,8 @@ function stopDeveloperAICall() {
   stopDeveloperAIAudio();
   setDeveloperAICallScrollSafe();
 
+  $("developer-ai-call-window")?.remove();
+
   const button = $("developer-ai-call");
   const status = $("developer-ai-status");
   if (button) {
@@ -6132,6 +6146,7 @@ function playDeveloperAIAudio(base64, mimeType = "audio/mpeg") {
 
   const status = $("developer-ai-status");
   if (status) status.textContent = "Developer AI is speaking…";
+  updateDeveloperAICallWindow("Speaking…", "Developer AI");
 
   // Web Audio is preferred on iPhone because CALL unlocks its audio context.
   playDeveloperAIWebAudio(base64).catch(() => {
@@ -6185,6 +6200,80 @@ function developerAIVoiceModeForNetwork() {
   };
 }
 
+function openDeveloperAICallWindow() {
+  if ($("developer-ai-call-window")) return;
+
+  const wrap = document.createElement("div");
+  wrap.id = "developer-ai-call-window";
+  wrap.style.cssText = [
+    "position:fixed",
+    "inset:0",
+    "z-index:2147483646",
+    "background:linear-gradient(180deg,#0f5fc7,#1677f2)",
+    "color:white",
+    "display:flex",
+    "flex-direction:column",
+    "padding:max(18px,env(safe-area-inset-top)) 18px max(18px,env(safe-area-inset-bottom))",
+    "box-sizing:border-box",
+    "overflow:auto",
+    "-webkit-overflow-scrolling:touch"
+  ].join(";");
+
+  wrap.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+      <div>
+        <div style="font-size:12px;font-weight:850;letter-spacing:1.2px;opacity:.8;">MYSERVICE</div>
+        <div style="font-size:24px;font-weight:900;">Developer AI Call</div>
+      </div>
+      <button id="developer-ai-call-close" type="button"
+        style="border:0;background:rgba(255,255,255,.14);color:white;width:42px;height:42px;border-radius:50%;font-size:22px;">×</button>
+    </div>
+
+    <div style="flex:1;display:flex;align-items:center;justify-content:center;min-height:320px;text-align:center;">
+      <div>
+        <div style="width:112px;height:112px;margin:0 auto 18px;border-radius:50%;background:white;color:#1677f2;display:grid;place-items:center;font-size:42px;font-weight:900;box-shadow:0 18px 40px rgba(0,0,0,.18);">AI</div>
+        <div id="developer-ai-call-window-status" style="font-size:21px;font-weight:850;">Connecting…</div>
+        <div id="developer-ai-call-window-caption" style="margin-top:10px;font-size:14px;opacity:.85;max-width:310px;"></div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <button id="developer-ai-call-mute" type="button"
+        style="min-height:54px;border:0;border-radius:18px;background:rgba(255,255,255,.16);color:white;font-weight:850;">MUTE</button>
+      <button id="developer-ai-call-end" type="button"
+        style="min-height:54px;border:0;border-radius:18px;background:#d92d20;color:white;font-weight:900;">END CALL</button>
+    </div>
+  `;
+
+  document.body.appendChild(wrap);
+
+  $("developer-ai-call-end").onclick = () => stopDeveloperAICall();
+  $("developer-ai-call-close").onclick = () => {
+    wrap.remove();
+    setDeveloperAICallScrollSafe();
+  };
+
+  let muted = false;
+  $("developer-ai-call-mute").onclick = function () {
+    muted = !muted;
+    if (developerAIAudio) developerAIAudio.muted = muted;
+    try {
+      if (developerAIAudioContext) {
+        if (muted) developerAIAudioContext.suspend();
+        else developerAIAudioContext.resume();
+      }
+    } catch (_) {}
+    this.textContent = muted ? "UNMUTE" : "MUTE";
+  };
+}
+
+function updateDeveloperAICallWindow(statusText, captionText = "") {
+  const status = $("developer-ai-call-window-status");
+  const caption = $("developer-ai-call-window-caption");
+  if (status && statusText) status.textContent = statusText;
+  if (caption) caption.textContent = captionText || "";
+}
+
 function toggleDeveloperAICall() {
   if (!developerAIIsAllowed()) return;
 
@@ -6194,6 +6283,8 @@ function toggleDeveloperAICall() {
   }
 
   developerAICallMode = true;
+  openDeveloperAICallWindow();
+  updateDeveloperAICallWindow("Connecting…", "Preparing secure voice call");
   unlockDeveloperAIAudio();
   setDeveloperAICallScrollSafe();
 
@@ -6225,6 +6316,7 @@ function toggleDeveloperAICall() {
     const liveStatus = $("developer-ai-status");
     if (input) input.value = transcript;
     if (liveStatus) liveStatus.textContent = "Heard you — working on it…";
+    updateDeveloperAICallWindow("Thinking…", transcript);
 
     try { developerAIRecognition?.abort?.(); } catch (_) {}
     await sendDeveloperAIMessage();
@@ -6250,6 +6342,10 @@ function toggleDeveloperAICall() {
       status.textContent = q === "good"
         ? "Call mode active — listening…"
         : "Call mode active — low-bandwidth mode enabled.";
+      updateDeveloperAICallWindow(
+        q === "good" ? "Listening…" : "Listening…",
+        q === "good" ? "Developer AI is ready" : "Low-bandwidth mode enabled"
+      );
     }
   } catch (_) {
     if (status) status.textContent = "Call mode is active. Tap END CALL to stop.";
@@ -6344,6 +6440,7 @@ async function sendDeveloperAIMessage(event) {
         if (callStatus) callStatus.textContent = "Developer AI is speaking…";
         playDeveloperAIAudio(response.audioBase64, response.audioMimeType || "audio/mpeg");
       } else {
+        updateDeveloperAICallWindow("Reply received", "Voice audio was not returned. The text reply is in Developer AI.");
         restartDeveloperAIListening();
       }
     }
