@@ -2639,6 +2639,10 @@ function installDeveloperExperience() {
         <span>🛟</span>
         Support Tickets
       </button>
+      <button class="nav" type="button" onclick="openDeveloperAI()">
+        <span>✦</span>
+        Developer AI
+      </button>
       <button class="nav" type="button" onclick="showSection('settings')">
         <span>⚙</span>
         Admin Entire App Setup
@@ -2674,6 +2678,32 @@ function installDeveloperExperience() {
           </div>
           <button class="primary-button" type="button" onclick="showSection('support')">VIEW TICKETS</button>
         </div>
+      </section>
+
+      <section id="developer-ai-card" class="card" style="padding:18px;border:1px solid rgba(22,119,242,.22);background:linear-gradient(145deg,#ffffff,#f6f9ff);">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px;">
+          <div>
+            <div class="eyebrow">PRIVATE DEVELOPER COPILOT</div>
+            <h2 style="margin:4px 0;">Developer AI</h2>
+            <p style="margin:0;color:#61728c;">Business management, operations, support troubleshooting, and MyService guidance.</p>
+          </div>
+          <button class="outline-button" type="button" onclick="clearDeveloperAIChat()">Clear</button>
+        </div>
+
+        <div id="developer-ai-messages" style="display:grid;gap:10px;max-height:420px;overflow:auto;padding:4px 2px 12px;">
+          <div style="padding:12px 14px;border-radius:12px;background:#f3f7ff;color:#34445f;">
+            Ask about staffing, scheduling, support tickets, operations, inventory, labor, sales, or MyService troubleshooting.
+          </div>
+        </div>
+
+        <form onsubmit="sendDeveloperAIMessage(event)" style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;">
+          <div>
+            <label for="developer-ai-input" style="display:block;font-size:12px;font-weight:800;margin-bottom:6px;">MESSAGE DEVELOPER AI</label>
+            <textarea id="developer-ai-input" rows="3" maxlength="5000" placeholder="Example: An employee cannot clock in. What should I check first?" style="width:100%;resize:vertical;"></textarea>
+          </div>
+          <button id="developer-ai-send" class="primary-button" type="submit" style="min-height:44px;">SEND</button>
+        </form>
+        <small id="developer-ai-status" style="display:block;margin-top:8px;color:#61728c;">Developer-only. Sensitive or destructive actions still require confirmation.</small>
       </section>
 
       <section id="developer-code-alerts" class="card" style="padding:18px;background:#f8fbff;">
@@ -5556,6 +5586,168 @@ renderAll = function () {
     setTimeout(() => completeMyServiceOAuthCallback(), 0);
   }
 };
+
+
+
+/* =========================================================
+   MYSERVICE — DEVELOPER AI CHAT
+   Developer-only AI copilot. AI analysis never directly mutates
+   company data or security-sensitive state.
+   ========================================================= */
+
+const DEVELOPER_AI_CHAT_KEY = "myservice_developer_ai_chat_v1";
+
+function getDeveloperAIHistory() {
+  try {
+    const parsed = JSON.parse(sessionStorage.getItem(DEVELOPER_AI_CHAT_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed.slice(-20) : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function saveDeveloperAIHistory(messages) {
+  sessionStorage.setItem(DEVELOPER_AI_CHAT_KEY, JSON.stringify((messages || []).slice(-20)));
+}
+
+function developerAIIsAllowed() {
+  return String(authenticatedContext?.databaseRole || "").toLowerCase() === "developer";
+}
+
+function renderDeveloperAIChat() {
+  const box = $("developer-ai-messages");
+  if (!box) return;
+
+  const messages = getDeveloperAIHistory();
+  if (!messages.length) {
+    box.innerHTML = `
+      <div style="padding:12px 14px;border-radius:12px;background:#f3f7ff;color:#34445f;">
+        Ask about staffing, scheduling, support tickets, operations, inventory, labor, sales, or MyService troubleshooting.
+      </div>
+    `;
+    return;
+  }
+
+  box.innerHTML = messages.map(message => {
+    const mine = message.role === "user";
+    return `
+      <div style="padding:12px 14px;border-radius:12px;white-space:pre-wrap;line-height:1.45;
+        ${mine ? "background:#eaf3ff;margin-left:36px;" : "background:#f6f7f9;margin-right:36px;"}">
+        <strong style="display:block;margin-bottom:5px;">${mine ? "You" : "Developer AI"}</strong>
+        ${escapeHTML(message.content)}
+      </div>
+    `;
+  }).join("");
+
+  box.scrollTop = box.scrollHeight;
+}
+
+function openDeveloperAI() {
+  if (!developerAIIsAllowed()) {
+    alert("Developer AI is available only to the platform developer account.");
+    return;
+  }
+
+  if (getDeveloperView() !== "Developer") {
+    switchDeveloperView("Developer");
+  }
+
+  setTimeout(() => {
+    const card = $("developer-ai-card");
+    if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+    renderDeveloperAIChat();
+    $("developer-ai-input")?.focus();
+  }, 60);
+}
+
+function clearDeveloperAIChat() {
+  if (!developerAIIsAllowed()) return;
+  sessionStorage.removeItem(DEVELOPER_AI_CHAT_KEY);
+  renderDeveloperAIChat();
+  const status = $("developer-ai-status");
+  if (status) status.textContent = "Chat cleared. Developer-only.";
+}
+
+function getDeveloperAISafeContext() {
+  const employees = Array.isArray(state.employees) ? state.employees : [];
+  const jobs = Array.isArray(state.jobs) ? state.jobs : [];
+  const tickets = Array.isArray(state.supportTickets) ? state.supportTickets : [];
+  const schedule = Array.isArray(state.schedule) ? state.schedule : [];
+
+  return {
+    app: "MyService",
+    companyName: String(state.companyName || authenticatedContext?.companyName || "Unknown"),
+    developerView: typeof getDeveloperView === "function" ? getDeveloperView() : "Developer",
+    counts: {
+      employees: employees.length,
+      activeEmployees: employees.filter(employee => employee.active !== false).length,
+      openJobs: jobs.filter(job => String(job.status || "").toLowerCase() !== "completed").length,
+      scheduleEntries: schedule.length,
+      openSupportTickets: tickets.filter(ticket => String(ticket.status || "").toLowerCase() === "open").length
+    },
+    note: "Only summary counts are automatically supplied. No passwords, PINs, access tokens, or ticket descriptions are sent automatically."
+  };
+}
+
+async function sendDeveloperAIMessage(event) {
+  event?.preventDefault?.();
+
+  if (!developerAIIsAllowed()) {
+    alert("Developer AI is available only to the platform developer account.");
+    return;
+  }
+
+  const input = $("developer-ai-input");
+  const send = $("developer-ai-send");
+  const status = $("developer-ai-status");
+  const message = String(input?.value || "").trim();
+  if (!message) return;
+
+  const history = getDeveloperAIHistory();
+  history.push({ role: "user", content: message });
+  saveDeveloperAIHistory(history);
+  if (input) input.value = "";
+  renderDeveloperAIChat();
+
+  if (send) send.disabled = true;
+  if (status) status.textContent = "Developer AI is thinking…";
+
+  try {
+    const response = await callMyServiceEdgeFunction("developer-ai", {
+      messages: history.slice(-12),
+      context: getDeveloperAISafeContext()
+    });
+
+    history.push({
+      role: "assistant",
+      content: String(response.reply || "No response returned.")
+    });
+    saveDeveloperAIHistory(history);
+    renderDeveloperAIChat();
+
+    if (status) {
+      status.textContent = "Developer AI ready" + (response.model ? " • " + response.model : "");
+    }
+  } catch (error) {
+    const messageText = String(error?.message || "Developer AI request failed.");
+    history.push({
+      role: "assistant",
+      content: messageText.includes("OPENAI_API_KEY")
+        ? "Developer AI is installed, but its secure AI API key still needs to be configured on the server."
+        : "I couldn't complete that request: " + messageText
+    });
+    saveDeveloperAIHistory(history);
+    renderDeveloperAIChat();
+    if (status) status.textContent = "Developer AI unavailable — " + messageText;
+  } finally {
+    if (send) send.disabled = false;
+    input?.focus();
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  setTimeout(renderDeveloperAIChat, 0);
+});
 
 
 /* =========================================================
