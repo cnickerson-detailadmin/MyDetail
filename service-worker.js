@@ -1,9 +1,9 @@
-const CACHE_NAME = "myservice-cache-v9";
+const CACHE_NAME = "myservice-cache-v10";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./styles.css?v=3",
-  "./app.js?v=24-pin-autofill-fix",
+  "./app.js?v=25-onscreen-pin-pad",
   "./manifest.json",
   "./install.html"
 ];
