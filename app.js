@@ -2702,6 +2702,13 @@ function installDeveloperExperience() {
           <button id="developer-ai-send" class="primary-button" type="submit" style="min-height:42px;flex:0 0 auto;border-radius:18px;">SEND</button>
         </form>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+          <div id="developer-ai-audio-output-wrap" style="margin:10px 0 8px;">
+            <label for="developer-ai-audio-output" style="display:block;font-size:12px;font-weight:850;margin-bottom:5px;">AUDIO OUTPUT</label>
+            <select id="developer-ai-audio-output" style="width:100%;min-height:44px;border:1px solid #d0d5dd;border-radius:12px;padding:0 12px;background:white;color:#101828;font-weight:750;">
+              <option value="auto">Automatic / iPhone</option>
+            </select>
+            <div id="developer-ai-audio-output-note" style="font-size:11px;opacity:.72;margin-top:4px;">Checking available audio routes…</div>
+          </div>
           <button id="developer-ai-call" class="outline-button" type="button" onclick="toggleDeveloperAICall()" style="border-radius:18px;">☎ CALL</button>
           <button id="developer-ai-self-check" class="outline-button" type="button" onclick="runSethSelfCheck()" style="border-radius:18px;">✓ SELF-CHECK</button>
           <button id="developer-ai-diagnose" class="outline-button" type="button" onclick="askSethToDiagnose()" style="border-radius:18px;">✦ DIAGNOSE / FIX</button>
@@ -6192,6 +6199,7 @@ let developerAIUserIsSpeaking = false;
 let developerAIFreeCallMode = false;
 let developerAIFreeProvider = "";
 let developerAISpeakerMode = false;
+let developerAIPreferredAudioOutput = "auto";
 let developerAIFreeRequestBusy = false;
 let developerAICallManagerTimer = null;
 let developerAICallManagerRecoveries = 0;
@@ -6877,6 +6885,7 @@ function playDeveloperAIAudio(base64, mimeType = "audio/mpeg") {
       developerAIAudio = new Audio("data:" + mimeType + ";base64," + base64);
       developerAIAudio.playsInline = true;
       developerAIAudio.volume = developerAISpeakerMode ? 1 : 0.35;
+      applyDeveloperAIAudioOutput(developerAIPreferredAudioOutput).catch(() => {});
 
       developerAIAudio.onended = () => {
         developerAISpeaking = false;
@@ -7064,6 +7073,68 @@ async function toggleDeveloperAITestRecording() {
   updateDeveloperAICallWindow("Listening…", "RECORDING • local only");
 }
 
+async function getDeveloperAIAudioOutputOptions() {
+  const options = [{ id: "auto", label: "Automatic / iPhone" }];
+  if (!navigator.mediaDevices?.enumerateDevices) return options;
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const outputs = devices.filter(device => device.kind === "audiooutput");
+    for (const device of outputs) {
+      const label = String(device.label || "Audio output");
+      const bluetooth = /bluetooth|airpods|beats|buds|headset|headphones/i.test(label);
+      options.push({
+        id: device.deviceId,
+        label: (bluetooth ? "Bluetooth • " : "") + label,
+        bluetooth
+      });
+    }
+  } catch (_) {}
+  return options;
+}
+
+async function applyDeveloperAIAudioOutput(deviceId) {
+  developerAIPreferredAudioOutput = String(deviceId || "auto");
+  if (developerAIPreferredAudioOutput === "auto") return true;
+  let applied = false;
+  for (const audio of [developerAIAudio, developerAIRealtimeAudio]) {
+    if (!audio || typeof audio.setSinkId !== "function") continue;
+    try {
+      await audio.setSinkId(developerAIPreferredAudioOutput);
+      applied = true;
+    } catch (_) {}
+  }
+  return applied;
+}
+
+async function refreshDeveloperAIAudioOutputControl() {
+  const select = $("developer-ai-audio-output");
+  const note = $("developer-ai-audio-output-note");
+  if (!select) return;
+  const options = await getDeveloperAIAudioOutputOptions();
+  const bluetooth = options.filter(option => option.bluetooth);
+  const ordered = [
+    ...bluetooth,
+    ...options.filter(option => !option.bluetooth)
+  ];
+  select.innerHTML = ordered.map(option =>
+    '<option value="' + escapeHtml(option.id) + '">' + escapeHtml(option.label) + '</option>'
+  ).join("");
+  if (ordered.some(option => option.id === developerAIPreferredAudioOutput)) {
+    select.value = developerAIPreferredAudioOutput;
+  } else if (bluetooth.length) {
+    developerAIPreferredAudioOutput = bluetooth[0].id;
+    select.value = developerAIPreferredAudioOutput;
+  } else {
+    developerAIPreferredAudioOutput = "auto";
+    select.value = "auto";
+  }
+  if (note) {
+    note.textContent = bluetooth.length
+      ? "Bluetooth audio is available and shown first."
+      : "iPhone may keep Bluetooth routing in Control Center when Safari does not expose the device name.";
+  }
+}
+
 function openDeveloperAICallWindow() {
   if ($("developer-ai-call-window")) return;
 
@@ -7123,6 +7194,7 @@ function openDeveloperAICallWindow() {
   `;
 
   document.body.appendChild(wrap);
+  refreshDeveloperAIAudioOutputControl();
 
   $("developer-ai-test-record").onclick = () => {
     toggleDeveloperAITestRecording().catch(() => {
@@ -7165,6 +7237,17 @@ function openDeveloperAICallWindow() {
     } catch (_) {}
     this.textContent = muted ? "UNMUTE SETH" : "MUTE SETH";
   };
+
+  const outputSelect = $("developer-ai-audio-output");
+  if (outputSelect) {
+    outputSelect.onchange = async function () {
+      const ok = await applyDeveloperAIAudioOutput(this.value);
+      const note = $("developer-ai-audio-output-note");
+      if (note) note.textContent = this.value === "auto"
+        ? "Using the phone's current audio route."
+        : (ok ? "Selected output applied." : "Saved for the call; iPhone controls the final Bluetooth route.");
+    };
+  }
 
   $("developer-ai-call-speaker").onclick = function () {
     developerAISpeakerMode = !developerAISpeakerMode;
@@ -7291,6 +7374,7 @@ function handleDeveloperAIRealtimeEvent(event) {
         // Keep the HTML element silent when Web Audio is handling the same stream.
         developerAIRealtimeAudio.muted = Boolean(developerAIRealtimeAudioSource);
         developerAIRealtimeAudio.volume = developerAISpeakerMode ? 1 : 0.35;
+        applyDeveloperAIAudioOutput(developerAIPreferredAudioOutput).catch(() => {});
         developerAIRealtimeAudio.play().catch(() => {});
       }
     } catch (_) {}
