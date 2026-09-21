@@ -6808,7 +6808,12 @@ function restartDeveloperAIListening(delay = 1200) {
 }
 
 async function playDeveloperAIWebAudio(base64, mimeType = "audio/mpeg") {
-  if (!developerAIAudioContext || !base64) throw new Error("Web Audio unavailable.");
+  if (!base64) throw new Error("Web Audio unavailable.");
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!developerAIAudioContext && AudioCtx) {
+    developerAIAudioContext = new AudioCtx({ latencyHint: "interactive" });
+  }
+  if (!developerAIAudioContext) throw new Error("Web Audio unavailable.");
 
   if (developerAIAudioContext.state === "suspended") {
     await developerAIAudioContext.resume();
@@ -6833,7 +6838,7 @@ async function playDeveloperAIWebAudio(base64, mimeType = "audio/mpeg") {
   developerAIAudioSource = source;
   source.buffer = decoded;
   developerAIFreeOutputGain = developerAIAudioContext.createGain();
-  developerAIFreeOutputGain.gain.value = developerAISpeakerMode ? 1 : 0.35;
+  developerAIFreeOutputGain.gain.value = developerAISpeakerMode ? 1 : 0.62;
   source.connect(developerAIFreeOutputGain);
   developerAIFreeOutputGain.connect(developerAIAudioContext.destination);
   if (developerAITestRecording && developerAITestRecordDestination) {
@@ -6850,6 +6855,7 @@ async function playDeveloperAIWebAudio(base64, mimeType = "audio/mpeg") {
   };
 
   source.start(0);
+  developerAICallManagerMarkPlaybackStarted();
   developerAICallManagerLastRecoveryAt = 0;
   developerAICallManagerPlaybackFailures = 0;
   developerAICallManagerLastHealthyAt = Date.now();
@@ -6884,7 +6890,7 @@ function playDeveloperAIAudio(base64, mimeType = "audio/mpeg") {
     try {
       developerAIAudio = new Audio("data:" + mimeType + ";base64," + base64);
       developerAIAudio.playsInline = true;
-      developerAIAudio.volume = developerAISpeakerMode ? 1 : 0.35;
+      developerAIAudio.volume = developerAISpeakerMode ? 1 : 0.62;
       applyDeveloperAIAudioOutput(developerAIPreferredAudioOutput).catch(() => {});
 
       developerAIAudio.onended = () => {
