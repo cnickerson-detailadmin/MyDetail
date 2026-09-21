@@ -7324,7 +7324,50 @@ async function playDeveloperAIWebAudio(base64, mimeType = "audio/mpeg") {
   developerAICallManagerLastHealthyAt = Date.now();
 }
 
-function playDeveloperAIAudio(base64, mimeType = "audio/mpeg") {
+function speakDeveloperAIBrowserFallback(text) {
+  const value = String(text || "").trim();
+  if (!value || !("speechSynthesis" in window)) return false;
+  try {
+    speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(value.slice(0, 1200));
+    utterance.rate = 1.02;
+    utterance.pitch = 0.92;
+    utterance.volume = developerAISpeakerMode ? 1 : 0.72;
+
+    const voices = speechSynthesis.getVoices?.() || [];
+    const preferred = voices.find(v => /en[-_ ]?US/i.test(v.lang || "") && /alex|daniel|fred|aaron|gordon|reed|rocko/i.test(v.name || ""))
+      || voices.find(v => /en[-_ ]?US/i.test(v.lang || ""))
+      || voices[0];
+    if (preferred) utterance.voice = preferred;
+
+    utterance.onstart = () => {
+      setDeveloperAIPipelineStage("browser-voice-fallback", preferred?.name || "system voice");
+      developerAICallManagerMarkPlaybackStarted();
+      updateDeveloperAICallWindow("🟠 FALLBACK VOICE", "Primary audio failed, so iPhone system speech is keeping Seth audible.");
+    };
+    utterance.onend = () => {
+      developerAISpeaking = false;
+      setDeveloperAIAudioSessionType("play-and-record");
+      restartDeveloperAIListening(250);
+    };
+    utterance.onerror = event => {
+      developerAISpeaking = false;
+      setDeveloperAIPipelineStage("browser-voice-fallback-failed", String(event?.error || "speech synthesis failed"));
+      updateDeveloperAICallWindow("🔴 VOICE FAILURE", "Both generated audio and the iPhone speech fallback failed.");
+      restartDeveloperAIListening(250);
+    };
+
+    developerAISpeaking = true;
+    setDeveloperAIAudioSessionType("playback");
+    speechSynthesis.speak(utterance);
+    return true;
+  } catch (error) {
+    setDeveloperAIPipelineStage("browser-voice-fallback-failed", String(error?.message || error));
+    return false;
+  }
+}
+
+function playDeveloperAIAudio(base64, mimeType = "audio/mpeg", fallbackText = "") {
   if (developerAIUserIsSpeaking) {
     developerAIPendingVoiceReply = { audioBase64: base64, mimeType };
     updateDeveloperAICallWindow("Listening…", "Reply is ready. I’ll wait until you finish.");
@@ -7333,7 +7376,7 @@ function playDeveloperAIAudio(base64, mimeType = "audio/mpeg") {
 
   if (!base64) {
     developerAISpeaking = false;
-    restartDeveloperAIListening();
+    if (!speakDeveloperAIBrowserFallback(fallbackText)) restartDeveloperAIListening();
     return;
   }
 
@@ -7375,8 +7418,8 @@ function playDeveloperAIAudio(base64, mimeType = "audio/mpeg") {
         developerAISpeaking = false;
         developerAICallManagerSet("failure", "Browser audio element could not decode/play Seth audio", "Inspect returned MIME type and iPhone audio route", "Fallback playback failed");
         updateDeveloperAICallWindow("🔴 AUDIO DIAGNOSIS", "Voice data arrived, but Safari could not play it. This points to audio format/decoder or output routing, not Seth's AI response.");
-        if (status) status.textContent = "Voice playback failed — diagnostic captured.";
-        restartDeveloperAIListening(250);
+        if (status) status.textContent = "Voice playback failed — switching to iPhone system speech fallback.";
+        if (!speakDeveloperAIBrowserFallback(fallbackText)) restartDeveloperAIListening(250);
       };
 
       developerAIAudio.play().catch((error) => {
@@ -7384,8 +7427,8 @@ function playDeveloperAIAudio(base64, mimeType = "audio/mpeg") {
         developerAISpeaking = false;
         developerAICallManagerSet("failure", "iPhone blocked or failed audio playback", "Re-arm audio from the CALL button and retry current provider", String(error?.name || "play() rejected"));
         updateDeveloperAICallWindow("🔴 PLAYBACK BLOCKED", "MyService received Seth’s audio but iPhone did not start it. The call scanner captured the playback failure.");
-        if (status) status.textContent = "Playback blocked — MyService captured the failing stage.";
-        restartDeveloperAIListening(250);
+        if (status) status.textContent = "Playback blocked — switching to iPhone system speech fallback.";
+        if (!speakDeveloperAIBrowserFallback(fallbackText)) restartDeveloperAIListening(250);
       });
     } catch (_) {
       developerAISpeaking = false;
@@ -8384,11 +8427,12 @@ async function answerDeveloperAIFreeCall(message) {
     if (developerAICallMode) {
       developerAICallManagerMarkProviderReply(!!response.audioBase64);
       if (response.audioBase64) {
-        playDeveloperAIAudio(response.audioBase64, response.audioMimeType || "audio/mpeg");
+        playDeveloperAIAudio(response.audioBase64, response.audioMimeType || "audio/mpeg", reply);
       } else {
-        updateDeveloperAICallWindow("Voice unavailable", reply);
+        updateDeveloperAICallWindow("🟠 USING IPHONE VOICE", "Generated voice was unavailable, so Seth is using the device speech fallback.");
+        speakDeveloperAIBrowserFallback(reply);
         if ($("developer-ai-status")) $("developer-ai-status").textContent =
-          "Seth returned text, but voice failed: " + String(response.voiceError || "no audio returned.");
+          "Generated voice unavailable — iPhone speech fallback active.";
       }
     }
   } catch (error) {
@@ -8698,7 +8742,7 @@ async function greetDeveloperAIFreeCall(provider) {
       developerAIUserIsSpeaking = false;
       updateDeveloperAICallWindow("Greeting received…", "MyService received Seth’s voice from " + provider + "; verifying iPhone playback.");
       setDeveloperAIPipelineStage("starting-playback", String(voice.audioMimeType || "audio/mpeg"));
-      playDeveloperAIAudio(voice.audioBase64, voice.audioMimeType || "audio/mpeg");
+      playDeveloperAIAudio(voice.audioBase64, voice.audioMimeType || "audio/mpeg", startupGreeting);
       if (firstIntroduction) {
         try { localStorage.setItem(introKey, "1"); } catch (_) {}
       }
@@ -8712,6 +8756,10 @@ async function greetDeveloperAIFreeCall(provider) {
       updateDeveloperAICallWindow("⚡ AUTO TROUBLESHOOTING", "Greeting failed. Seth is tracing the voice pipeline automatically…");
       const recovered = await autoRecoverDeveloperAICall("Greeting failure: " + message).catch(() => false);
       if (recovered) return true;
+      if (speakDeveloperAIBrowserFallback(startupGreeting)) {
+        updateDeveloperAICallWindow("🟠 FALLBACK VOICE", "Generated greeting failed; iPhone system speech is keeping Seth audible.");
+        return true;
+      }
       updateDeveloperAICallWindow("Voice unavailable", developerAIPipelineStage + " • " + (developerAIPipelineLastError || message));
     }
     throw new Error(message);
