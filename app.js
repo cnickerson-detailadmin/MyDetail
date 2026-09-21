@@ -8349,35 +8349,20 @@ async function startDeveloperAIRealtimeCall(isReconnect = false) {
   };
 
   ws.onopen = () => {
+    // Keep first handshake deliberately minimal and aligned with Google's
+    // current raw-WebSocket Live example. Add tuning only after setupComplete.
     send({
       setup: {
         model: "models/" + model,
-        generationConfig: {
-          responseModalities: ["AUDIO"],
-          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Algenib" } } }
-        },
-        inputAudioTranscription: {},
-        outputAudioTranscription: {},
-        realtimeInputConfig: {
-          automaticActivityDetection: {
-            disabled: false,
-            startOfSpeechSensitivity: "START_SENSITIVITY_HIGH",
-            endOfSpeechSensitivity: "END_SENSITIVITY_HIGH",
-            prefixPaddingMs: 20,
-            silenceDurationMs: 500
-          },
-          activityHandling: "START_OF_ACTIVITY_INTERRUPTS"
-        },
+        responseModalities: ["AUDIO"],
         systemInstruction: {
           parts: [{
             text:
               "Your name is Seth. You are MyService's private developer voice AI. " +
-              "Sound like a calm adult guy on a real phone call: deeper, warm, relaxed, low-key, concise, natural contractions and connected phrasing. " +
-              "Never sound bubbly, salesy, robotic, over-enunciated, or like a scripted assistant. Never swear. " +
-              "Wait for the developer to finish, allow natural pauses, and immediately stop speaking when interrupted. " +
-              "Troubleshoot root causes, separate verified facts from guesses, and give one practical next action at a time. " +
-              "Never reveal or request passwords, PINs, API keys, tokens, payment-card data, SSNs, or private keys. " +
-              "Never claim you changed or fixed MyService unless an approved tool result proves it. Voice alone never authorizes code, security, destructive, billing, payroll, permissions, or employee-status changes."
+              "Sound extremely human and conversational: calm adult male, deeper and warm, relaxed, low-key, concise, natural contractions, connected phrasing and realistic pauses. " +
+              "Never sound bubbly, salesy, robotic, over-enunciated, or scripted. Never swear. " +
+              "Stop when interrupted. Troubleshoot root causes and give one practical next action at a time. " +
+              "Never reveal or request secrets, and never claim a change was made unless an approved tool result proves it."
           }]
         }
       }
@@ -8448,12 +8433,14 @@ async function startDeveloperAIRealtimeCall(isReconnect = false) {
       if (status) status.textContent = "Gemini Live connection error.";
     }
   };
-  ws.onclose = () => {
+  ws.onclose = event => {
     processor.onaudioprocess = null;
     try { processor.disconnect(); } catch (_) {}
     try { silentGain.disconnect(); } catch (_) {}
     if (developerAICallMode) {
-      updateDeveloperAICallWindow("Connection interrupted", "Reconnecting automatically…");
+      const closeDetail = "Gemini Live closed • " + String(event?.code || "no code") + (event?.reason ? " • " + event.reason : "");
+      updateDeveloperAICallWindow("Connection interrupted", closeDetail);
+      if (status) status.textContent = closeDetail;
       scheduleDeveloperAIReconnect();
     }
   };
