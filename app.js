@@ -7469,7 +7469,7 @@ async function refreshDeveloperAIAudioOutputControl() {
     ...options.filter(option => !option.bluetooth)
   ];
   select.innerHTML = ordered.map(option =>
-    '<option value="' + escapeHtml(option.id) + '">' + escapeHtml(option.label) + '</option>'
+    '<option value="' + escapeHTML(option.id) + '">' + escapeHTML(option.label) + '</option>'
   ).join("");
   if (ordered.some(option => option.id === developerAIPreferredAudioOutput)) {
     select.value = developerAIPreferredAudioOutput;
