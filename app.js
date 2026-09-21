@@ -8673,8 +8673,8 @@ async function startDeveloperAIFreeCall(provider = "gemini", startupToken = deve
   updateDeveloperAICallWindow("Connecting…", "Preparing Seth’s opening audio");
   setDeveloperAICallScrollSafe();
 
-  const button = ("#developer-ai-call");
-  const status = ("#developer-ai-status");
+  const button = $("developer-ai-call");
+  const status = $("developer-ai-status");
   if (button) button.textContent = "■ END CALL";
   if (status) status.textContent = "Starting Seth voice…";
 
