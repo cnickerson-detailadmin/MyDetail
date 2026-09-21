@@ -9041,7 +9041,9 @@ async function sendDeveloperAIMessage(event) {
       rootCauseFirst: true,
       verifyBeforeClaimingFixed: true,
       regressionAware: true,
-      securityFirst: true
+      securityFirst: true,
+      responseStyle: "fast",
+      replyInstruction: "Reply immediately with the useful answer first. Keep routine replies short and conversational. Do deeper analysis internally when troubleshooting, but do not pad the visible response with unnecessary explanation. Ask a question only when the missing information truly blocks progress."
     };
     if (memory?.context) context.resumeNote = "Saved progress for " + memory.topic + ": " + memory.context;
     const media = await developerAIReadMediaAttachments();
