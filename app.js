@@ -8023,7 +8023,7 @@ async function startDeveloperAIFreeMediaCapture() {
   return true;
 }
 
-async function startDeveloperAIFreeCall(provider = "cloudflare") {
+async function startDeveloperAIFreeCall(provider = "gemini") {
   const setup = await callMyServiceEdgeFunction("developer-ai", { action: provider + "_status" });
   if (!setup.configured) throw new Error(provider + " voice needs its server configuration.");
 
@@ -8107,8 +8107,7 @@ async function greetDeveloperAIFreeCall(provider) {
   let firstIntroduction = false;
   try { firstIntroduction = localStorage.getItem(introKey) !== "1"; } catch (_) {}
   const greeting = firstIntroduction
-    ? "Hey, I’m Seth. I’ve got an overview of your MyService controls and features, and I’m your advanced AI assistant while you build this thing. Since you’re starting out in software development and business, part of my job is keeping you grounded. I’ll be direct when something isn’t realistic, when you’re getting in over your head, or when there’s a simpler way to get where you’re trying to go. When you’ve genuinely got a good idea, I’ll tell you that too. I have a broad base of software and business knowledge, but I’ll only access parts of MyService I’m specifically permitted to access, and I’ll only use that access to help with MyService. I can advise you, challenge an idea, and suggest better options, but you make the final decisions. Anyway, what’re we working on?"
-    : "Hey, it’s Seth. What’re we working on?";
+    ? "Hey, I’m Seth. I’ve got an overview of your MyService controls and features. I’m here to help you build this, troubleshoot it, and keep the business side realistic. I’ll be direct when something won’t work, and I’ll tell you when an idea is genuinely solid. I only access the MyService areas I’m permitted to access, and you make the final decisions. So, what’re we working on?"    : "Hey, it’s Seth. What’re we working on?";
 
   // Startup greeting must win the audio turn. Mic/VAD can report room noise as
   // user speech while the TTS request is in flight, which previously queued the
@@ -8163,8 +8162,8 @@ async function toggleDeveloperAICall() {
   // providers so a known-disabled path cannot turn a recoverable outage into a
   // misleading third failure.
   const attempts = [
-    ["cloudflare", () => startDeveloperAIFreeCall("cloudflare")],
-    ["gemini", () => startDeveloperAIFreeCall("gemini")]
+    ["gemini", () => startDeveloperAIFreeCall("gemini")],
+    ["cloudflare", () => startDeveloperAIFreeCall("cloudflare")]
   ];
 
   for (const [name, start] of attempts) {
