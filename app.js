@@ -6770,6 +6770,21 @@ function reportDeveloperAICallHealth(label, detail = "") {
 
 function startDeveloperAICallManager() {
   developerAICallManagerSet("degraded", "Call starting", "Run independent health checks", "Supervision active");
+
+  // Extermination Team call-mode supervision: scan for bugs for the ENTIRE
+  // lifetime of the active Seth call, not merely at startup.
+  if (window.__myserviceCallExterminationTimer) {
+    clearInterval(window.__myserviceCallExterminationTimer);
+  }
+  window.__myserviceCallExterminationTimer = setInterval(() => {
+    if (!developerAICallMode) return;
+    try {
+      const team = document.getElementById("myservice-extermination-team");
+      if (team && typeof window.__myserviceRunExterminationScan === "function") {
+        window.__myserviceRunExterminationScan();
+      }
+    } catch (_) {}
+  }, 1000);
   stopDeveloperAICallManager();
   developerAICallManagerTimer = setInterval(async () => {
     if (!developerAICallMode || document.hidden) return;
@@ -6807,6 +6822,10 @@ function startDeveloperAICallManager() {
 }
 
 function stopDeveloperAICall() {
+  if (window.__myserviceCallExterminationTimer) {
+    clearInterval(window.__myserviceCallExterminationTimer);
+    window.__myserviceCallExterminationTimer = null;
+  }
   if (developerAITestRecording) stopDeveloperAITestRecording(true);
   developerAICallMode = false;
   stopDeveloperAICallManager();
@@ -8982,6 +9001,10 @@ function installTrainingCenter() {
     if (recentErrors.length > 50) recentErrors.shift();
     record("critical", "Unhandled promise rejection", message);
   });
+
+  window.__myserviceRunExterminationScan = function () {
+    try { scan(); } catch (_) {}
+  };
 
   function scan() {
     try {
