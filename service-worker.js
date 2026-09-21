@@ -1,5 +1,5 @@
-const CACHE_NAME = "myservice-cache-v31";
-const BUILD_ID = "46-natural-fast-voice";
+const CACHE_NAME = "myservice-cache-v32";
+const BUILD_ID = "47-no-recurring-pin";
 
 const APP_SHELL = [
   "./styles.css?v=4-pro-desktop",
