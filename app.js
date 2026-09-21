@@ -9005,17 +9005,34 @@ async function sendDeveloperAIMessage(event) {
     const memory = await handleDeveloperAIMemoryCommand(message, history);
     const context = getDeveloperAISafeContext();
     if (memory?.context) context.resumeNote = "Saved progress for " + memory.topic + ": " + memory.context;
-    const response = memory?.reply ? { reply: memory.reply } : await callMyServiceEdgeFunction("developer-ai", {
-      // Use the full Developer AI brain/tool path here. Gemini remains only as
-      // a no-tools fallback; the primary developer chat can inspect approved
-      // repo files and use the guarded code broker after explicit confirmation.
-      action: "chat",
-      messages: history.slice(-12),
-      voice: developerAICallMode === true,
-      voiceNetwork: developerAICallMode ? developerAIVoiceModeForNetwork() : null,
-      allowCodePush: developerAICodePushEnabled(),
-      context
-    });
+    let response = memory?.reply ? { reply: memory.reply } : null;
+    if (!response) {
+      // Free-first Seth chat: do not depend on paid OpenAI. Try Gemini first,
+      // then automatically fail over to Cloudflare when the provider is
+      // unavailable, rate-limited, or not configured.
+      const providers = ["gemini", "cloudflare"];
+      const providerErrors = [];
+      for (const provider of providers) {
+        try {
+          const setup = await callMyServiceEdgeFunction("developer-ai", { action: provider + "_status" });
+          if (!setup?.configured) throw new Error(provider + " is not configured.");
+          response = await callMyServiceEdgeFunction("developer-ai", {
+            action: provider + "_chat",
+            messages: history.slice(-12),
+            voice: developerAICallMode === true,
+            voiceRepairMode: developerAIVoiceRepairMode,
+            allowCodePush: developerAICodePushEnabled(),
+            context
+          });
+          if (!response?.reply) throw new Error(provider + " returned no reply.");
+          response.model = response.model || provider;
+          break;
+        } catch (providerError) {
+          providerErrors.push(provider + ": " + String(providerError?.message || "unavailable").slice(0, 120));
+        }
+      }
+      if (!response) throw new Error("Gemini and Cloudflare are unavailable. " + providerErrors.join(" • "));
+    }
 
     history.push({
       role: "assistant",
