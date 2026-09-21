@@ -7689,9 +7689,15 @@ async function refreshDeveloperAIAudioOutputControl() {
 
 
 async function runDeveloperAICallTroubleshooter(issue) {
-  if (!developerAICallMode) return;
+  // Troubleshooting is also the recovery path when normal call startup failed.
+  if (!developerAICallMode && !$("developer-ai-call-window")) return;
 
   if (issue === "not-answering") {
+    // Re-arm the call state so a failed startup can be actively recovered.
+    developerAICallMode = true;
+    developerAIFreeCallMode = true;
+    if (!developerAIFreeProvider) developerAIFreeProvider = "gemini";
+    unlockDeveloperAIAudio();
     updateDeveloperAICallWindow("🛠 AUTO TROUBLESHOOT", "Checking provider, microphone, playback, and recovery paths…");
     try {
       await runSethSelfCheck();
@@ -7710,7 +7716,7 @@ async function runDeveloperAICallTroubleshooter(issue) {
     try {
       const probe = await callMyServiceEdgeFunction("developer-ai", {
         action: developerAIFreeProvider + "_tts",
-        text: "Seth recovery check.",
+        text: "Hey, I’m back. Troubleshooting restored my voice. What do you need help with?",
         voiceRepairMode: developerAIVoiceRepairMode
       });
       if (probe?.audioBase64) {
@@ -7726,7 +7732,7 @@ async function runDeveloperAICallTroubleshooter(issue) {
         );
         const probe = await callMyServiceEdgeFunction("developer-ai", {
           action: replacement + "_tts",
-          text: "Seth recovery check.",
+          text: "Hey, I’m back. Troubleshooting restored my voice. What do you need help with?",
           voiceRepairMode: developerAIVoiceRepairMode
         });
         if (probe?.audioBase64) {
