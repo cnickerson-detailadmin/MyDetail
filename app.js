@@ -2925,15 +2925,16 @@ function installDeveloperExperience() {
           </div>
         </div>
 
-        <input id="developer-ai-media-input" type="file" accept="image/*,video/*" multiple hidden onchange="handleDeveloperAIMediaSelection(event)">
-        <div style="display:flex;gap:8px;margin:0 0 8px;align-items:center;">
-          <button id="developer-ai-add-media" type="button" onclick="document.getElementById('developer-ai-media-input')?.click()" aria-label="Add photos or videos" style="display:inline-flex!important;visibility:visible!important;opacity:1!important;min-height:42px;border:1px solid #1677f2;background:#fff;color:#0f5fc7;border-radius:18px;padding:0 14px;font-weight:900;align-items:center;justify-content:center;">📷 ADD PHOTO / VIDEO</button>
-          <span id="developer-ai-media-label" style="font-size:12px;color:#61728c;font-weight:700;">No media selected</span>
-        </div>
-        <form id="developer-ai-message-form" onsubmit="sendDeveloperAIMessage(event)" style="display:flex;gap:8px;align-items:center;position:relative;z-index:20;pointer-events:auto!important;">
-          <textarea id="developer-ai-input" rows="1" maxlength="5000" placeholder="Message Seth…" autocomplete="off" style="position:relative;z-index:21;width:100%;min-height:46px;max-height:90px;resize:vertical;padding:10px 12px;box-sizing:border-box;border-radius:18px;pointer-events:auto!important;touch-action:manipulation;-webkit-user-select:text;user-select:text;"></textarea>
+        <input id="developer-ai-media-input" type="file" accept="image/*" multiple hidden onchange="handleDeveloperAIMediaSelection(event)">
+        <form id="developer-ai-message-form" onsubmit="sendDeveloperAIMessage(event)" style="display:flex;gap:8px;align-items:flex-end;position:relative;z-index:20;pointer-events:auto!important;">
+          <button id="developer-ai-add-media" type="button" onclick="document.getElementById('developer-ai-media-input')?.click()" aria-label="Add photo" style="position:relative;z-index:21;display:inline-flex!important;min-width:46px;width:46px;height:46px;border:1px solid #1677f2;background:#fff;color:#0f5fc7;border-radius:18px;font-size:20px;align-items:center;justify-content:center;pointer-events:auto!important;">📷</button>
+          <div style="min-width:0;flex:1;">
+            <div id="developer-ai-media-preview" style="display:none;gap:6px;align-items:center;margin:0 0 6px;overflow-x:auto;"></div>
+            <textarea id="developer-ai-input" rows="1" maxlength="5000" placeholder="Message Seth…" autocomplete="off" style="position:relative;z-index:21;width:100%;min-height:46px;max-height:90px;resize:vertical;padding:10px 12px;box-sizing:border-box;border-radius:18px;pointer-events:auto!important;touch-action:manipulation;-webkit-user-select:text;user-select:text;"></textarea>
+          </div>
           <button id="developer-ai-send" class="primary-button" type="submit" style="position:relative;z-index:21;min-height:46px;flex:0 0 auto;border-radius:18px;pointer-events:auto!important;touch-action:manipulation;">SEND</button>
         </form>
+        <span id="developer-ai-media-label" style="display:none;"></span>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
           <div id="developer-ai-audio-output-wrap" style="margin:10px 0 8px;">
             <label for="developer-ai-audio-output" style="display:block;font-size:12px;font-weight:850;margin-bottom:5px;">AUDIO OUTPUT</label>
@@ -9012,18 +9013,43 @@ async function generateDeveloperAIImage() {
 
 let developerAIPendingMedia = [];
 
+function clearDeveloperAIPendingMedia() {
+  developerAIPendingMedia = [];
+  const mediaInput = $("developer-ai-media-input");
+  if (mediaInput) mediaInput.value = "";
+  const preview = $("developer-ai-media-preview");
+  if (preview) {
+    preview.innerHTML = "";
+    preview.style.display = "none";
+  }
+}
+
 function handleDeveloperAIMediaSelection(event) {
   const files = Array.from(event?.target?.files || []).filter(file =>
-    String(file.type || "").startsWith("image/") || String(file.type || "").startsWith("video/")
+    String(file.type || "").startsWith("image/")
   );
   developerAIPendingMedia = files.slice(0, 4);
   const status = $("developer-ai-status");
-  const label = $("developer-ai-media-label");
-  const mediaText = developerAIPendingMedia.length
-    ? developerAIPendingMedia.length + " photo/video file" + (developerAIPendingMedia.length === 1 ? "" : "s") + " attached"
-    : "No supported photo/video selected";
-  if (status) status.textContent = mediaText + (developerAIPendingMedia.length ? " to Seth." : ".");
-  if (label) label.textContent = mediaText;
+  const preview = $("developer-ai-media-preview");
+  if (preview) {
+    preview.innerHTML = "";
+    for (const file of developerAIPendingMedia) {
+      const url = URL.createObjectURL(file);
+      const item = document.createElement("div");
+      item.style.cssText = "position:relative;flex:0 0 auto;width:54px;height:54px;border-radius:12px;overflow:hidden;border:1px solid #dbe4f0;background:#fff;";
+      const img = document.createElement("img");
+      img.src = url;
+      img.alt = "Selected photo";
+      img.style.cssText = "width:100%;height:100%;object-fit:cover;display:block;";
+      img.onload = () => URL.revokeObjectURL(url);
+      item.appendChild(img);
+      preview.appendChild(item);
+    }
+    preview.style.display = developerAIPendingMedia.length ? "flex" : "none";
+  }
+  if (status) status.textContent = developerAIPendingMedia.length
+    ? "Photo ready — add a message or tap SEND."
+    : "No supported photo selected.";
 }
 
 async function developerAIReadMediaAttachments() {
@@ -9107,7 +9133,9 @@ async function sendDeveloperAIMessage(event) {
       // Free-first Seth chat: do not depend on paid OpenAI. Try Gemini first,
       // then automatically fail over to Cloudflare when the provider is
       // unavailable, rate-limited, or not configured.
-      const providers = ["gemini", "cloudflare"];
+      // Photo analysis requires a provider that actually receives vision input.
+      // Never fall back to text-only Cloudflare and pretend it saw the photo.
+      const providers = media.length ? ["gemini"] : ["gemini", "cloudflare"];
       const providerErrors = [];
       for (const provider of providers) {
         try {
@@ -9135,11 +9163,7 @@ async function sendDeveloperAIMessage(event) {
       role: "assistant",
       content: String(response.reply || "No response returned.")
     });
-    developerAIPendingMedia = [];
-    const mediaInput = $("developer-ai-media-input");
-    if (mediaInput) mediaInput.value = "";
-    const mediaLabel = $("developer-ai-media-label");
-    if (mediaLabel) mediaLabel.textContent = "No media selected";
+    clearDeveloperAIPendingMedia();
     saveDeveloperAIHistory(history);
     renderDeveloperAIChat();
 
