@@ -7030,9 +7030,19 @@ function speakDeveloperAIFreeReply(reply) {
   return new Promise(resolve => {
     const synth = window.speechSynthesis;
     if (!synth || typeof SpeechSynthesisUtterance === "undefined") {
+      updateDeveloperAICallWindow("Voice unavailable", "This iPhone browser did not expose speech output.");
       resolve();
       return;
     }
+
+    const micTracks = developerAIFreeMicStream?.getAudioTracks?.() || [];
+    micTracks.forEach(track => { track.enabled = false; });
+
+    try {
+      if (developerAIAudioContext?.state === "suspended") {
+        developerAIAudioContext.resume().catch(() => {});
+      }
+    } catch (_) {}
 
     synth.cancel();
     const utterance = new SpeechSynthesisUtterance(cleanDeveloperAIFreeReply(reply));
@@ -7043,22 +7053,39 @@ function speakDeveloperAIFreeReply(reply) {
     utterance.pitch = 0.98;
     utterance.volume = developerAISpeakerMode ? 1 : 0.45;
 
-    utterance.onstart = () => {
-      developerAISpeaking = true;
-      updateDeveloperAICallWindow("Speaking…", "Developer AI • no-credit mode");
-    };
-    utterance.onend = () => {
+    let started = false;
+    const finish = () => {
+      micTracks.forEach(track => { track.enabled = true; });
       developerAISpeaking = false;
       developerAISpeechUtterance = null;
-      updateDeveloperAICallWindow("Listening…", "Voice input ready");
-      resolve();
-    };
-    utterance.onerror = () => {
-      developerAISpeaking = false;
-      developerAISpeechUtterance = null;
+      updateDeveloperAICallWindow("Listening…", "Stable microphone ready");
       resolve();
     };
 
+    const watchdog = setTimeout(() => {
+      if (!started) {
+        updateDeveloperAICallWindow("Voice blocked", "Tap Play reply / test audio once, then replies should play automatically.");
+        finish();
+      }
+    }, 1800);
+
+    utterance.onstart = () => {
+      started = true;
+      clearTimeout(watchdog);
+      developerAISpeaking = true;
+      updateDeveloperAICallWindow("Speaking…", "Developer AI");
+    };
+    utterance.onend = () => {
+      clearTimeout(watchdog);
+      finish();
+    };
+    utterance.onerror = () => {
+      clearTimeout(watchdog);
+      updateDeveloperAICallWindow("Voice playback issue", "Tap Play reply / test audio once.");
+      finish();
+    };
+
+    synth.resume?.();
     synth.speak(utterance);
   });
 }
