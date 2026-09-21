@@ -7664,13 +7664,12 @@ async function toggleDeveloperAICall() {
   }
 
   unlockDeveloperAIAudio();
-  // Use realtime first, then Cloudflare or Gemini generated speech.
-  try {
-    await startDeveloperAIRealtimeCall();
-    return;
-  } catch (realtimeError) {
-    stopDeveloperAICall();
-    for (const provider of ["cloudflare", "gemini"]) {
+  // iPhone Safari/PWA: prefer the generated-speech path first. It uses the
+  // AudioContext unlocked by the CALL tap and avoids WebRTC remote-track
+  // routing failures that can connect successfully while producing silence.
+  const isiPhone = /iPhone/i.test(navigator.userAgent);
+  if (isiPhone) {
+    for (const provider of ["gemini", "cloudflare"]) {
       try {
         await startDeveloperAIFreeCall(provider);
         return;
@@ -7678,9 +7677,31 @@ async function toggleDeveloperAICall() {
         stopDeveloperAICall();
       }
     }
-    openDeveloperAICallWindow();
-    updateDeveloperAICallWindow("Voice unavailable", "Realtime, Cloudflare, and Gemini could not start. Run SELF-CHECK for details.");
+    try {
+      await startDeveloperAIRealtimeCall();
+      return;
+    } catch (_) {
+      stopDeveloperAICall();
+    }
+  } else {
+    try {
+      await startDeveloperAIRealtimeCall();
+      return;
+    } catch (realtimeError) {
+      stopDeveloperAICall();
+      for (const provider of ["cloudflare", "gemini"]) {
+        try {
+          await startDeveloperAIFreeCall(provider);
+          return;
+        } catch (_) {
+          stopDeveloperAICall();
+        }
+      }
+    }
   }
+
+  openDeveloperAICallWindow();
+  updateDeveloperAICallWindow("Voice unavailable", "Realtime, Cloudflare, and Gemini could not start. Run SELF-CHECK for details.");
 }
 
 async function generateDeveloperAIImage() {
