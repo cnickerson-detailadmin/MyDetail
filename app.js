@@ -7787,8 +7787,11 @@ async function runDeveloperAICallTroubleshooter(issue) {
       }
     } catch (primaryError) {
       try {
+        // Provider errors (including free/rate limits) automatically fail over.
+        // Preserve the call and retry the other approved provider immediately.
+        const failedProvider = developerAIFreeProvider || "gemini";
         const replacement = await switchDeveloperAIFreeProvider(
-          developerAIFreeProvider,
+          failedProvider,
           String(primaryError?.message || "Voice provider did not respond.")
         );
         const probe = await callMyServiceEdgeFunction("developer-ai", {
@@ -7802,10 +7805,9 @@ async function runDeveloperAICallTroubleshooter(issue) {
           return;
         }
       } catch (fallbackError) {
-        updateDeveloperAICallWindow(
-          "🔴 COULD NOT AUTO-FIX",
-          String(fallbackError?.message || primaryError?.message || "No working voice path was available.").slice(0, 220)
-        );
+        const message = String(fallbackError?.message || primaryError?.message || "No working voice path was available.").slice(0, 220);
+        developerAICallManagerRecord("provider-failover-exhausted", message);
+        updateDeveloperAICallWindow("🔴 BOTH PROVIDERS UNAVAILABLE", message);
         return;
       }
     }
