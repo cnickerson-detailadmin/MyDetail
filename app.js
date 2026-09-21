@@ -1940,7 +1940,235 @@ function installLoginHelpSettings() {
   $("login-help-phone").value = state.settings.loginHelpPhone || "";
 }
 
+
+/* =========================================================
+   CORE OPERATIONS — RESTORED HANDLERS
+   Repairs controls that existed in the UI without functions.
+   These are local demo-state actions only; no real payment/POS
+   processing is performed.
+   ========================================================= */
+
+function renderJobs() {
+  const list = $("jobList");
+  if (!list) return;
+  const jobs = Array.isArray(state.jobs) ? state.jobs : [];
+  list.innerHTML = jobs.length ? jobs.map(job => `
+    <div class="list-row">
+      <div>
+        <strong>${escapeHTML(job.customer || "Customer")}</strong>
+        <small>${escapeHTML(job.orderType || "Order")} • ${escapeHTML(job.order || "")}</small>
+      </div>
+      <strong>${money(job.price || 0)}</strong>
+    </div>
+  `).join("") : '<div class="empty-state">No orders yet.</div>';
+}
+
+function addJob() {
+  const customer = prompt("Customer name:");
+  if (!customer) return;
+  const order = prompt("Order / service:");
+  if (!order) return;
+  const priceInput = prompt("Price:", "0.00");
+  if (priceInput === null) return;
+  const price = Number(priceInput);
+  if (!Number.isFinite(price) || price < 0) {
+    alert("Enter a valid price.");
+    return;
+  }
+
+  state.jobs = Array.isArray(state.jobs) ? state.jobs : [];
+  state.jobs.unshift({
+    id: uid("job"),
+    customer: customer.trim(),
+    orderType: "Manual",
+    order: order.trim(),
+    employee: getCurrentUser()?.name || "Unassigned",
+    employeeId: getCurrentUser()?.id || null,
+    time: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    status: "Open",
+    price,
+    paymentMethod: "Unspecified"
+  });
+  addActivity("Order created", customer.trim() + " • " + money(price), "＋");
+  saveState();
+  renderJobs();
+}
+
+function renderCustomers() {
+  const list = $("customerList");
+  if (!list) return;
+  const query = String($("customerSearch")?.value || "").trim().toLowerCase();
+  const customers = (Array.isArray(state.customers) ? state.customers : [])
+    .filter(c => !query || [c.name,c.phone,c.email].some(v => String(v || "").toLowerCase().includes(query)));
+
+  list.innerHTML = customers.length ? customers.map(c => `
+    <div class="list-row">
+      <div>
+        <strong>${escapeHTML(c.name || "Customer")}</strong>
+        <small>${escapeHTML(c.phone || "")}${c.email ? " • " + escapeHTML(c.email) : ""}</small>
+      </div>
+    </div>
+  `).join("") : '<div class="empty-state">No matching customers.</div>';
+}
+
+function addCustomer() {
+  const name = prompt("Customer name:");
+  if (!name) return;
+  const phone = prompt("Phone (optional):", "") || "";
+  const email = prompt("Email (optional):", "") || "";
+
+  state.customers = Array.isArray(state.customers) ? state.customers : [];
+  state.customers.unshift({
+    id: uid("customer"),
+    name: name.trim(),
+    phone: phone.trim(),
+    email: email.trim(),
+    notes: "",
+    createdAt: new Date().toISOString()
+  });
+  addActivity("Customer added", name.trim(), "＋");
+  saveState();
+  renderCustomers();
+}
+
+function renderCashDrops() {
+  const list = $("cashDropList");
+  const drops = Array.isArray(state.cashDrops) ? state.cashDrops : [];
+  const deposited = drops.reduce((sum, d) => sum + Number(d.amount || 0), 0);
+  if ($("cashDeposited")) $("cashDeposited").textContent = money(deposited);
+  if ($("cashOverUnder")) $("cashOverUnder").textContent = money(deposited - Number(state.cashExpected || 0));
+  if (list) {
+    list.innerHTML = drops.length ? drops.map(d => `
+      <div class="list-row">
+        <div><strong>${money(d.amount)}</strong><small>${formatDate(d.createdAt)} • ${formatTime(d.createdAt)}</small></div>
+        <span>${escapeHTML(d.note || "")}</span>
+      </div>
+    `).join("") : '<div class="empty-state">No cash drops recorded.</div>';
+  }
+}
+
+function newCashDrop() {
+  const input = prompt("Cash drop amount:", "0.00");
+  if (input === null) return;
+  const amount = Number(input);
+  if (!Number.isFinite(amount) || amount < 0) {
+    alert("Enter a valid amount.");
+    return;
+  }
+  const note = prompt("Note (optional):", "") || "";
+  state.cashDrops = Array.isArray(state.cashDrops) ? state.cashDrops : [];
+  state.cashDrops.unshift({ id: uid("cash"), amount, note: note.trim(), createdAt: new Date().toISOString() });
+  addActivity("Cash drop recorded", money(amount), "$");
+  saveState();
+  renderCashDrops();
+}
+
+function tipTotals() {
+  const tips = Array.isArray(state.tips) ? state.tips : [];
+  const gross = tips.reduce((sum, t) => sum + Number(t.amount || 0), 0);
+  const fee = gross * Number(state.settings.defaultCardFeeRate || 0);
+  const taxes = gross * Number(state.settings.estimatedTaxRate || 0);
+  return { gross, fee, taxes, net: Math.max(0, gross - fee - taxes) };
+}
+
+function renderTips() {
+  const t = tipTotals();
+  const pairs = [
+    ["grossTips", t.gross], ["tipCardFees", t.fee], ["tipEstimatedTaxes", t.taxes],
+    ["netTips", t.net], ["reviewGrossTips", t.gross], ["reviewCardFees", t.fee],
+    ["reviewTaxes", t.taxes], ["reviewNetTips", t.net]
+  ];
+  pairs.forEach(([id, value]) => { if ($(id)) $(id).textContent = money(value); });
+
+  const list = $("employeeTipList");
+  if (list) {
+    const tips = Array.isArray(state.tips) ? state.tips : [];
+    list.innerHTML = tips.length ? tips.map(tip => `
+      <div class="list-row"><div><strong>${escapeHTML(tip.employee || "Manual tip")}</strong>
+      <small>${formatTime(tip.createdAt)}</small></div><strong>${money(tip.amount)}</strong></div>
+    `).join("") : '<div class="empty-state">No tips recorded today.</div>';
+  }
+}
+
+function addManualTip() {
+  const amountInput = prompt("Tip amount:", "0.00");
+  if (amountInput === null) return;
+  const amount = Number(amountInput);
+  if (!Number.isFinite(amount) || amount < 0) {
+    alert("Enter a valid tip amount.");
+    return;
+  }
+  const employee = prompt("Employee / source:", getCurrentUser()?.name || "Manual") || "Manual";
+  state.tips = Array.isArray(state.tips) ? state.tips : [];
+  state.tips.unshift({ id: uid("tip"), amount, employee: employee.trim(), createdAt: new Date().toISOString() });
+  saveState();
+  renderTips();
+}
+
+function openTipPayoutReview() {
+  const t = tipTotals();
+  alert("Estimated net payout: " + money(t.net) + "\n\nThis is a review only. MyService is not processing payroll or transferring funds.");
+}
+
+function changeTipMode() {
+  const value = $("tipMode")?.value || "pool";
+  state.settings.tipMode = value;
+  saveState();
+  if ($("tipModeDescription")) {
+    $("tipModeDescription").textContent = value === "individual"
+      ? "Tips are tracked by individual employee."
+      : "Tips are automatically divided between eligible employees.";
+  }
+}
+
+function changeSalesMode() {
+  const value = $("salesMode")?.value || "manual";
+  state.settings.salesMode = value;
+  saveState();
+  if ($("salesModeDescription")) {
+    $("salesModeDescription").textContent = value === "pos"
+      ? "Connected POS mode selected. A real POS connection still requires provider setup."
+      : "Sales and tips are currently entered manually.";
+  }
+}
+
+function openPosSettings() {
+  alert("POS integration is not connected yet. MyService will not claim or simulate a live payment connection.");
+}
+
+function submitFeedback(event) {
+  event?.preventDefault?.();
+  const type = $("feedbackType")?.value || "other";
+  const subject = String($("feedbackSubject")?.value || "").trim();
+  const message = String($("feedbackMessage")?.value || "").trim();
+  if (!message) return;
+
+  state.feedbackQueue = Array.isArray(state.feedbackQueue) ? state.feedbackQueue : [];
+  state.feedbackQueue.unshift({
+    id: uid("feedback"),
+    type,
+    subject,
+    message,
+    createdAt: new Date().toISOString()
+  });
+  saveState();
+  if ($("feedbackSubject")) $("feedbackSubject").value = "";
+  if ($("feedbackMessage")) $("feedbackMessage").value = "";
+  alert("Feedback saved in this MyService workspace.");
+}
+
+function renderOperationalBasics() {
+  renderJobs();
+  renderCustomers();
+  renderCashDrops();
+  renderTips();
+  changeTipMode();
+  changeSalesMode();
+}
+
 function renderAll() {
+  renderOperationalBasics();
   installLunchSettings();
   installLoginHelpSettings();
   renderSupportTickets();
