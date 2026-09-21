@@ -6035,7 +6035,10 @@ let developerAIListenTimer = null;
 let developerAIRealtimePc = null;
 let developerAIRealtimeStream = null;
 let developerAIRealtimeAudio = null;
+let developerAIRealtimeAudioSource = null;
 let developerAIRealtimeChannel = null;
+let developerAIRealtimeReplyTimer = null;
+let developerAILastRealtimeUserTranscript = "";
 let developerAISpeechBuffer = "";
 let developerAISpeechDebounce = null;
 let developerAIPendingVoiceReply = null;
@@ -6411,6 +6414,9 @@ function stopDeveloperAICall() {
   } catch (_) {}
   developerAIRealtimeStream = null;
 
+  try { developerAIRealtimeAudioSource?.disconnect?.(); } catch (_) {}
+  developerAIRealtimeAudioSource = null;
+
   try {
     if (developerAIRealtimeAudio) {
       developerAIRealtimeAudio.pause();
@@ -6427,6 +6433,8 @@ function stopDeveloperAICall() {
   developerAIPendingVoiceReply = null;
   developerAIFreeCallMode = false;
   developerAIQuietMode = false;
+  clearDeveloperAIRealtimeReplyTimer();
+  developerAILastRealtimeUserTranscript = "";
   stopDeveloperAIQuietWakeListener();
 
   try { window.speechSynthesis?.cancel?.(); } catch (_) {}
@@ -6646,6 +6654,44 @@ function openDeveloperAICallWindow() {
   };
 }
 
+function clearDeveloperAIRealtimeReplyTimer() {
+  if (developerAIRealtimeReplyTimer) clearTimeout(developerAIRealtimeReplyTimer);
+  developerAIRealtimeReplyTimer = null;
+}
+
+function armDeveloperAIRealtimeReplyFallback() {
+  clearDeveloperAIRealtimeReplyTimer();
+  developerAIRealtimeReplyTimer = setTimeout(async () => {
+    if (!developerAICallMode || developerAIQuietMode) return;
+
+    const transcript = String(developerAILastRealtimeUserTranscript || "").trim();
+    if (!transcript) {
+      updateDeveloperAICallWindow("Still listening…", "I didn’t get a usable transcript. Try that again.");
+      return;
+    }
+
+    // Stop any stuck realtime response before using the reliable text + local-speaker fallback.
+    try {
+      if (developerAIRealtimeChannel?.readyState === "open") {
+        developerAIRealtimeChannel.send(JSON.stringify({ type: "response.cancel" }));
+      }
+    } catch (_) {}
+
+    const input = $("developer-ai-input");
+    if (input) input.value = transcript;
+
+    updateDeveloperAICallWindow("Recovering audio…", "Using speaker fallback");
+    const status = $("developer-ai-status");
+    if (status) status.textContent = "Realtime audio was silent — using speaker fallback.";
+
+    try {
+      await sendDeveloperAIMessage();
+    } catch (_) {
+      updateDeveloperAICallWindow("Call issue", "Audio fallback failed. Tap Play reply / test audio.");
+    }
+  }, 6500);
+}
+
 function updateDeveloperAICallWindow(statusText, captionText = "") {
   const status = $("developer-ai-call-window-status");
   const caption = $("developer-ai-call-window-caption");
@@ -6683,6 +6729,7 @@ function handleDeveloperAIRealtimeEvent(event) {
   if (type === "input_audio_buffer.speech_stopped") {
     developerAIUserIsSpeaking = false;
     updateDeveloperAICallWindow("Thinking…", "");
+    armDeveloperAIRealtimeReplyFallback();
     return;
   }
 
@@ -6691,6 +6738,7 @@ function handleDeveloperAIRealtimeEvent(event) {
     type === "input_audio_transcription.completed"
   ) {
     const transcript = String(data?.transcript || data?.text || "").trim();
+    if (transcript) developerAILastRealtimeUserTranscript = transcript;
     if (transcript && developerAILooksLikeCustomerInteraction(transcript)) {
       setDeveloperAIQuietMode(true, "Customer interaction detected.");
     }
@@ -6710,11 +6758,20 @@ function handleDeveloperAIRealtimeEvent(event) {
   }
 
   if (type === "output_audio_buffer.started") {
+    clearDeveloperAIRealtimeReplyTimer();
+    try {
+      if (developerAIRealtimeAudio) {
+        developerAIRealtimeAudio.muted = false;
+        developerAIRealtimeAudio.volume = 1;
+        developerAIRealtimeAudio.play().catch(() => {});
+      }
+    } catch (_) {}
     updateDeveloperAICallWindow("Speaking…", "Developer AI");
     return;
   }
 
   if (type === "output_audio_buffer.stopped" || type === "response.done") {
+    clearDeveloperAIRealtimeReplyTimer();
     updateDeveloperAICallWindow("Listening…", "Your turn");
     return;
   }
@@ -6768,9 +6825,29 @@ async function startDeveloperAIRealtimeCall(isReconnect = false) {
   pc.ontrack = event => {
     const remote = event.streams?.[0];
     if (!remote) return;
+
+    // iPhone Safari can block a late HTMLMediaElement play() even though CALL was user-initiated.
+    // Route the remote WebRTC stream through the already-unlocked Web Audio context as the
+    // primary speaker path, while keeping the HTML audio element as a compatibility fallback.
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx) {
+        if (!developerAIAudioContext) developerAIAudioContext = new AudioCtx();
+        if (developerAIAudioContext.state === "suspended") {
+          developerAIAudioContext.resume().catch(() => {});
+        }
+        try { developerAIRealtimeAudioSource?.disconnect?.(); } catch (_) {}
+        developerAIRealtimeAudioSource = developerAIAudioContext.createMediaStreamSource(remote);
+        developerAIRealtimeAudioSource.connect(developerAIAudioContext.destination);
+      }
+    } catch (_) {}
+
     developerAIRealtimeAudio.srcObject = remote;
+    developerAIRealtimeAudio.muted = false;
+    developerAIRealtimeAudio.volume = 1;
     developerAIRealtimeAudio.play().catch(() => {
-      updateDeveloperAICallWindow("Audio blocked", "Tap the call screen once, then keep talking.");
+      // Web Audio above remains the primary iPhone speaker path.
+      updateDeveloperAICallWindow("Connected", "Audio is using the iPhone speaker fallback path.");
     });
   };
 
