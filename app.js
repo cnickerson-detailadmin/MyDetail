@@ -7908,7 +7908,7 @@ function openDeveloperAICallWindow() {
     "right:0",
     "height:100dvh",
     "z-index:2147483646",
-    "background:linear-gradient(180deg,#0f5fc7,#1677f2)",
+    "background:#000",
     "color:white",
     "display:flex",
     "flex-direction:column",
