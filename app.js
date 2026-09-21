@@ -6028,6 +6028,13 @@ function toggleDeveloperAICodePush() {
 let developerAICallMode = false;
 let developerAIRecognition = null;
 let developerAIRecognitionActive = false;
+let developerAIFreeMicStream = null;
+let developerAIFreeRecorder = null;
+let developerAIFreeRecorderChunks = [];
+let developerAIFreeAnalyser = null;
+let developerAIFreeVadTimer = null;
+let developerAIFreeVadSpeaking = false;
+let developerAIFreeVadLastVoiceAt = 0;
 let developerAIAudio = null;
 let developerAISpeaking = false;
 let developerAIAudioContext = null;
@@ -6404,6 +6411,7 @@ function stopDeveloperAICall() {
   try { developerAIRecognition?.stop?.(); } catch (_) {}
   developerAIRecognition = null;
   developerAIRecognitionActive = false;
+  stopDeveloperAIFreeMediaCapture();
 
   try { developerAIRealtimeChannel?.close?.(); } catch (_) {}
   developerAIRealtimeChannel = null;
@@ -7088,28 +7096,152 @@ async function answerDeveloperAIFreeCall(message) {
   }
 }
 
-async function startDeveloperAIFreeCall() {
-  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!Recognition || !window.speechSynthesis) {
-    throw new Error("This device does not support the free voice-call mode.");
-  }
+async function blobToBase64(blob) {
+  return await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || "").split(",")[1] || "");
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
 
+function stopDeveloperAIFreeMediaCapture() {
+  if (developerAIFreeVadTimer) clearInterval(developerAIFreeVadTimer);
+  developerAIFreeVadTimer = null;
+  try {
+    if (developerAIFreeRecorder && developerAIFreeRecorder.state !== "inactive") developerAIFreeRecorder.stop();
+  } catch (_) {}
+  developerAIFreeRecorder = null;
+  developerAIFreeRecorderChunks = [];
+  try { developerAIFreeMicStream?.getTracks?.().forEach(track => track.stop()); } catch (_) {}
+  developerAIFreeMicStream = null;
+  developerAIFreeAnalyser = null;
+  developerAIFreeVadSpeaking = false;
+  developerAIFreeVadLastVoiceAt = 0;
+}
+
+async function transcribeDeveloperAIFreeBlob(blob) {
+  if (!blob || blob.size < 1200 || developerAIFreeRequestBusy || !developerAICallMode) return;
+  try {
+    const audioBase64 = await blobToBase64(blob);
+    if (!audioBase64) return;
+    const response = await callMyServiceEdgeFunction("developer-ai", {
+      action: "gemini_transcribe",
+      audioBase64,
+      mimeType: blob.type || "audio/mp4"
+    });
+    const transcript = String(response?.transcript || "").trim();
+    if (transcript) queueDeveloperAIUserSpeech(transcript);
+  } catch (error) {
+    updateDeveloperAICallWindow("Listening…", "Voice transcription retrying…");
+  }
+}
+
+async function startDeveloperAIFreeMediaCapture() {
+  if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") return false;
+
+  developerAIFreeMicStream = await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+  });
+
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) return false;
+  if (!developerAIAudioContext) developerAIAudioContext = new AudioCtx();
+  if (developerAIAudioContext.state === "suspended") await developerAIAudioContext.resume().catch(() => {});
+
+  const source = developerAIAudioContext.createMediaStreamSource(developerAIFreeMicStream);
+  developerAIFreeAnalyser = developerAIAudioContext.createAnalyser();
+  developerAIFreeAnalyser.fftSize = 1024;
+  source.connect(developerAIFreeAnalyser);
+
+  const mimeChoices = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"];
+  const mimeType = mimeChoices.find(type => MediaRecorder.isTypeSupported?.(type)) || "";
+  const recorder = new MediaRecorder(developerAIFreeMicStream, mimeType ? { mimeType } : undefined);
+  developerAIFreeRecorder = recorder;
+
+  recorder.ondataavailable = event => {
+    if (event.data?.size) developerAIFreeRecorderChunks.push(event.data);
+  };
+  recorder.onstop = async () => {
+    const chunks = developerAIFreeRecorderChunks.splice(0);
+    if (chunks.length) {
+      const blob = new Blob(chunks, { type: recorder.mimeType || "audio/mp4" });
+      await transcribeDeveloperAIFreeBlob(blob);
+    }
+    if (developerAICallMode && developerAIFreeCallMode && developerAIFreeRecorder === recorder) {
+      try { recorder.start(); } catch (_) {}
+    }
+  };
+
+  recorder.start();
+  const samples = new Uint8Array(developerAIFreeAnalyser.fftSize);
+  developerAIFreeVadTimer = setInterval(() => {
+    if (!developerAICallMode || !developerAIFreeAnalyser || developerAISpeaking) return;
+    developerAIFreeAnalyser.getByteTimeDomainData(samples);
+    let sum = 0;
+    for (const x of samples) {
+      const n = (x - 128) / 128;
+      sum += n * n;
+    }
+    const rms = Math.sqrt(sum / samples.length);
+    const now = Date.now();
+
+    if (rms > 0.035) {
+      developerAIFreeVadLastVoiceAt = now;
+      if (!developerAIFreeVadSpeaking) {
+        developerAIFreeVadSpeaking = true;
+        developerAIUserIsSpeaking = true;
+        updateDeveloperAICallWindow("Listening…", "Go ahead — I’m listening.");
+      }
+    } else if (developerAIFreeVadSpeaking && now - developerAIFreeVadLastVoiceAt > 1300) {
+      developerAIFreeVadSpeaking = false;
+      developerAIUserIsSpeaking = false;
+      updateDeveloperAICallWindow("Thinking…", "");
+      try {
+        if (recorder.state === "recording") recorder.stop();
+      } catch (_) {}
+    }
+  }, 120);
+
+  return true;
+}
+
+async function startDeveloperAIFreeCall() {
   const setup = await callMyServiceEdgeFunction("developer-ai", { action: "gemini_status" });
   if (!setup.configured) throw new Error("Google AI needs its server key before calls can start.");
+
   developerAICallMode = true;
   developerAIFreeCallMode = true;
   developerAISpeakerMode = true;
   unlockDeveloperAIAudio();
-  window.speechSynthesis.getVoices();
+  window.speechSynthesis?.getVoices?.();
 
   openDeveloperAICallWindow();
-  updateDeveloperAICallWindow("Connecting…", "Starting no-credit voice");
+  updateDeveloperAICallWindow("Connecting…", "Starting stable no-credit voice");
   setDeveloperAICallScrollSafe();
 
   const button = $("developer-ai-call");
   const status = $("developer-ai-status");
   if (button) button.textContent = "■ END CALL";
-  if (status) status.textContent = "Starting no-credit Developer AI call…";
+  if (status) status.textContent = "Starting Developer AI voice…";
+
+  // Prefer one persistent microphone stream + local voice activity detection.
+  // This avoids Safari's repeated speech-recognition start/stop chimes.
+  try {
+    const mediaStarted = await startDeveloperAIFreeMediaCapture();
+    if (mediaStarted) {
+      updateDeveloperAICallWindow("Listening…", "Stable microphone ready");
+      if (status) status.textContent = "Developer AI no-credit call connected.";
+      return;
+    }
+  } catch (_) {
+    stopDeveloperAIFreeMediaCapture();
+  }
+
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!Recognition || !window.speechSynthesis) {
+    throw new Error("This device does not support the available voice input modes.");
+  }
 
   const recognition = new Recognition();
   developerAIRecognition = recognition;
@@ -7124,8 +7256,6 @@ async function startDeveloperAIFreeCall() {
     updateDeveloperAICallWindow("Listening…", "Voice input ready");
   };
   recognition.onspeechstart = () => {
-    // If the phone is currently speaking, ignore its own speaker audio instead
-    // of canceling/restarting the microphone session.
     if (developerAISpeaking) return;
     developerAIUserIsSpeaking = true;
     updateDeveloperAICallWindow("Listening…", "Go ahead — I won’t interrupt.");
@@ -7138,31 +7268,19 @@ async function startDeveloperAIFreeCall() {
       if (result?.isFinal) finals.push(result?.[0]?.transcript || "");
     }
     const transcript = finals.join(" ").trim();
-    if (!transcript) return;
-    developerAIUserIsSpeaking = false;
-    queueDeveloperAIUserSpeech(transcript);
+    if (transcript) queueDeveloperAIUserSpeech(transcript);
   };
-  recognition.onerror = event => {
-    if (!developerAICallMode || !developerAIFreeCallMode) return;
-    const code = String(event?.error || "");
-    if (code === "not-allowed" || code === "service-not-allowed") {
-      updateDeveloperAICallWindow("Microphone blocked", "Allow microphone and speech recognition in iPhone Settings.");
-      return;
-    }
-    restartDeveloperAIListening(500);
+  recognition.onerror = () => {
+    if (developerAICallMode && developerAIFreeCallMode) restartDeveloperAIListening(1500);
   };
   recognition.onend = () => {
     developerAIRecognitionActive = false;
-    if (developerAICallMode && developerAIFreeCallMode) {
-      // iOS may still end a long recognition session occasionally. Restart only
-      // after an actual end, not after every user turn.
-      restartDeveloperAIListening(1500);
-    }
+    if (developerAICallMode && developerAIFreeCallMode) restartDeveloperAIListening(1500);
   };
 
   try { recognition.start(); } catch (_) {}
   updateDeveloperAICallWindow("Listening…", "Voice input ready");
-  if (status) status.textContent = "Developer AI no-credit call connected.";
+  if (status) status.textContent = "Developer AI browser fallback connected.";
 }
 
 async function toggleDeveloperAICall() {
