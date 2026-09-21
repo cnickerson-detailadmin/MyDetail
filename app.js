@@ -7097,7 +7097,11 @@ function openDeveloperAICallWindow() {
       <button id="developer-ai-call-quiet" type="button"
         style="min-height:54px;border:0;border-radius:18px;background:rgba(255,255,255,.16);color:white;font-weight:850;">HOLD UP</button>
       <button id="developer-ai-call-mute" type="button"
-        style="min-height:54px;border:0;border-radius:18px;background:rgba(255,255,255,.16);color:white;font-weight:850;">MUTE</button>
+        style="min-height:54px;border:0;border-radius:18px;background:rgba(255,255,255,.16);color:white;font-weight:850;">MUTE SETH</button>
+      <button id="developer-ai-call-mic" type="button"
+        style="min-height:54px;border:0;border-radius:18px;background:rgba(255,255,255,.16);color:white;font-weight:850;">🎙️ MIC ON</button>
+      <button id="developer-ai-call-details" type="button"
+        style="min-height:54px;border:0;border-radius:18px;background:rgba(255,255,255,.16);color:white;font-weight:850;">CALL DETAILS</button>
       </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
       <button id="developer-ai-call-speaker" type="button"
@@ -7115,6 +7119,23 @@ function openDeveloperAICallWindow() {
     });
   };
   $("developer-ai-call-quiet").onclick = () => setDeveloperAIQuietMode(!developerAIQuietMode);
+  let developerMicEnabled = true;
+  $("developer-ai-call-mic").onclick = function () {
+    developerMicEnabled = !developerMicEnabled;
+    try { developerAIRealtimeStream?.getAudioTracks?.().forEach(t => { t.enabled = developerMicEnabled; }); } catch (_) {}
+    try { developerAIFreeMicStream?.getAudioTracks?.().forEach(t => { t.enabled = developerMicEnabled; }); } catch (_) {}
+    this.textContent = developerMicEnabled ? "🎙️ MIC ON" : "🔇 MIC OFF";
+    this.style.background = developerMicEnabled ? "rgba(255,255,255,.16)" : "white";
+    this.style.color = developerMicEnabled ? "white" : "#0f5fc7";
+  };
+  $("developer-ai-call-details").onclick = function () {
+    const h = developerAICallManagerSnapshot();
+    updateDeveloperAICallWindow(
+      h.state === "healthy" ? "🟢 CALL HEALTHY" : h.state === "failure" ? "🔴 CALL FAILURE" : "🟠 CALL DETAILS",
+      "Provider: " + h.provider + " • Mic: " + h.mic + " • Connection: " + h.connection + " • Playback: " + h.playback +
+      (h.lastIncident ? " • " + h.lastIncident : "")
+    );
+  };
   $("developer-ai-call-end").onclick = () => stopDeveloperAICall();
   $("developer-ai-call-close").onclick = () => {
     stopDeveloperAICall();
@@ -7131,7 +7152,7 @@ function openDeveloperAICallWindow() {
         else developerAIAudioContext.resume();
       }
     } catch (_) {}
-    this.textContent = muted ? "UNMUTE" : "MUTE";
+    this.textContent = muted ? "UNMUTE SETH" : "MUTE SETH";
   };
 
   $("developer-ai-call-speaker").onclick = function () {
@@ -7827,55 +7848,47 @@ async function greetDeveloperAIFreeCall(provider) {
 
 async function toggleDeveloperAICall() {
   if (!developerAIIsAllowed()) return;
-
   if (developerAICallMode) {
     stopDeveloperAICall();
     return;
   }
 
   unlockDeveloperAIAudio();
-  // iPhone Safari/PWA: prefer the generated-speech path first. It uses the
-  // AudioContext unlocked by the CALL tap and avoids WebRTC remote-track
-  // routing failures that can connect successfully while producing silence.
+  openDeveloperAICallWindow();
+  updateDeveloperAICallWindow("Connecting…", "Call Manager is checking available voice paths.");
+
+  const failures = [];
   const isiPhone = /iPhone/i.test(navigator.userAgent);
-  if (isiPhone) {
-    for (const provider of ["gemini", "cloudflare"]) {
-      try {
-        await startDeveloperAIFreeCall(provider);
-        startDeveloperAICallManager();
-        return;
-      } catch (_) {
-        stopDeveloperAICall();
-      }
-    }
+  const attempts = isiPhone
+    ? [
+        ["cloudflare", () => startDeveloperAIFreeCall("cloudflare")],
+        ["gemini", () => startDeveloperAIFreeCall("gemini")],
+        ["realtime", () => startDeveloperAIRealtimeCall()]
+      ]
+    : [
+        ["realtime", () => startDeveloperAIRealtimeCall()],
+        ["cloudflare", () => startDeveloperAIFreeCall("cloudflare")],
+        ["gemini", () => startDeveloperAIFreeCall("gemini")]
+      ];
+
+  for (const [name, start] of attempts) {
     try {
-      await startDeveloperAIRealtimeCall();
+      updateDeveloperAICallWindow("Connecting…", "Trying " + name + " voice.");
+      await start();
       startDeveloperAICallManager();
+      developerAICallManagerHealth.provider = name;
       return;
-    } catch (_) {
+    } catch (error) {
+      failures.push(name + ": " + String(error?.message || "startup failed").slice(0, 90));
       stopDeveloperAICall();
-    }
-  } else {
-    try {
-      await startDeveloperAIRealtimeCall();
-      startDeveloperAICallManager();
-      return;
-    } catch (realtimeError) {
-      stopDeveloperAICall();
-      for (const provider of ["cloudflare", "gemini"]) {
-        try {
-          await startDeveloperAIFreeCall(provider);
-          startDeveloperAICallManager();
-          return;
-        } catch (_) {
-          stopDeveloperAICall();
-        }
-      }
+      openDeveloperAICallWindow();
     }
   }
 
-  openDeveloperAICallWindow();
-  updateDeveloperAICallWindow("Voice unavailable", "Realtime, Cloudflare, and Gemini could not start. Run SELF-CHECK for details.");
+  developerAICallManagerSet("failure", "Voice startup failed", "Tried all approved voice paths", "No voice path connected");
+  updateDeveloperAICallWindow("🔴 CALL FAILURE", failures.join(" • ") || "No voice path connected.");
+  const status = $("developer-ai-status");
+  if (status) status.textContent = "Call Manager: " + (failures.join(" • ") || "voice startup failed");
 }
 
 async function generateDeveloperAIImage() {
