@@ -9047,7 +9047,15 @@ async function sendDeveloperAIMessage(event) {
     };
     if (memory?.context) context.resumeNote = "Saved progress for " + memory.topic + ": " + memory.context;
     const media = await developerAIReadMediaAttachments();
-    if (media.length) context.mediaAttachments = media;
+    if (media.length) {
+      context.mediaAttachments = media.map(file => ({
+        name: file.name,
+        mimeType: file.type,
+        data: String(file.dataUrl || "").split(",")[1] || ""
+      }));
+      context.visionRequest = true;
+      context.visionInstruction = "Inspect every attached image directly. Describe only what is actually visible, use visible UI/text/error states when troubleshooting, and never pretend you saw an attachment if the provider did not receive it.";
+    }
     let response = memory?.reply ? { reply: memory.reply } : null;
     if (!response) {
       // Free-first Seth chat: do not depend on paid OpenAI. Try Gemini first,
