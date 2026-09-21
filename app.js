@@ -6032,6 +6032,7 @@ let developerAIFreeMicStream = null;
 let developerAIFreeRecorder = null;
 let developerAIFreeRecorderChunks = [];
 let developerAIFreeAnalyser = null;
+let developerAIFreeSilentGain = null;
 let developerAIFreeVadTimer = null;
 let developerAIFreeVadSpeaking = false;
 let developerAIFreeVadLastVoiceAt = 0;
@@ -7142,6 +7143,8 @@ function stopDeveloperAIFreeMediaCapture() {
   developerAIFreeRecorderChunks = [];
   try { developerAIFreeMicStream?.getTracks?.().forEach(track => track.stop()); } catch (_) {}
   developerAIFreeMicStream = null;
+  try { developerAIFreeSilentGain?.disconnect?.(); } catch (_) {}
+  developerAIFreeSilentGain = null;
   developerAIFreeAnalyser = null;
   developerAIFreeVadSpeaking = false;
   developerAIFreeVadLastVoiceAt = 0;
@@ -7160,7 +7163,10 @@ async function transcribeDeveloperAIFreeBlob(blob) {
     const transcript = String(response?.transcript || "").trim();
     if (transcript) queueDeveloperAIUserSpeech(transcript);
   } catch (error) {
-    updateDeveloperAICallWindow("Listening…", "Voice transcription retrying…");
+    const message = String(error?.message || "Voice transcription failed.");
+    updateDeveloperAICallWindow("Transcription issue", message);
+    const status = $("developer-ai-status");
+    if (status) status.textContent = "Developer AI transcription issue — " + message;
   }
 }
 
@@ -7180,6 +7186,14 @@ async function startDeveloperAIFreeMediaCapture() {
   developerAIFreeAnalyser = developerAIAudioContext.createAnalyser();
   developerAIFreeAnalyser.fftSize = 1024;
   source.connect(developerAIFreeAnalyser);
+
+  // Safari may stop processing an analyser graph that has no path to the audio
+  // destination. Keep the graph alive through a zero-gain node so mic analysis
+  // runs continuously without feeding the user's own microphone back to them.
+  developerAIFreeSilentGain = developerAIAudioContext.createGain();
+  developerAIFreeSilentGain.gain.value = 0;
+  developerAIFreeAnalyser.connect(developerAIFreeSilentGain);
+  developerAIFreeSilentGain.connect(developerAIAudioContext.destination);
 
   const mimeChoices = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"];
   const mimeType = mimeChoices.find(type => MediaRecorder.isTypeSupported?.(type)) || "";
@@ -7213,7 +7227,12 @@ async function startDeveloperAIFreeMediaCapture() {
     const rms = Math.sqrt(sum / samples.length);
     const now = Date.now();
 
-    if (rms > 0.035) {
+    const levelPercent = Math.min(99, Math.round(rms * 700));
+    if (!developerAIFreeVadSpeaking && levelPercent > 0) {
+      updateDeveloperAICallWindow("Listening…", "Mic level " + levelPercent + "%");
+    }
+
+    if (rms > 0.015) {
       developerAIFreeVadLastVoiceAt = now;
       if (!developerAIFreeVadSpeaking) {
         developerAIFreeVadSpeaking = true;
