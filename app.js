@@ -7014,8 +7014,7 @@ function startDeveloperAICallManager() {
   window.__myserviceCallExterminationTimer = setInterval(() => {
     if (!developerAICallMode) return;
     try {
-      const team = document.getElementById("myservice-extermination-team");
-      if (team && typeof window.__myserviceRunExterminationScan === "function") {
+      if (typeof window.__myserviceRunExterminationScan === "function") {
         window.__myserviceRunExterminationScan();
       }
     } catch (_) {}
@@ -7109,7 +7108,9 @@ function stopDeveloperAICall() {
   developerAIPendingVoiceReply = null;
   developerAIFreeCallMode = false;
   developerAIFreeProvider = "";
+  developerAIFreeRequestBusy = false;
   developerAIQuietMode = false;
+  developerAITroubleshootOpenedAt = 0;
   clearDeveloperAIRealtimeReplyTimer();
   developerAILastRealtimeUserTranscript = "";
   stopDeveloperAIQuietWakeListener();
@@ -8433,6 +8434,25 @@ async function startDeveloperAIFreeMediaCapture() {
   return true;
 }
 
+function resetDeveloperAICallForRestart() {
+  $("developer-ai-call-troubleshoot-menu")?.remove();
+  $("developer-ai-call-details-panel")?.remove();
+  const staleWindow = $("developer-ai-call-window");
+  if (staleWindow && !developerAICallMode) staleWindow.remove();
+
+  developerAIFreeRequestBusy = false;
+  developerAIUserIsSpeaking = false;
+  developerAIPendingVoiceReply = null;
+  developerAISpeechBuffer = "";
+  developerAIFreeVadSpeaking = false;
+  developerAITroubleshootOpenedAt = 0;
+
+  if (developerAIListenTimer) clearTimeout(developerAIListenTimer);
+  developerAIListenTimer = null;
+
+  enforceMyServiceTouchSafety();
+}
+
 async function startDeveloperAIFreeCall(provider = "gemini") {
   const setup = await callMyServiceEdgeFunction("developer-ai", { action: provider + "_status" });
   if (!setup.configured) throw new Error(provider + " voice needs its server configuration.");
@@ -8563,6 +8583,7 @@ async function toggleDeveloperAICall() {
     return;
   }
 
+  resetDeveloperAICallForRestart();
   unlockDeveloperAIAudio();
   openDeveloperAICallWindow();
   updateDeveloperAICallWindow("Connecting…", "Call Manager is checking available voice paths.");
@@ -8740,17 +8761,34 @@ document.addEventListener("DOMContentLoaded", () => {
   }, 0);
 });
 
-document.addEventListener("visibilitychange", () => {
+document.addEventListener("visibilitychange", async () => {
   if (document.hidden && developerAICallMode) {
-    developerAICallManagerSet("policy-block", "App hidden or closed", "Stop Seth immediately", "Stopped");
-    stopDeveloperAICall();
+    developerAICallManagerSet("degraded", "App moved to background", "Preserve call session", "Waiting for iOS/browser");
+    try { sessionStorage.setItem("myservice_seth_call_active", "1"); } catch (_) {}
     return;
   }
+
   if (!document.hidden && developerAICallMode) {
     requestDeveloperAIWakeLock();
-    const state = developerAIRealtimePc?.connectionState;
-    if (!developerAIRealtimePc || state === "failed" || state === "disconnected" || state === "closed") {
-      scheduleDeveloperAIReconnect();
+    try { await developerAIAudioContext?.resume?.(); } catch (_) {}
+    setDeveloperAIAudioSessionType("play-and-record");
+
+    if (developerAIFreeCallMode) {
+      const liveMic = developerAIFreeMicStream?.getAudioTracks?.().some(track => track.readyState === "live");
+      if (!liveMic) {
+        try {
+          stopDeveloperAIFreeMediaCapture();
+          await startDeveloperAIFreeMediaCapture();
+          updateDeveloperAICallWindow("Listening…", "Seth call restored after returning to MyService.");
+        } catch (_) {
+          updateDeveloperAICallWindow("Tap CALL to resume", "iPhone suspended the microphone while MyService was in the background.");
+        }
+      }
+    } else {
+      const state = developerAIRealtimePc?.connectionState;
+      if (!developerAIRealtimePc || state === "failed" || state === "disconnected" || state === "closed") {
+        scheduleDeveloperAIReconnect();
+      }
     }
   }
 });
@@ -9362,6 +9400,69 @@ function installTrainingCenter() {
       issueFound ? "Mobile interaction issue detected or repaired." : "Touch, scroll, and pointer interaction look healthy.");
   }
 
+  function scanCallControls() {
+    const callWindow = document.getElementById("developer-ai-call-window");
+    if (!callWindow) {
+      setWatchdogStatus("call", "green", "Standing by; no Seth call is active.");
+      return;
+    }
+
+    let issueFound = false;
+    const required = [
+      "developer-ai-call-quiet",
+      "developer-ai-call-mute",
+      "developer-ai-call-mic",
+      "developer-ai-call-details",
+      "developer-ai-call-troubleshoot",
+      "developer-ai-call-speaker",
+      "developer-ai-call-end"
+    ];
+
+    required.forEach(id => {
+      const button = document.getElementById(id);
+      if (!button) {
+        issueFound = true;
+        record("critical", "Missing Seth call control: " + id, "A required in-call control disappeared.");
+        return;
+      }
+
+      const style = getComputedStyle(button);
+      if (style.pointerEvents === "none") {
+        button.style.pointerEvents = "auto";
+        button.style.touchAction = "manipulation";
+        issueFound = true;
+        record("critical", "Seth call control became untappable", id + " had pointer events disabled; watchdog restored them.", true);
+      }
+
+      if (button.disabled) {
+        button.disabled = false;
+        issueFound = true;
+        record("high", "Seth call control unexpectedly disabled", id + " was disabled; watchdog re-enabled it.", true);
+      }
+    });
+
+    const hiddenBlockers = Array.from(callWindow.querySelectorAll("*")).filter(node => {
+      if (!(node instanceof HTMLElement)) return false;
+      if (node.id === "developer-ai-call-troubleshoot-menu") return false;
+      const st = getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      return st.position === "fixed" &&
+        st.pointerEvents !== "none" &&
+        (st.opacity === "0" || st.visibility === "hidden") &&
+        rect.width >= innerWidth * 0.9 &&
+        rect.height >= innerHeight * 0.9;
+    });
+
+    hiddenBlockers.forEach(node => {
+      node.style.pointerEvents = "none";
+      issueFound = true;
+      record("critical", "Invisible Seth call blocker detected", "An invisible full-screen layer was intercepting taps; watchdog disabled its pointer interception.", true);
+    });
+
+    setWatchdogStatus("call", issueFound ? "orange" : "green",
+      issueFound ? "Seth call-control issue detected or repaired." : "Seth call controls are present and tappable.");
+  }
+
   function fingerprint() {
     return [
       location.pathname,
@@ -9460,6 +9561,7 @@ function installTrainingCenter() {
         typeof developerAICallMode !== "undefined" && developerAICallMode ? "Seth call monitoring active." : "Standing by; no Seth call is active.");
       scanDOM();
       scanMobileInteraction();
+      scanCallControls();
       safeRepairStaleOverlay();
 
       const fp = fingerprint();
