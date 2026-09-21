@@ -8879,7 +8879,7 @@ function installTrainingCenter() {
 
     document.querySelectorAll("[onclick]").forEach(node => {
       const handler = node.getAttribute("onclick") || "";
-      const match = handler.match(/^\\s*([A-Za-z_$][\\w$]*)\\s*\\(/);
+      const match = handler.match(/^\s*([A-Za-z_$][\w$]*)\s*\(/);
       if (match && typeof window[match[1]] !== "function") {
         record(
           "critical",
