@@ -6062,6 +6062,14 @@ function setDeveloperAIQuietMode(enabled, reason = "") {
   stopDeveloperAIAudio();
   try { window.speechSynthesis?.cancel?.(); } catch (_) {}
 
+  // In realtime WebRTC mode, actually mute the outgoing microphone track.
+  // This prevents customer/coworker audio from being sent upstream while HOLD UP is active.
+  try {
+    developerAIRealtimeStream?.getAudioTracks?.().forEach(track => {
+      track.enabled = !developerAIQuietMode;
+    });
+  } catch (_) {}
+
   const quietButton = $("developer-ai-call-quiet");
   if (quietButton) {
     quietButton.textContent = developerAIQuietMode ? "RESUME AI" : "HOLD UP";
@@ -6069,10 +6077,13 @@ function setDeveloperAIQuietMode(enabled, reason = "") {
     quietButton.style.color = developerAIQuietMode ? "#0f5fc7" : "white";
   }
 
+  const realtimeActive = Boolean(developerAIRealtimePc && developerAIRealtimeStream);
   updateDeveloperAICallWindow(
     developerAIQuietMode ? "Quiet mode" : "Listening…",
     developerAIQuietMode
-      ? "Customer/coworker conversation is ignored and not added to AI memory. Say “Developer AI” to resume."
+      ? (realtimeActive
+          ? "Microphone muted to Developer AI. Tap RESUME AI when you’re ready."
+          : "Customer/coworker conversation is ignored. Say “Developer AI” or tap RESUME AI.")
       : (reason || "Talk naturally — I’ll wait for you to finish.")
   );
 }
