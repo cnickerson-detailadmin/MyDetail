@@ -1,5 +1,5 @@
-const CACHE_NAME = "myservice-cache-v40";
-const BUILD_ID = "62-black-screen-recovery";
+const CACHE_NAME = "myservice-cache-v41";
+const BUILD_ID = "70-repeat-call-hard-reset";
 
 const APP_SHELL = [
   "./styles.css?v=4-pro-desktop",
