@@ -6790,7 +6790,7 @@ function setDeveloperAICallScrollSafe() {
   }
 }
 
-const MYSERVICE_STABILITY_BUILD = "63-extermination-team";
+const MYSERVICE_STABILITY_BUILD = "70-repeat-call-hard-reset";
 
 function runMyServiceExterminationTeam() {
   // Lightweight regression guard. It repairs only global UI invariants and
@@ -7636,7 +7636,7 @@ function openDeveloperAITroubleshootMenu(event) {
 }
 
 function openDeveloperAICallWindow() {
-  if ($("developer-ai-call-window")) return;
+  $("developer-ai-call-window")?.remove();
 
   const wrap = document.createElement("div");
   wrap.id = "developer-ai-call-window";
@@ -7688,9 +7688,9 @@ function openDeveloperAICallWindow() {
         style="min-height:54px;border:0;border-radius:18px;background:rgba(255,255,255,.16);color:white;font-weight:850;">MUTE SETH</button>
       <button id="developer-ai-call-mic" type="button"
         style="min-height:54px;border:0;border-radius:18px;background:rgba(255,255,255,.16);color:white;font-weight:850;">🎙️ MIC ON</button>
-      <button id="developer-ai-call-details" type="button"
+      <button id="developer-ai-call-details" type="button" onclick="event.preventDefault();event.stopPropagation();window.__myserviceCallDetails?.();"
         style="min-height:54px;border:0;border-radius:18px;background:rgba(255,255,255,.16);color:white;font-weight:850;">CALL DETAILS</button>
-      <button id="developer-ai-call-troubleshoot" type="button"
+      <button id="developer-ai-call-troubleshoot" type="button" onclick="event.preventDefault();event.stopPropagation();window.__myserviceTroubleshootSeth?.(event);"
         style="grid-column:1 / -1;min-height:54px;border:0;border-radius:18px;background:rgba(255,255,255,.22);color:white;font-weight:900;">🛠 TROUBLESHOOT SETH</button>
       </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
@@ -7725,6 +7725,16 @@ function openDeveloperAICallWindow() {
     this.style.background = developerMicEnabled ? "rgba(255,255,255,.16)" : "white";
     this.style.color = developerMicEnabled ? "white" : "#0f5fc7";
   };
+  window.__myserviceTroubleshootSeth = event => openDeveloperAITroubleshootMenu(event);
+  window.__myserviceCallDetails = () => {
+    const h = developerAICallManagerSnapshot();
+    updateDeveloperAICallWindow(
+      h.state === "healthy" ? "🟢 CALL HEALTHY" : h.state === "failure" ? "🔴 CALL FAILURE" : "🟠 CALL DETAILS",
+      "Provider: " + h.provider + " • Mic: " + h.mic + " • Connection: " + h.connection + " • Playback: " + h.playback +
+      (h.lastIncident ? " • " + h.lastIncident : "")
+    );
+  };
+
   const troubleshootBtn = $("developer-ai-call-troubleshoot");
   const detailsBtn = $("developer-ai-call-details");
 
@@ -7746,9 +7756,7 @@ function openDeveloperAICallWindow() {
   };
 
   troubleshootBtn?.addEventListener("click", openTroubleshoot);
-  troubleshootBtn?.addEventListener("touchend", openTroubleshoot, { passive: false });
   detailsBtn?.addEventListener("click", openDetails);
-  detailsBtn?.addEventListener("touchend", openDetails, { passive: false });
   $("developer-ai-call-end").onclick = () => stopDeveloperAICall();
   $("developer-ai-call-close").onclick = () => {
     stopDeveloperAICall();
@@ -8435,10 +8443,9 @@ async function startDeveloperAIFreeMediaCapture() {
 }
 
 function resetDeveloperAICallForRestart() {
-  $("developer-ai-call-troubleshoot-menu")?.remove();
-  $("developer-ai-call-details-panel")?.remove();
+  document.querySelectorAll("#developer-ai-call-troubleshoot-menu,#developer-ai-call-details-panel").forEach(node => node.remove());
   const staleWindow = $("developer-ai-call-window");
-  if (staleWindow && !developerAICallMode) staleWindow.remove();
+  if (staleWindow) staleWindow.remove();
 
   developerAIFreeRequestBusy = false;
   developerAIUserIsSpeaking = false;
@@ -9408,6 +9415,15 @@ function installTrainingCenter() {
     }
 
     let issueFound = false;
+
+    const callStyle = getComputedStyle(callWindow);
+    if (callStyle.pointerEvents === "none") {
+      callWindow.style.pointerEvents = "auto";
+      callWindow.style.touchAction = "pan-y";
+      issueFound = true;
+      record("critical", "Seth call surface became untappable", "The full call surface had pointer interaction disabled; watchdog restored it.", true);
+    }
+
     const required = [
       "developer-ai-call-quiet",
       "developer-ai-call-mute",
