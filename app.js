@@ -6894,7 +6894,7 @@ function runMyServiceExterminationTeam() {
   enforceMyServiceTouchSafety();
 
   const staleCallWindow = $("developer-ai-call-window");
-  if (staleCallWindow && !developerAICallMode) staleCallWindow.remove();
+  if (staleCallWindow && !developerAICallMode && !developerAICallStarting) staleCallWindow.remove();
 
   // Development/Seth UI must never leave an invisible full-screen blocker.
   document.querySelectorAll('[data-myservice-temporary-overlay="true"]').forEach((overlay) => {
@@ -6907,7 +6907,7 @@ function runMyServiceExterminationTeam() {
   return {
     build: MYSERVICE_STABILITY_BUILD,
     scrolling: getComputedStyle(document.body).overflowY !== "hidden",
-    staleCallOverlay: Boolean($("developer-ai-call-window") && !developerAICallMode)
+    staleCallOverlay: Boolean($("developer-ai-call-window") && !developerAICallMode && !developerAICallStarting)
   };
 }
 
