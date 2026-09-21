@@ -7090,9 +7090,11 @@ function stopDeveloperAICallManager() {
 }
 
 function reportDeveloperAICallHealth(label, detail = "") {
+  // A general health event is NOT proof that audio reached the speakers.
+  // Playback is marked healthy only by real playback-start callbacks such as
+  // WebAudio source start / HTMLAudio onplaying / browser speech onstart.
   developerAICallManagerRecord(label, detail);
   developerAICallManagerLastHealthyAt = Date.now();
-    developerAICallManagerMarkPlaybackStarted();
   const status = $("developer-ai-status");
   if (status && developerAICallMode) {
     status.textContent = "Call Manager • " + label + (detail ? " • " + detail : "");
