@@ -2940,6 +2940,7 @@ function installDeveloperExperience() {
           <button id="developer-ai-call" class="outline-button" type="button" onclick="toggleDeveloperAICall()" style="border-radius:18px;">☎ CALL</button>
           <button id="developer-ai-self-check" class="outline-button" type="button" onclick="runSethSelfCheck()" style="border-radius:18px;">✓ SELF-CHECK</button>
           <button id="developer-ai-diagnose" class="outline-button" type="button" onclick="askSethToDiagnose()" style="border-radius:18px;">✦ DIAGNOSE / FIX</button>
+          <button id="developer-ai-deep-check" class="outline-button" type="button" onclick="runSethDeepAICodeCheck()" style="border-radius:18px;">⚡ DEEP AI CHECK</button>
           <button id="developer-ai-image" class="outline-button" type="button" onclick="generateDeveloperAIImage()" style="border-radius:18px;">▧ IMAGE</button>
           <button id="developer-ai-code-push" class="outline-button" type="button" onclick="toggleDeveloperAICodePush()" style="border-radius:18px;">CODE PUSH: OFF</button>
         </div>
