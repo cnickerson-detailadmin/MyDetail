@@ -8987,46 +8987,22 @@ async function toggleDeveloperAICall() {
   resetDeveloperAICallForRestart();
   unlockDeveloperAIAudio(); // Keep this in the original tap for iPhone playback.
   openDeveloperAICallWindow();
-  updateDeveloperAICallWindow("Connecting…", "Checking Gemini and Cloudflare voice.");
-
-  const failures = [];
-  const attempts = [
-    ["gemini", () => startDeveloperAIFreeCall("gemini", startupToken)],
-    ["cloudflare", () => startDeveloperAIFreeCall("cloudflare", startupToken)]
-  ];
+  updateDeveloperAICallWindow("Connecting…", "Starting primary Gemini Live voice.");
 
   try {
-    for (const [name, start] of attempts) {
-      if (startupToken !== developerAICallStartupToken) return;
-      try {
-        updateDeveloperAICallWindow("Connecting…", "Trying " + name + " voice.");
-        const connected = await start();
-        if (startupToken !== developerAICallStartupToken) return;
-        if (!connected && !developerAICallMode) return;
-        startDeveloperAICallManager();
-        developerAICallManagerHealth.provider = name;
-        return;
-      } catch (error) {
-        if (startupToken !== developerAICallStartupToken) return;
-        failures.push(name + ": " + String(error?.message || "startup failed").slice(0, 90));
-        // Tear down the failed provider before the next attempt, then keep the
-        // same visible call surface and its already attached button handlers.
-        try { developerAIRecognition?.abort?.(); } catch (_) {}
-        developerAIRecognition = null;
-        developerAIRecognitionActive = false;
-        stopDeveloperAIFreeMediaCapture();
-        developerAIFreeCallMode = false;
-        developerAIFreeProvider = "";
-        developerAICallMode = false;
-        stopDeveloperAIAudio();
-      }
-    }
-
     if (startupToken !== developerAICallStartupToken) return;
-    developerAICallManagerSet("failure", "Voice startup failed", "Tried approved voice paths", "No voice path connected");
-    updateDeveloperAICallWindow("🔴 CALL FAILURE", failures.join(" • ") || "No voice path connected.");
+    await startDeveloperAIRealtimeCall(false);
+    if (startupToken !== developerAICallStartupToken) return;
+    startDeveloperAICallManager();
+    developerAICallManagerHealth.provider = "gemini-live";
+  } catch (error) {
+    if (startupToken !== developerAICallStartupToken) return;
+    const message = String(error?.message || "Gemini Live startup failed.").slice(0, 180);
+    developerAICallManagerSet("failure", "Gemini Live startup failed", "Primary Live path attempted", message);
+    updateDeveloperAICallWindow("🔴 CALL FAILURE", "gemini-live: " + message);
     const status = $("developer-ai-status");
-    if (status) status.textContent = "Call Manager: " + (failures.join(" • ") || "voice startup failed");
+    if (status) status.textContent = "Call Manager: Gemini Live startup failed — " + message;
+    developerAICallMode = false;
   } finally {
     if (startupToken === developerAICallStartupToken) developerAICallStarting = false;
   }
