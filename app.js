@@ -6842,6 +6842,16 @@ document.addEventListener("visibilitychange", () => {
   if (!document.hidden) runMyServiceExterminationTeam();
 });
 
+function setDeveloperAIAudioSessionType(type) {
+  try {
+    if (navigator.audioSession && "type" in navigator.audioSession) {
+      navigator.audioSession.type = type;
+      return true;
+    }
+  } catch (_) {}
+  return false;
+}
+
 function unlockDeveloperAIAudio() {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -6853,11 +6863,7 @@ function unlockDeveloperAIAudio() {
     // iPhone/iPad: explicitly request a playback-capable audio session when
     // WebKit exposes the API. This prevents microphone capture from leaving
     // Seth's output on an inaudible/record-only route.
-    try {
-      if (navigator.audioSession && "type" in navigator.audioSession) {
-        navigator.audioSession.type = "play-and-record";
-      }
-    } catch (_) {}
+    setDeveloperAIAudioSessionType("play-and-record");
 
     if (developerAIAudioContext.state === "suspended") {
       developerAIAudioContext.resume().catch(() => {});
@@ -7175,6 +7181,7 @@ async function playDeveloperAIWebAudio(base64, mimeType = "audio/mpeg") {
   }
 
   source.onended = () => {
+    setDeveloperAIAudioSessionType("play-and-record");
     if (developerAIAudioSource !== source) return;
     developerAIAudioSource = null;
     developerAISpeaking = false;
@@ -7183,6 +7190,7 @@ async function playDeveloperAIWebAudio(base64, mimeType = "audio/mpeg") {
     restartDeveloperAIListening(250);
   };
 
+  setDeveloperAIAudioSessionType("playback");
   source.start(0);
   developerAICallManagerRecord("web-audio-started", mimeType + " • duration " + Number(decoded.duration || 0).toFixed(2) + "s");
   developerAICallManagerMarkPlaybackStarted();
