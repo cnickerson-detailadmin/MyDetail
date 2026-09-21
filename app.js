@@ -6464,6 +6464,100 @@ let developerAICallManagerHealth = {
 };
 let developerAICallManagerAudit = [];
 let developerAICallManagerNoReplyTimer = null;
+let developerAIAutoRecoveryInProgress = false;
+let developerAIAutoRecoveryCount = 0;
+let developerAIPipelineStage = "idle";
+let developerAIPipelineLastError = "";
+let developerAIPipelineStageAt = 0;
+
+function setDeveloperAIPipelineStage(stage, detail = "") {
+  developerAIPipelineStage = String(stage || "unknown");
+  developerAIPipelineLastError = String(detail || "").slice(0, 220);
+  developerAIPipelineStageAt = Date.now();
+  developerAICallManagerRecord("pipeline-" + developerAIPipelineStage, developerAIPipelineLastError);
+}
+
+async function autoRecoverDeveloperAICall(reason = "unknown") {
+  if (!developerAICallMode || developerAIAutoRecoveryInProgress) return false;
+  developerAIAutoRecoveryInProgress = true;
+  developerAIAutoRecoveryCount += 1;
+  setDeveloperAIPipelineStage("auto-recovery", reason);
+  updateDeveloperAICallWindow("⚡ AUTO TROUBLESHOOTING", "Seth is tracing the failure and repairing the safest layer automatically…");
+
+  try {
+    // UI/touch layer.
+    try { window.__myserviceRunExterminationScan?.(); } catch (_) {}
+    enforceMyServiceTouchSafety();
+
+    // Browser audio layer.
+    try {
+      unlockDeveloperAIAudio();
+      await developerAIAudioContext?.resume?.();
+      setDeveloperAIAudioSessionType("playback");
+    } catch (_) {}
+
+    // Microphone layer.
+    if (developerAIFreeCallMode) {
+      const liveMic = developerAIFreeMicStream?.getAudioTracks?.().some(t => t.readyState === "live");
+      if (!liveMic) {
+        setDeveloperAIPipelineStage("repair-microphone", "Microphone stream was not live.");
+        try {
+          stopDeveloperAIFreeMediaCapture();
+          await startDeveloperAIFreeMediaCapture();
+        } catch (_) {}
+      }
+    }
+
+    // Provider/TTS + playback probe.
+    if (developerAIFreeProvider) {
+      setDeveloperAIPipelineStage("probe-provider", developerAIFreeProvider);
+      try {
+        const probe = await callMyServiceEdgeFunction("developer-ai", {
+          action: developerAIFreeProvider + "_tts",
+          text: "Seth diagnostic check.",
+          voiceRepairMode: developerAIVoiceRepairMode
+        });
+        if (probe?.audioBase64) {
+          setDeveloperAIPipelineStage("probe-playback", String(probe.audioMimeType || "audio/mpeg"));
+          developerAIUserIsSpeaking = false;
+          playDeveloperAIAudio(probe.audioBase64, probe.audioMimeType || "audio/mpeg");
+          setDeveloperAIPipelineStage("recovered", "Primary provider returned playable audio.");
+          updateDeveloperAICallWindow("🟢 AUTO-RECOVERED", "Seth repaired the active voice path automatically.");
+          return true;
+        }
+      } catch (primaryError) {
+        developerAIPipelineLastError = String(primaryError?.message || "Primary provider probe failed.").slice(0,220);
+      }
+
+      // Provider failover is safe and reversible.
+      try {
+        setDeveloperAIPipelineStage("provider-failover", developerAIPipelineLastError);
+        const replacement = await switchDeveloperAIFreeProvider(developerAIFreeProvider, developerAIPipelineLastError);
+        const probe = await callMyServiceEdgeFunction("developer-ai", {
+          action: replacement + "_tts",
+          text: "Seth diagnostic check.",
+          voiceRepairMode: developerAIVoiceRepairMode
+        });
+        if (probe?.audioBase64) {
+          developerAIUserIsSpeaking = false;
+          playDeveloperAIAudio(probe.audioBase64, probe.audioMimeType || "audio/mpeg");
+          setDeveloperAIPipelineStage("recovered", "Fallback provider restored audio.");
+          updateDeveloperAICallWindow("🟢 AUTO-RECOVERED", "Seth switched voice providers and restored audio.");
+          return true;
+        }
+      } catch (fallbackError) {
+        developerAIPipelineLastError = String(fallbackError?.message || developerAIPipelineLastError || "Fallback failed.").slice(0,220);
+      }
+    }
+
+    setDeveloperAIPipelineStage("needs-attention", developerAIPipelineLastError || reason);
+    developerAICallManagerSet("failure", "Automatic recovery exhausted", "Show exact failing stage", developerAIPipelineStage + ": " + developerAIPipelineLastError);
+    updateDeveloperAICallWindow("🔴 AUTO-DIAGNOSIS", developerAIPipelineStage + " • " + (developerAIPipelineLastError || reason));
+    return false;
+  } finally {
+    developerAIAutoRecoveryInProgress = false;
+  }
+}
 
 function developerAICallManagerRecord(kind, detail = "") {
   const safeDetail = String(detail || "")
@@ -6517,7 +6611,8 @@ function developerAICallManagerMarkUserSpeech() {
     if (!developerAICallMode || developerAISpeaking || developerAIFreeRequestBusy) return;
     const replied = developerAICallManagerHealth.lastProviderReplyAt >= developerAICallManagerHealth.lastUserSpeechAt;
     if (!replied) {
-      developerAICallManagerSet("degraded", "No provider reply detected after speech", "Verify active provider and microphone path", "Waiting for safe recovery");
+      developerAICallManagerSet("degraded", "No provider reply detected after speech", "Start automatic pipeline recovery", "Auto-recovery starting");
+      autoRecoverDeveloperAICall("No provider reply after user speech").catch(() => {});
     }
   }, 15000);
 }
@@ -6534,7 +6629,8 @@ function developerAICallManagerMarkProviderReply(hasAudio) {
       if (!developerAICallMode) return;
       if (developerAICallManagerHealth.playback === "audio-received") {
         developerAICallManagerSet("failure", "Audio received but playback never started", "Check audio MIME/decoder and iPhone output route", "Provider is responding; local playback path failed");
-        updateDeveloperAICallWindow("🔴 PLAYBACK DIAGNOSIS", "Seth received voice audio, but your iPhone never started playback. Provider is working; checking the local audio decoder/output path.");
+        updateDeveloperAICallWindow("🔴 PLAYBACK DIAGNOSIS", "Seth received voice audio, but your iPhone never started playback. Auto-recovery is checking decoder and output routing now.");
+        autoRecoverDeveloperAICall("Provider returned audio but playback did not start").catch(() => {});
       }
     }, 3500);
   } else if (!hasAudio && developerAICallMode) {
@@ -7757,7 +7853,7 @@ function openDeveloperAICallWindow() {
     const h = developerAICallManagerSnapshot();
     updateDeveloperAICallWindow(
       h.state === "healthy" ? "🟢 CALL HEALTHY" : h.state === "failure" ? "🔴 CALL FAILURE" : "🟠 CALL DETAILS",
-      "Provider: " + h.provider + " • Mic: " + h.mic + " • Connection: " + h.connection + " • Playback: " + h.playback +
+      "Stage: " + developerAIPipelineStage + " • Auto-fixes: " + developerAIAutoRecoveryCount + " • Provider: " + h.provider + " • Mic: " + h.mic + " • Connection: " + h.connection + " • Playback: " + h.playback +
       (h.lastIncident ? " • " + h.lastIncident : "")
     );
   };
@@ -7777,7 +7873,7 @@ function openDeveloperAICallWindow() {
     const h = developerAICallManagerSnapshot();
     updateDeveloperAICallWindow(
       h.state === "healthy" ? "🟢 CALL HEALTHY" : h.state === "failure" ? "🔴 CALL FAILURE" : "🟠 CALL DETAILS",
-      "Provider: " + h.provider + " • Mic: " + h.mic + " • Connection: " + h.connection + " • Playback: " + h.playback +
+      "Stage: " + developerAIPipelineStage + " • Auto-fixes: " + developerAIAutoRecoveryCount + " • Provider: " + h.provider + " • Mic: " + h.mic + " • Connection: " + h.connection + " • Playback: " + h.playback +
       (h.lastIncident ? " • " + h.lastIncident : "")
     );
   };
@@ -8475,6 +8571,11 @@ function resetDeveloperAICallForRestart() {
   if (staleWindow) staleWindow.remove();
 
   developerAIFreeRequestBusy = false;
+  developerAIAutoRecoveryInProgress = false;
+  developerAIAutoRecoveryCount = 0;
+  developerAIPipelineStage = "starting";
+  developerAIPipelineLastError = "";
+  developerAIPipelineStageAt = Date.now();
   developerAIUserIsSpeaking = false;
   developerAIPendingVoiceReply = null;
   developerAISpeechBuffer = "";
@@ -8585,15 +8686,18 @@ async function greetDeveloperAIFreeCall(provider) {
     const startupGreeting = firstIntroduction
       ? "Hey, I’m Seth. I’m your MyService AI for coding, troubleshooting, business guidance, and realistic estimates. I’ll stay inside the access you approve, I’ll be direct when something won’t work, and you make the final decisions. What’re we working on?"
       : greeting;
+    setDeveloperAIPipelineStage("requesting-greeting-tts", provider);
     const voice = await callMyServiceEdgeFunction("developer-ai", {
       action: provider + "_tts", text: startupGreeting, voiceRepairMode: developerAIVoiceRepairMode
     });
     if (developerAICallMode && developerAIFreeProvider === provider && voice.audioBase64) {
+      setDeveloperAIPipelineStage("greeting-audio-received", String(voice.audioMimeType || "audio/mpeg"));
       developerAICallManagerHealth.provider = provider;
       developerAICallManagerRecord("greeting-audio-received", provider + " • " + String(voice.audioMimeType || "audio/mpeg") + " • base64 chars " + String(voice.audioBase64.length));
       developerAICallManagerMarkProviderReply(true);
       developerAIUserIsSpeaking = false;
       updateDeveloperAICallWindow("Greeting received…", "MyService received Seth’s voice from " + provider + "; verifying iPhone playback.");
+      setDeveloperAIPipelineStage("starting-playback", String(voice.audioMimeType || "audio/mpeg"));
       playDeveloperAIAudio(voice.audioBase64, voice.audioMimeType || "audio/mpeg");
       if (firstIntroduction) {
         try { localStorage.setItem(introKey, "1"); } catch (_) {}
@@ -8603,8 +8707,12 @@ async function greetDeveloperAIFreeCall(provider) {
     throw new Error(provider + " connected but returned no greeting audio.");
   } catch (error) {
     const message = String(error?.message || "Seth could not speak.");
+    setDeveloperAIPipelineStage("greeting-failed", message);
     if (developerAICallMode && developerAIFreeProvider === provider) {
-      updateDeveloperAICallWindow("Voice unavailable", message);
+      updateDeveloperAICallWindow("⚡ AUTO TROUBLESHOOTING", "Greeting failed. Seth is tracing the voice pipeline automatically…");
+      const recovered = await autoRecoverDeveloperAICall("Greeting failure: " + message).catch(() => false);
+      if (recovered) return true;
+      updateDeveloperAICallWindow("Voice unavailable", developerAIPipelineStage + " • " + (developerAIPipelineLastError || message));
     }
     throw new Error(message);
   }
