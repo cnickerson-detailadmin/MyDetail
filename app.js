@@ -7709,6 +7709,33 @@ function buildDeveloperAIFreeReply(message) {
   return "I heard you. The no-credit call is working, but that request needs cloud-level reasoning. I can still help with MyService status, navigation, staffing, clock, schedule, or support tickets without charging API credits.";
 }
 
+function developerAIProviderRecoverableError(error) {
+  return /rate limit|usage limit|quota|too many requests|429|resource exhausted|timeout|timed out|temporarily unavailable|service unavailable|connection|network/i.test(String(error?.message || error || ""));
+}
+
+async function switchDeveloperAIFreeProvider(failedProvider, reason = "") {
+  const approved = ["cloudflare", "gemini"].filter(name => name !== failedProvider);
+  let lastError = null;
+  for (const fallback of approved) {
+    try {
+      developerAICallManagerSet("degraded", failedProvider + " unavailable", "Test " + fallback + " fallback", String(reason || "provider failure").slice(0, 120));
+      updateDeveloperAICallWindow("🟠 SWITCHING PROVIDER", "MyService is testing " + fallback + " automatically.");
+      const setup = await callMyServiceEdgeFunction("developer-ai", { action: fallback + "_status" });
+      if (!setup?.configured) throw new Error(fallback + " is not configured.");
+      const probe = await callMyServiceEdgeFunction("developer-ai", { action: fallback + "_tts", text: "Provider recovery check." });
+      if (!probe?.audioBase64) throw new Error(fallback + " returned no recovery audio.");
+      developerAIFreeProvider = fallback;
+      developerAICallManagerHealth.provider = fallback;
+      developerAICallManagerRecord("provider-failover", failedProvider + " -> " + fallback);
+      developerAICallManagerSet("degraded", failedProvider + " unavailable; " + fallback + " verified", "Continue call on " + fallback, "Automatic provider recovery succeeded");
+      updateDeveloperAICallWindow("🟠 RECOVERED", "MyService switched Seth to " + fallback + ". Continuing the same call.");
+      return fallback;
+    } catch (error) { lastError = error; }
+  }
+  developerAICallManagerSet("failure", "All approved voice providers unavailable", "Preserve call diagnosis", String(lastError?.message || reason || "fallback failed").slice(0, 140));
+  throw lastError || new Error("No approved fallback provider is available.");
+}
+
 async function answerDeveloperAIFreeCall(message) {
   if (!developerAIIsAllowed() || developerAIFreeRequestBusy) return;
   if (developerAIContainsSecret(message)) {
@@ -7751,9 +7778,24 @@ async function answerDeveloperAIFreeCall(message) {
       }
     }
   } catch (error) {
-    const message = String(error.message || "AI connection failed.");
-    updateDeveloperAICallWindow("AI unavailable", message);
-    if ($("developer-ai-status")) $("developer-ai-status").textContent = message;
+    const failedProvider = developerAIFreeProvider;
+    const errorMessage = String(error?.message || "AI connection failed.");
+    if (developerAICallMode && developerAIFreeCallMode && developerAIProviderRecoverableError(error)) {
+      try {
+        const replacement = await switchDeveloperAIFreeProvider(failedProvider, errorMessage);
+        developerAIFreeRequestBusy = false;
+        developerAICallManagerRecord("automatic-retry", "Retrying interrupted turn on " + replacement);
+        await answerDeveloperAIFreeCall(message);
+        return;
+      } catch (fallbackError) {
+        const fallbackMessage = String(fallbackError?.message || "Fallback provider failed.");
+        updateDeveloperAICallWindow("🔴 PROVIDERS UNAVAILABLE", fallbackMessage);
+        if ($("developer-ai-status")) $("developer-ai-status").textContent = "Call Manager captured provider failover failure.";
+      }
+    } else {
+      updateDeveloperAICallWindow("AI unavailable", errorMessage);
+      if ($("developer-ai-status")) $("developer-ai-status").textContent = errorMessage;
+    }
   } finally {
     developerAIFreeRequestBusy = false;
     if (developerAICallMode && !developerAIRecognitionActive) restartDeveloperAIListening(1200);
