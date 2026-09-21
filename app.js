@@ -9017,7 +9017,6 @@ async function toggleDeveloperAICall() {
       if (status) status.textContent = "Call Manager: voice startup failed — " + message;
       developerAICallMode = false;
     }
-  }
   } finally {
     if (startupToken === developerAICallStartupToken) developerAICallStarting = false;
   }
