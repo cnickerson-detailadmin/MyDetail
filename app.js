@@ -2642,7 +2642,7 @@ function installDeveloperExperience() {
       </button>
       <button id="developer-ai-nav" class="nav" type="button" style="position:relative;z-index:50;pointer-events:auto;touch-action:manipulation;">
         <span>✦</span>
-        Developer AI
+        Seth Support
       </button>
       <button class="nav" type="button" onclick="showSection('settings')">
         <span>⚙</span>
@@ -2684,30 +2684,31 @@ function installDeveloperExperience() {
       <section id="developer-ai-card" class="card" style="padding:14px;border:1px solid rgba(22,119,242,.18);background:#f7f9fc;border-radius:22px;">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px;">
           <div>
-            <div class="eyebrow">PRIVATE DEVELOPER COPILOT</div>
-            <h2 style="margin:4px 0;">Seth <span style="font-size:13px;opacity:.65;">• Developer AI</span></h2>
-            <p style="margin:0;color:#61728c;">Business management, operations, support troubleshooting, and MyService guidance.</p>
+            <div class="eyebrow">PRIVATE TROUBLESHOOTING ASSISTANT</div>
+            <h2 style="margin:4px 0;">Seth <span style="font-size:13px;opacity:.65;">• Support AI</span></h2>
+            <p style="margin:0;color:#61728c;">Chill, direct troubleshooting for MyService, support, operations, and code issues.</p>
           </div>
           <button class="outline-button" type="button" onclick="clearDeveloperAIChat()" style="border-radius:16px;">Clear</button>
         </div>
 
         <div id="developer-ai-messages" style="display:grid;gap:6px;max-height:300px;overflow:auto;padding:2px 0 8px;">
           <div style="padding:9px 13px;border-radius:18px;background:#ffffff;border:1px solid #dbe4f0;color:#34445f;">
-            Ask about staffing, scheduling, support tickets, operations, inventory, labor, sales, or MyService troubleshooting.
+            Tell Seth what is wrong, or run a safe self-check so he can troubleshoot the support system himself.
           </div>
         </div>
 
         <form onsubmit="sendDeveloperAIMessage(event)" style="display:flex;gap:8px;align-items:center;">
-          <textarea id="developer-ai-input" rows="1" maxlength="5000" placeholder="Message Developer AI…" style="width:100%;min-height:42px;max-height:90px;resize:vertical;padding:9px 12px;box-sizing:border-box;border-radius:18px;"></textarea>
+          <textarea id="developer-ai-input" rows="1" maxlength="5000" placeholder="Message Seth…" style="width:100%;min-height:42px;max-height:90px;resize:vertical;padding:9px 12px;box-sizing:border-box;border-radius:18px;"></textarea>
           <button id="developer-ai-send" class="primary-button" type="submit" style="min-height:42px;flex:0 0 auto;border-radius:18px;">SEND</button>
         </form>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
           <button id="developer-ai-call" class="outline-button" type="button" onclick="toggleDeveloperAICall()" style="border-radius:18px;">☎ CALL</button>
+          <button id="developer-ai-self-check" class="outline-button" type="button" onclick="runSethSelfCheck()" style="border-radius:18px;">✓ SELF-CHECK</button>
           <button id="developer-ai-image" class="outline-button" type="button" onclick="generateDeveloperAIImage()" style="border-radius:18px;">▧ IMAGE</button>
           <button id="developer-ai-code-push" class="outline-button" type="button" onclick="toggleDeveloperAICodePush()" style="border-radius:18px;">CODE PUSH: OFF</button>
         </div>
         <small style="display:block;margin-top:8px;">Gemini free tier has limits. Messages go to Google; keep private business data out. Audio follows your iPhone output selection.</small>
-        <small id="developer-ai-status" style="display:block;margin-top:8px;color:#61728c;">Developer-only. Sensitive or destructive actions still require confirmation.</small>
+        <small id="developer-ai-status" style="display:block;margin-top:8px;color:#61728c;">Seth is developer-only. Sensitive or destructive actions still require confirmation.</small>
         <small style="display:block;margin-top:4px;color:#7b8aa0;">Voice is AI-generated. Call mode uses speech recognition when supported by your device.</small>
       </section>
 
@@ -5878,7 +5879,7 @@ function renderDeveloperAIChat() {
   if (!messages.length) {
     box.innerHTML = `
       <div style="padding:9px 13px;border-radius:18px;background:#ffffff;border:1px solid #dbe4f0;color:#34445f;">
-        Ask about staffing, scheduling, support tickets, operations, inventory, labor, sales, or MyService troubleshooting.
+        Tell Seth what is wrong, or ask him to troubleshoot MyService, support, operations, or code issues.
       </div>
     `;
     return;
@@ -5909,7 +5910,7 @@ document.addEventListener("click", event => {
 
 function openDeveloperAI() {
   if (!developerAIIsAllowed()) {
-    alert("Developer AI is available only to the platform developer account.");
+    alert("Seth is available only to the platform developer account.");
     return false;
   }
 
@@ -5957,7 +5958,7 @@ function clearDeveloperAIChat() {
   sessionStorage.removeItem(DEVELOPER_AI_CHAT_KEY);
   renderDeveloperAIChat();
   const status = $("developer-ai-status");
-  if (status) status.textContent = "Chat cleared. Developer-only.";
+  if (status) status.textContent = "Chat cleared. Seth remains developer-only.";
 }
 
 function getDeveloperAISafeContext() {
@@ -5977,8 +5978,54 @@ function getDeveloperAISafeContext() {
       scheduleEntries: schedule.length,
       openSupportTickets: tickets.filter(ticket => String(ticket.status || "").toLowerCase() === "open").length
     },
-    note: "Only summary counts are automatically supplied. No passwords, PINs, access tokens, or ticket descriptions are sent automatically. In voice calls, respond naturally and conversationally, with short spoken sentences and minimal formatting."
+    diagnostics: getSethSelfDiagnostics(),
+    note: "Only summary counts and safe diagnostics are automatically supplied. No passwords, PINs, access tokens, customer records, or ticket descriptions are sent automatically. Respond like Seth: chill, direct, laid-back, honest, and useful. Troubleshoot from the supplied checks before guessing. In voice calls, use short natural spoken sentences and minimal formatting."
   };
+}
+
+function getSethSelfDiagnostics() {
+  const checks = [];
+  const add = (name, ok, detail) => checks.push({ name, ok: ok === true, detail: String(detail || "") });
+
+  add("Secure connection", window.isSecureContext === true, window.isSecureContext ? "HTTPS active" : "Secure browser context unavailable");
+  add("Network", navigator.onLine !== false, navigator.onLine === false ? "Device reports offline" : "Device reports online");
+  add("Authenticated developer", developerAIIsAllowed(), developerAIIsAllowed() ? "Authorized" : "Developer authorization missing");
+  add("Support API configuration", Boolean(SUPABASE_URL && SUPABASE_KEY), "Publishable client configuration only");
+  add("Microphone support", Boolean(navigator.mediaDevices?.getUserMedia), navigator.mediaDevices?.getUserMedia ? "Available" : "Unavailable in this browser");
+  add("Realtime calling", Boolean(window.RTCPeerConnection), window.RTCPeerConnection ? "Supported" : "Unsupported in this browser");
+  add("Local call recording", typeof MediaRecorder !== "undefined", typeof MediaRecorder !== "undefined" ? "Supported" : "Unsupported in this browser");
+  add("Service worker", !('serviceWorker' in navigator) || Boolean(navigator.serviceWorker.controller), navigator.serviceWorker?.controller ? "Controlling this page" : "Not controlling this page yet");
+
+  const failed = checks.filter(check => !check.ok);
+  return {
+    checkedAt: new Date().toISOString(),
+    status: failed.length ? "attention" : "good",
+    failedCount: failed.length,
+    checks
+  };
+}
+
+function runSethSelfCheck() {
+  if (!developerAIIsAllowed()) {
+    alert("Seth is available only to the platform developer account.");
+    return;
+  }
+
+  const diagnostics = getSethSelfDiagnostics();
+  const failed = diagnostics.checks.filter(check => !check.ok);
+  const lines = diagnostics.checks.map(check =>
+    (check.ok ? "✓ " : "⚠ ") + check.name + " — " + check.detail
+  );
+  const summary = failed.length
+    ? "Self-check finished. I found " + failed.length + " item" + (failed.length === 1 ? "" : "s") + " that need attention.\n\n" + lines.join("\n")
+    : "Self-check finished. Everything I can safely test from this screen looks good.\n\n" + lines.join("\n");
+
+  const history = getDeveloperAIHistory();
+  history.push({ role: "assistant", content: summary });
+  saveDeveloperAIHistory(history);
+  renderDeveloperAIChat();
+  const status = $("developer-ai-status");
+  if (status) status.textContent = failed.length ? "Seth found items that need attention." : "Seth self-check passed.";
 }
 
 
@@ -6011,7 +6058,7 @@ function toggleDeveloperAICodePush() {
   }
 
   const ok = window.confirm(
-    "Allow Developer AI to push approved MyService code during this session?\n\n" +
+    "Allow Seth to push approved MyService code during this session?\n\n" +
     "You will still have to explicitly confirm each code push. Sensitive changes remain blocked."
   );
 
@@ -6044,6 +6091,7 @@ let developerAIRealtimePc = null;
 let developerAIRealtimeStream = null;
 let developerAIRealtimeAudio = null;
 let developerAIRealtimeAudioSource = null;
+let developerAIRealtimeOutputGain = null;
 let developerAIRealtimeChannel = null;
 let developerAIRealtimeReplyTimer = null;
 let developerAILastRealtimeUserTranscript = "";
@@ -6052,7 +6100,7 @@ let developerAISpeechDebounce = null;
 let developerAIPendingVoiceReply = null;
 let developerAIUserIsSpeaking = false;
 let developerAIFreeCallMode = false;
-let developerAISpeakerMode = true;
+let developerAISpeakerMode = false;
 let developerAIFreeRequestBusy = false;
 let developerAILastSpokenReply = "";
 let developerAIPendingWebsiteChange = "";
@@ -6266,8 +6314,8 @@ function setDeveloperAIQuietMode(enabled, reason = "") {
     developerAIQuietMode ? "Quiet mode" : "Listening…",
     developerAIQuietMode
       ? (realtimeActive
-          ? "Developer AI audio is muted. I’ll stay quiet and only resume for Developer AI/MyService/site talk or a clear continuation."
-          : "Quiet mode. I’ll stay quiet until you clearly return to Developer AI/MyService/site talk.")
+          ? "Seth audio is muted. I’ll stay quiet and only resume when you say Seth or clearly return to MyService/site talk."
+          : "Quiet mode. I’ll stay quiet until you say Seth or clearly return to MyService/site talk.")
       : (reason || "Talk naturally — I’ll wait for you to finish.")
   );
 }
@@ -6323,7 +6371,7 @@ function pauseDeveloperAIForUserSpeech() {
 
   updateDeveloperAICallWindow("Listening…", "I stopped so you can finish.");
   const status = $("developer-ai-status");
-  if (status) status.textContent = "Developer AI paused — listening to you.";
+  if (status) status.textContent = "Seth paused — listening to you.";
 }
 
 function resumePendingDeveloperAIVoiceReply() {
@@ -6431,6 +6479,8 @@ function stopDeveloperAICall() {
 
   try { developerAIRealtimeAudioSource?.disconnect?.(); } catch (_) {}
   developerAIRealtimeAudioSource = null;
+  try { developerAIRealtimeOutputGain?.disconnect?.(); } catch (_) {}
+  developerAIRealtimeOutputGain = null;
 
   try {
     if (developerAIRealtimeAudio) {
@@ -6464,7 +6514,7 @@ function stopDeveloperAICall() {
     button.textContent = "☎ CALL";
     button.disabled = false;
   }
-  if (status) status.textContent = "Developer AI call ended.";
+  if (status) status.textContent = "Seth call ended.";
 }
 function restartDeveloperAIListening(delay = 1200) {
   if (!developerAICallMode || !developerAIRecognition || developerAIRecognitionActive) return;
@@ -6522,7 +6572,7 @@ function playDeveloperAIAudio(base64, mimeType = "audio/mpeg") {
   setDeveloperAICallScrollSafe();
 
   const status = $("developer-ai-status");
-  if (status) status.textContent = "Developer AI is speaking…";
+  if (status) status.textContent = "Seth is speaking…";
   updateDeveloperAICallWindow("Speaking…", DEVELOPER_AI_NAME);
 
   // Web Audio is preferred on iPhone because CALL unlocks its audio context.
@@ -6591,7 +6641,7 @@ function developerAITestRecordingFilename(mimeType = "audio/mp4") {
     pad(d.getHours()) +
     pad(d.getMinutes()) +
     pad(d.getSeconds());
-  return "MyServiceTstDgnstcs-" + stamp + (mimeType.includes("mp4") ? ".m4a" : ".webm");
+  return "SethCall-" + stamp + (mimeType.includes("mp4") ? ".m4a" : ".webm");
 }
 
 function stopDeveloperAITestRecording(showSave = true) {
@@ -6604,7 +6654,7 @@ function stopDeveloperAITestRecording(showSave = true) {
   recorder.onstop = () => {
     const chunks = developerAITestRecordChunks.splice(0);
     if (!chunks.length) {
-      updateDeveloperAICallWindow("Recording empty", "No call audio was captured. Tap record after Listening appears.");
+      updateDeveloperAICallWindow("Recording empty", "No call audio was captured. Tap the round record button after Listening appears.");
       return;
     }
 
@@ -6625,9 +6675,9 @@ function stopDeveloperAITestRecording(showSave = true) {
       }
       save.href = developerAITestRecordingUrl;
       save.download = developerAITestRecordingFilename(mimeType);
-      save.textContent = "SAVE TEST CALL RECORDING";
+      save.textContent = "SAVE SETH CALL RECORDING";
       save.onclick = () => setTimeout(() => save.remove(), 2500);
-      updateDeveloperAICallWindow("Recording ready", "Tap SAVE TEST CALL RECORDING.");
+      updateDeveloperAICallWindow("Recording ready", "Tap SAVE SETH CALL RECORDING.");
     }
   };
 
@@ -6639,10 +6689,13 @@ function stopDeveloperAITestRecording(showSave = true) {
 
   const btn = $("developer-ai-test-record");
   if (btn) {
-    btn.textContent = "● RECORD TEST CALL";
+    btn.textContent = "●";
+    btn.setAttribute("aria-label", "Start call recording");
     btn.style.background = "rgba(255,255,255,.16)";
     btn.style.color = "white";
   }
+  const label = $("developer-ai-record-label");
+  if (label) label.textContent = "Record call • local only";
 }
 
 async function toggleDeveloperAITestRecording() {
@@ -6651,6 +6704,11 @@ async function toggleDeveloperAITestRecording() {
     updateDeveloperAICallWindow("Listening…", "Test recording stopped — save button ready.");
     return;
   }
+
+  const approved = window.confirm(
+    "Start recording this Seth call?\n\nThe recording stays on this device until you save it. Tell anyone else on the call before recording."
+  );
+  if (!approved) return;
 
   let stream = developerAITestRecordingStream();
   if (!stream || !stream.getAudioTracks?.().length) {
@@ -6696,11 +6754,14 @@ async function toggleDeveloperAITestRecording() {
 
   const btn = $("developer-ai-test-record");
   if (btn) {
-    btn.textContent = "■ STOP + SAVE";
+    btn.textContent = "■";
+    btn.setAttribute("aria-label", "Stop and save call recording");
     btn.style.background = "#fff";
     btn.style.color = "#d92d20";
   }
-  updateDeveloperAICallWindow("Listening…", "TEST RECORDING • local only");
+  const label = $("developer-ai-record-label");
+  if (label) label.textContent = "Recording • tap to stop and save";
+  updateDeveloperAICallWindow("Listening…", "RECORDING • local only");
 }
 
 function openDeveloperAICallWindow() {
@@ -6726,7 +6787,7 @@ function openDeveloperAICallWindow() {
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
       <div>
         <div style="font-size:12px;font-weight:850;letter-spacing:1.2px;opacity:.8;">MYSERVICE</div>
-        <div style="font-size:24px;font-weight:900;">Seth • MyService Support</div>
+        <div style="font-size:24px;font-weight:900;">Seth • MyService Troubleshooting</div>
       </div>
       <button id="developer-ai-call-close" type="button"
         style="border:0;background:rgba(255,255,255,.14);color:white;width:42px;height:42px;border-radius:50%;font-size:22px;">×</button>
@@ -6740,8 +6801,9 @@ function openDeveloperAICallWindow() {
       </div>
     </div>
 
-    <button id="developer-ai-test-record" type="button"
-      style="padding:12px;margin-bottom:10px;border:0;border-radius:14px;background:rgba(255,255,255,.16);color:white;font-weight:900;">● RECORD TEST CALL</button>
+    <button id="developer-ai-test-record" type="button" aria-label="Start call recording" title="Record call"
+      style="width:66px;height:66px;min-width:66px;align-self:center;padding:0;margin:0 auto 7px;border:2px solid rgba(255,255,255,.7);border-radius:50%;background:rgba(255,255,255,.16);color:white;font-size:28px;font-weight:900;display:grid;place-items:center;">●</button>
+    <div id="developer-ai-record-label" style="margin:0 0 12px;text-align:center;font-size:12px;font-weight:800;opacity:.88;">Record call • local only</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
       <button id="developer-ai-call-quiet" type="button"
         style="min-height:54px;border:0;border-radius:18px;background:rgba(255,255,255,.16);color:white;font-weight:850;">HOLD UP</button>
@@ -6750,7 +6812,7 @@ function openDeveloperAICallWindow() {
       </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
       <button id="developer-ai-call-speaker" type="button"
-        style="min-height:54px;border:0;border-radius:18px;background:white;color:#0f5fc7;font-weight:900;">🔊 LOUD</button>
+        style="min-height:54px;border:0;border-radius:18px;background:rgba(255,255,255,.16);color:white;font-weight:900;">🔉 LOW</button>
       <button id="developer-ai-call-end" type="button"
         style="min-height:54px;border:0;border-radius:18px;background:#d92d20;color:white;font-weight:900;">END</button>
     </div>
@@ -6785,9 +6847,10 @@ function openDeveloperAICallWindow() {
 
   $("developer-ai-call-speaker").onclick = function () {
     developerAISpeakerMode = !developerAISpeakerMode;
-    if (developerAIRealtimeAudio) developerAIRealtimeAudio.volume = developerAISpeakerMode ? 1 : 0.45;
-    if (developerAIAudio) developerAIAudio.volume = developerAISpeakerMode ? 1 : 0.45;
-    this.textContent = developerAISpeakerMode ? "🔊 LOUD" : "🔉 QUIET";
+    if (developerAIRealtimeAudio) developerAIRealtimeAudio.volume = developerAISpeakerMode ? 1 : 0.35;
+    if (developerAIAudio) developerAIAudio.volume = developerAISpeakerMode ? 1 : 0.35;
+    if (developerAIRealtimeOutputGain) developerAIRealtimeOutputGain.gain.value = developerAISpeakerMode ? 1 : 0.35;
+    this.textContent = developerAISpeakerMode ? "🔊 LOUD" : "🔉 LOW";
     this.style.background = developerAISpeakerMode ? "white" : "rgba(255,255,255,.16)";
     this.style.color = developerAISpeakerMode ? "#0f5fc7" : "white";
   };
@@ -6929,6 +6992,7 @@ async function startDeveloperAIRealtimeCall(isReconnect = false) {
   }
 
   developerAICallMode = true;
+  developerAISpeakerMode = false;
   if (!isReconnect) {
     clearDeveloperAIReconnect();
     openDeveloperAICallWindow();
@@ -6941,7 +7005,7 @@ async function startDeveloperAIRealtimeCall(isReconnect = false) {
   const button = $("developer-ai-call");
   const status = $("developer-ai-status");
   if (button) button.textContent = "■ END CALL";
-  if (status) status.textContent = "Starting realtime Developer AI call…";
+  if (status) status.textContent = "Starting realtime Seth call…";
 
   developerAIRealtimeStream = await navigator.mediaDevices.getUserMedia({
     audio: {
@@ -6957,7 +7021,7 @@ async function startDeveloperAIRealtimeCall(isReconnect = false) {
   developerAIRealtimeAudio = document.createElement("audio");
   developerAIRealtimeAudio.autoplay = true;
   developerAIRealtimeAudio.playsInline = true;
-  developerAIRealtimeAudio.volume = 1;
+  developerAIRealtimeAudio.volume = 0.35;
   developerAIRealtimeAudio.style.display = "none";
   document.body.appendChild(developerAIRealtimeAudio);
 
@@ -6977,13 +7041,16 @@ async function startDeveloperAIRealtimeCall(isReconnect = false) {
         }
         try { developerAIRealtimeAudioSource?.disconnect?.(); } catch (_) {}
         developerAIRealtimeAudioSource = developerAIAudioContext.createMediaStreamSource(remote);
-        developerAIRealtimeAudioSource.connect(developerAIAudioContext.destination);
+        developerAIRealtimeOutputGain = developerAIAudioContext.createGain();
+        developerAIRealtimeOutputGain.gain.value = 0.35;
+        developerAIRealtimeAudioSource.connect(developerAIRealtimeOutputGain);
+        developerAIRealtimeOutputGain.connect(developerAIAudioContext.destination);
       }
     } catch (_) {}
 
     developerAIRealtimeAudio.srcObject = remote;
     developerAIRealtimeAudio.muted = false;
-    developerAIRealtimeAudio.volume = 1;
+    developerAIRealtimeAudio.volume = 0.35;
     developerAIRealtimeAudio.play().catch(() => {
       // Web Audio above remains the primary iPhone speaker path.
       updateDeveloperAICallWindow("Connected", "Audio is using the iPhone speaker fallback path.");
@@ -6995,10 +7062,10 @@ async function startDeveloperAIRealtimeCall(isReconnect = false) {
     if (state === "connected") {
       developerAIReconnectAttempts = 0;
       updateDeveloperAICallWindow("Listening…", "Realtime voice connected");
-      if (status) status.textContent = "Developer AI realtime call connected.";
+      if (status) status.textContent = "Seth realtime call connected.";
     } else if (state === "failed" || state === "disconnected") {
       updateDeveloperAICallWindow("Connection interrupted", "Reconnecting automatically…");
-      if (status) status.textContent = "Developer AI connection interrupted — reconnecting…";
+      if (status) status.textContent = "Seth connection interrupted — reconnecting…";
       scheduleDeveloperAIReconnect();
     }
   };
@@ -7021,7 +7088,8 @@ async function startDeveloperAIRealtimeCall(isReconnect = false) {
             "Your name is Seth. You are the advanced AI assistant for MyService Support. " +
             "Sound like a real guy: natural, chill, laid-back, warm, and conversational. " +
             "Use relaxed pacing and short spoken sentences. Reply promptly after Caleb finishes speaking, " +
-            "including after a simple hello. Never use an announcer tone, robotic cadence, or spoken system messages.",
+            "including after a simple hello. Never use an announcer tone, robotic cadence, or spoken system messages. " +
+            "You are the troubleshooting assistant too: check the safe diagnostic context before guessing, explain the real cause plainly, and give one practical next action at a time. Never reveal secrets or private records, and never authorize a website, code, security, or destructive change from voice alone.",
           audio: {
             input: {
               turn_detection: {
@@ -7041,7 +7109,7 @@ async function startDeveloperAIRealtimeCall(isReconnect = false) {
         type: "response.create",
         response: {
           instructions:
-            "Greet the caller once in a relaxed, genuinely friendly way. Say: " +
+            "Speak first immediately after the call connects. Greet the caller once in a relaxed, genuinely friendly way. Say: " +
             "\"Hey, thanks for calling MyService Support. I’m Seth, your advanced AI assistant. What can I help you with today?\""
         }
       }));
@@ -7068,7 +7136,7 @@ async function startDeveloperAIRealtimeCall(isReconnect = false) {
 
   unlockDeveloperAIAudio();
   updateDeveloperAICallWindow("Listening…", "Talk naturally — I’ll wait for you to finish.");
-  if (status) status.textContent = "Developer AI realtime voice ready.";
+  if (status) status.textContent = "Seth realtime voice ready.";
 }
 
 
@@ -7184,7 +7252,8 @@ async function answerDeveloperAIFreeCall(message) {
   updateDeveloperAICallWindow("Thinking…", message);
   try {
     const response = await callMyServiceEdgeFunction("developer-ai", {
-      action: "gemini_chat", messages: history.slice(-12), voice: true
+      action: "gemini_chat", messages: history.slice(-12), voice: true,
+      context: getDeveloperAISafeContext()
     });
     const reply = cleanDeveloperAIFreeReply(response.reply);
     history.push({ role: "assistant", content: reply });
@@ -7342,7 +7411,7 @@ async function startDeveloperAIFreeCall() {
 
   developerAICallMode = true;
   developerAIFreeCallMode = true;
-  developerAISpeakerMode = true;
+  developerAISpeakerMode = false;
   unlockDeveloperAIAudio();
 
   openDeveloperAICallWindow();
@@ -7352,7 +7421,7 @@ async function startDeveloperAIFreeCall() {
   const button = $("developer-ai-call");
   const status = $("developer-ai-status");
   if (button) button.textContent = "■ END CALL";
-  if (status) status.textContent = "Starting Developer AI voice…";
+  if (status) status.textContent = "Starting Seth voice…";
 
   // Prefer one persistent microphone stream + local voice activity detection.
   // This avoids Safari's repeated speech-recognition start/stop chimes.
@@ -7360,7 +7429,7 @@ async function startDeveloperAIFreeCall() {
     const mediaStarted = await startDeveloperAIFreeMediaCapture();
     if (mediaStarted) {
       updateDeveloperAICallWindow("Listening…", "Stable microphone ready");
-      if (status) status.textContent = "Developer AI no-credit call connected.";
+      if (status) status.textContent = "Seth no-credit call connected.";
       return;
     }
   } catch (_) {
@@ -7409,7 +7478,7 @@ async function startDeveloperAIFreeCall() {
 
   try { recognition.start(); } catch (_) {}
   updateDeveloperAICallWindow("Listening…", "Voice input ready");
-  if (status) status.textContent = "Developer AI browser fallback connected.";
+  if (status) status.textContent = "Seth browser fallback connected.";
 }
 
 async function toggleDeveloperAICall() {
@@ -7482,7 +7551,7 @@ async function sendDeveloperAIMessage(event) {
   event?.preventDefault?.();
 
   if (!developerAIIsAllowed()) {
-    alert("Developer AI is available only to the platform developer account.");
+    alert("Seth is available only to the platform developer account.");
     return;
   }
 
@@ -7499,7 +7568,7 @@ async function sendDeveloperAIMessage(event) {
   renderDeveloperAIChat();
 
   if (send) send.disabled = true;
-  if (status) status.textContent = "Developer AI is thinking…";
+  if (status) status.textContent = "Seth is thinking…";
 
   try {
     const response = await callMyServiceEdgeFunction("developer-ai", {
@@ -7510,7 +7579,8 @@ async function sendDeveloperAIMessage(event) {
       messages: history.slice(-12),
       voice: developerAICallMode === true,
       voiceNetwork: developerAICallMode ? developerAIVoiceModeForNetwork() : null,
-      allowCodePush: developerAICodePushEnabled()
+      allowCodePush: developerAICodePushEnabled(),
+      context: getDeveloperAISafeContext()
     });
 
     history.push({
@@ -7531,7 +7601,7 @@ async function sendDeveloperAIMessage(event) {
           if (callStatus) callStatus.textContent = "Reply ready — waiting for you to finish.";
           updateDeveloperAICallWindow("Listening…", "Reply ready. I’ll wait until you finish.");
         } else {
-          if (callStatus) callStatus.textContent = "Developer AI is speaking…";
+          if (callStatus) callStatus.textContent = "Seth is speaking…";
           playDeveloperAIAudio(response.audioBase64, response.audioMimeType || "audio/mpeg");
         }
       } else {
@@ -7545,7 +7615,7 @@ async function sendDeveloperAIMessage(event) {
     }
 
     if (status) {
-      status.textContent = "Developer AI ready" + (response.model ? " • " + response.model : "");
+      status.textContent = "Seth ready" + (response.model ? " • " + response.model : "");
     }
   } catch (error) {
     const messageText = String(error?.message || "Developer AI request failed.");
@@ -7557,7 +7627,7 @@ async function sendDeveloperAIMessage(event) {
     });
     saveDeveloperAIHistory(history);
     renderDeveloperAIChat();
-    if (status) status.textContent = "Developer AI unavailable — " + messageText;
+    if (status) status.textContent = "Seth unavailable — " + messageText;
   } finally {
     if (send) send.disabled = false;
     input?.focus();
