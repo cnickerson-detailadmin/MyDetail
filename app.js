@@ -6185,6 +6185,105 @@ let developerAIFreeRequestBusy = false;
 let developerAICallManagerTimer = null;
 let developerAICallManagerRecoveries = 0;
 let developerAICallManagerLastRecoveryAt = 0;
+let developerAICallManagerHealth = {
+  state: "idle",
+  mic: "unknown",
+  connection: "unknown",
+  provider: "unknown",
+  playback: "unknown",
+  policy: "enforced",
+  lastUserSpeechAt: 0,
+  lastProviderReplyAt: 0,
+  lastPlaybackStartAt: 0,
+  lastIncident: "",
+  lastAction: "",
+  lastResult: "",
+  updatedAt: 0
+};
+let developerAICallManagerAudit = [];
+let developerAICallManagerNoReplyTimer = null;
+
+function developerAICallManagerRecord(kind, detail = "") {
+  const safeDetail = String(detail || "")
+    .replace(/sk-[A-Za-z0-9_-]+/g, "[REDACTED]")
+    .replace(/AIza[A-Za-z0-9_-]+/g, "[REDACTED]")
+    .slice(0, 220);
+  developerAICallManagerAudit.unshift({
+    time: new Date().toISOString(),
+    kind: String(kind || "event").slice(0, 60),
+    detail: safeDetail
+  });
+  developerAICallManagerAudit = developerAICallManagerAudit.slice(0, 40);
+}
+
+function developerAICallManagerSet(stateName, incident = "", action = "", result = "") {
+  developerAICallManagerHealth.state = stateName;
+  developerAICallManagerHealth.lastIncident = String(incident || "").slice(0, 160);
+  developerAICallManagerHealth.lastAction = String(action || "").slice(0, 160);
+  developerAICallManagerHealth.lastResult = String(result || "").slice(0, 160);
+  developerAICallManagerHealth.updatedAt = Date.now();
+  developerAICallManagerRecord(stateName, [incident, action, result].filter(Boolean).join(" • "));
+  const status = $("developer-ai-status");
+  if (status && developerAICallMode) {
+    const label = stateName === "healthy" ? "🟢 CALL HEALTHY" :
+      stateName === "degraded" ? "🟠 DEGRADED" :
+      stateName === "policy-block" ? "🛡️ POLICY BLOCK" :
+      stateName === "failure" ? "🔴 CALL FAILURE" : "Call Manager";
+    status.textContent = label + (incident ? " • " + incident : "");
+  }
+}
+
+function developerAICallManagerPolicyCheck() {
+  if (!developerAIIsAllowed()) {
+    developerAICallManagerSet("policy-block", "Developer-only call boundary", "Stop call", "Blocked");
+    if (developerAICallMode) stopDeveloperAICall();
+    return false;
+  }
+  if (document.hidden) {
+    developerAICallManagerSet("policy-block", "MyService is not active", "Stop Seth", "Stopped");
+    if (developerAICallMode) stopDeveloperAICall();
+    return false;
+  }
+  developerAICallManagerHealth.policy = "enforced";
+  return true;
+}
+
+function developerAICallManagerMarkUserSpeech() {
+  developerAICallManagerHealth.lastUserSpeechAt = Date.now();
+  clearTimeout(developerAICallManagerNoReplyTimer);
+  developerAICallManagerNoReplyTimer = setTimeout(() => {
+    if (!developerAICallMode || developerAISpeaking || developerAIFreeRequestBusy) return;
+    const replied = developerAICallManagerHealth.lastProviderReplyAt >= developerAICallManagerHealth.lastUserSpeechAt;
+    if (!replied) {
+      developerAICallManagerSet("degraded", "No provider reply detected after speech", "Verify active provider and microphone path", "Waiting for safe recovery");
+    }
+  }, 15000);
+}
+
+function developerAICallManagerMarkProviderReply(hasAudio) {
+  developerAICallManagerHealth.lastProviderReplyAt = Date.now();
+  developerAICallManagerHealth.provider = developerAIFreeProvider || (developerAIRealtimePc ? "realtime" : "unknown");
+  developerAICallManagerHealth.playback = hasAudio ? "audio-received" : "text-only";
+  clearTimeout(developerAICallManagerNoReplyTimer);
+  if (!hasAudio && developerAICallMode) {
+    developerAICallManagerSet("degraded", "Provider returned no playable audio", "Keep text reply visible", "No blind restart");
+  }
+}
+
+function developerAICallManagerMarkPlaybackStarted() {
+  developerAICallManagerHealth.lastPlaybackStartAt = Date.now();
+  developerAICallManagerHealth.playback = "playing";
+  developerAICallManagerSet("healthy", "End-to-end audio playback verified", "None", "Voice pipeline healthy");
+}
+
+function developerAICallManagerSnapshot() {
+  const streamLive = !!developerAIFreeMediaStream?.getAudioTracks?.().some(t => t.readyState === "live");
+  developerAICallManagerHealth.mic = streamLive || developerAIRecognitionActive ? "live" : "unverified";
+  developerAICallManagerHealth.connection = developerAIRealtimePc?.connectionState || (developerAIFreeCallMode ? "free-provider" : "none");
+  developerAICallManagerHealth.provider = developerAIFreeProvider || (developerAIRealtimePc ? "realtime" : "none");
+  developerAICallManagerHealth.updatedAt = Date.now();
+  return { ...developerAICallManagerHealth };
+}
 let developerAICallManagerPlaybackFailures = 0;
 let developerAICallManagerLastHealthyAt = 0;
 let developerAILastSpokenReply = "";
@@ -6483,6 +6582,7 @@ function resumePendingDeveloperAIVoiceReply() {
 }
 
 function queueDeveloperAIUserSpeech(transcript) {
+  developerAICallManagerMarkUserSpeech();
   const text = String(transcript || "").trim();
   if (!text) return;
 
@@ -6554,6 +6654,9 @@ function stopDeveloperAIAudio() {
 }
 
 function stopDeveloperAICallManager() {
+  clearTimeout(developerAICallManagerNoReplyTimer);
+  developerAICallManagerNoReplyTimer = null;
+  developerAICallManagerHealth.state = "idle";
   if (developerAICallManagerTimer) clearInterval(developerAICallManagerTimer);
   developerAICallManagerTimer = null;
   developerAICallManagerRecoveries = 0;
@@ -6561,7 +6664,9 @@ function stopDeveloperAICallManager() {
 }
 
 function reportDeveloperAICallHealth(label, detail = "") {
+  developerAICallManagerRecord(label, detail);
   developerAICallManagerLastHealthyAt = Date.now();
+    developerAICallManagerMarkPlaybackStarted();
   const status = $("developer-ai-status");
   if (status && developerAICallMode) {
     status.textContent = "Call Manager • " + label + (detail ? " • " + detail : "");
@@ -6569,6 +6674,7 @@ function reportDeveloperAICallHealth(label, detail = "") {
 }
 
 function startDeveloperAICallManager() {
+  developerAICallManagerSet("degraded", "Call starting", "Run independent health checks", "Supervision active");
   stopDeveloperAICallManager();
   developerAICallManagerTimer = setInterval(async () => {
     if (!developerAICallMode || document.hidden) return;
@@ -7469,6 +7575,7 @@ async function answerDeveloperAIFreeCall(message) {
     renderDeveloperAIChat();
     developerAILastSpokenReply = reply;
     if (developerAICallMode) {
+      developerAICallManagerMarkProviderReply(!!response.audioBase64);
       if (response.audioBase64) {
         playDeveloperAIAudio(response.audioBase64, response.audioMimeType || "audio/mpeg");
       } else {
@@ -7917,6 +8024,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 document.addEventListener("visibilitychange", () => {
   if (document.hidden && developerAICallMode) {
+    developerAICallManagerSet("policy-block", "App hidden or closed", "Stop Seth immediately", "Stopped");
     stopDeveloperAICall();
     return;
   }
