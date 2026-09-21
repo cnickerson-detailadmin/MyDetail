@@ -6069,47 +6069,61 @@ async function runSethSelfCheck() {
     return;
   }
 
+  const status = $("developer-ai-status");
+  if (status) status.textContent = "MyService is running Seth’s full AI + call-path diagnosis…";
   const diagnostics = getSethSelfDiagnostics();
+
   try {
-    const cloudflare = await callMyServiceEdgeFunction("developer-ai", { action: "cloudflare_status" });
-    diagnostics.checks.push({
-      name: "Cloudflare fallback",
-      ok: cloudflare.configured === true,
-      detail: cloudflare.configured ? "Server configuration ready" :
-        "Server is missing " + [
-          !cloudflare.tokenConfigured && "Cloudflare token",
-          !cloudflare.accountConfigured && "Cloudflare Account ID"
-        ].filter(Boolean).join(" and ")
-    });
-    if (cloudflare.configured) {
-      try {
-        const probe = await callMyServiceEdgeFunction("developer-ai", { action: "cloudflare_probe" });
-        diagnostics.checks.push({ name: "Cloudflare connection", ok: probe.ready === true,
-          detail: probe.ready ? "AI model responded" : "AI model did not respond" });
-      } catch (error) {
-        diagnostics.checks.push({ name: "Cloudflare connection", ok: false,
-          detail: String(error?.message || "Model request failed").slice(0, 160) });
-      }
+    const server = await callMyServiceEdgeFunction("developer-ai", { action: "myservice_ai_health" });
+    for (const check of (server.checks || [])) {
+      diagnostics.checks.push({
+        name: "MyService • " + String(check.name || "server check").replaceAll("_", " "),
+        ok: check.ok === true,
+        detail: String(check.detail || "") + (Number.isFinite(check.ms) && check.ms ? " • " + check.ms + "ms" : "")
+      });
     }
-  } catch (_) {
-    diagnostics.checks.push({ name: "Cloudflare fallback", ok: false, detail: "Could not reach the server check" });
+  } catch (error) {
+    diagnostics.checks.push({
+      name: "MyService diagnostic backend",
+      ok: false,
+      detail: String(error?.message || "Could not run the protected server diagnosis").slice(0, 180)
+    });
   }
+
+  const routeStarted = Date.now();
+  const routeOptions = await Promise.race([
+    getDeveloperAIAudioOutputOptions(),
+    new Promise(resolve => setTimeout(() => resolve(null), 1800))
+  ]);
+  diagnostics.checks.push({
+    name: "iPhone audio-route scan",
+    ok: Array.isArray(routeOptions),
+    detail: Array.isArray(routeOptions)
+      ? "Completed in " + (Date.now() - routeStarted) + "ms; iOS may keep Bluetooth routing private"
+      : "Timed out; MyService will use the phone’s current route instead of hanging"
+  });
+
+  const snap = developerAICallManagerSnapshot();
+  diagnostics.checks.push({
+    name: "Call scanner",
+    ok: true,
+    detail: "State " + snap.state + " • mic " + snap.mic + " • provider " + snap.provider + " • playback " + snap.playback
+  });
+
   const failed = diagnostics.checks.filter(check => !check.ok);
   const lines = diagnostics.checks.map(check =>
     (check.ok ? "✓ " : "⚠ ") + check.name + " — " + check.detail
   );
   const summary = failed.length
-    ? "Self-check finished. I found " + failed.length + " item" + (failed.length === 1 ? "" : "s") + " that need attention.\n\n" + lines.join("\n")
-    : "Self-check finished. Everything I can safely test from this screen looks good.\n\n" + lines.join("\n");
+    ? "MyService full self-check found " + failed.length + " item" + (failed.length === 1 ? "" : "s") + " needing attention.\n\n" + lines.join("\n")
+    : "MyService full self-check passed every test available from this device and the protected backend.\n\n" + lines.join("\n");
 
   const history = getDeveloperAIHistory();
   history.push({ role: "assistant", content: summary });
   saveDeveloperAIHistory(history);
   renderDeveloperAIChat();
-  const status = $("developer-ai-status");
-  if (status) status.textContent = failed.length ? "Seth found items that need attention." : "Seth self-check passed.";
+  if (status) status.textContent = failed.length ? "Seth captured the failing stage(s)." : "Seth full self-check passed.";
 }
-
 async function askSethToDiagnose() {
   if (!developerAIIsAllowed()) return;
   const input = $("developer-ai-input");
@@ -6903,6 +6917,12 @@ function playDeveloperAIAudio(base64, mimeType = "audio/mpeg") {
       developerAIAudio.volume = developerAISpeakerMode ? 1 : 0.62;
       applyDeveloperAIAudioOutput(developerAIPreferredAudioOutput).catch(() => {});
 
+      developerAIAudio.onplaying = () => {
+        developerAICallManagerMarkPlaybackStarted();
+        developerAICallManagerLastRecoveryAt = 0;
+        developerAICallManagerPlaybackFailures = 0;
+      };
+
       developerAIAudio.onended = () => {
         developerAISpeaking = false;
         if (developerAICallMode && status) status.textContent = "Call mode active — listening…";
@@ -6918,10 +6938,12 @@ function playDeveloperAIAudio(base64, mimeType = "audio/mpeg") {
         restartDeveloperAIListening(250);
       };
 
-      developerAIAudio.play().catch(() => {
+      developerAIAudio.play().catch((error) => {
         developerAICallManagerPlaybackFailures += 1;
         developerAISpeaking = false;
-        if (status) status.textContent = "Tap CALL once to re-enable iPhone audio, then try again.";
+        developerAICallManagerSet("failure", "iPhone blocked or failed audio playback", "Re-arm audio from the CALL button and retry current provider", String(error?.name || "play() rejected"));
+        updateDeveloperAICallWindow("🔴 PLAYBACK BLOCKED", "MyService received Seth’s audio but iPhone did not start it. The call scanner captured the playback failure.");
+        if (status) status.textContent = "Playback blocked — MyService captured the failing stage.";
         restartDeveloperAIListening(250);
       });
     } catch (_) {
@@ -7128,7 +7150,12 @@ async function refreshDeveloperAIAudioOutputControl() {
   const select = $("developer-ai-audio-output");
   const note = $("developer-ai-audio-output-note");
   if (!select) return;
-  const options = await getDeveloperAIAudioOutputOptions();
+  if (note) note.textContent = "Checking available audio routes…";
+  let timedOut = false;
+  const options = await Promise.race([
+    getDeveloperAIAudioOutputOptions(),
+    new Promise(resolve => setTimeout(() => { timedOut = true; resolve([{ id: "auto", label: "Automatic / iPhone" }]); }, 1800))
+  ]);
   const bluetooth = options.filter(option => option.bluetooth);
   const ordered = [
     ...bluetooth,
@@ -7147,9 +7174,11 @@ async function refreshDeveloperAIAudioOutputControl() {
     select.value = "auto";
   }
   if (note) {
-    note.textContent = bluetooth.length
-      ? "Bluetooth audio is available and shown first."
-      : "iPhone may keep Bluetooth routing in Control Center when Safari does not expose the device name.";
+    note.textContent = timedOut
+      ? "iPhone controls the final audio route; route scan timed out safely."
+      : bluetooth.length
+        ? "Bluetooth audio is available and shown first."
+        : "iPhone may keep Bluetooth routing in Control Center when Safari does not expose the device name.";
   }
 }
 
