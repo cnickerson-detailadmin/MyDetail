@@ -7152,6 +7152,9 @@ function startDeveloperAICallManager() {
 }
 
 function stopDeveloperAICall() {
+  // Invalidate any provider setup that is still awaiting a network or mic result.
+  developerAICallStartupToken += 1;
+  developerAICallStarting = false;
   $("developer-ai-call-troubleshoot-menu")?.remove();
   if (window.__myserviceCallExterminationTimer) {
     clearInterval(window.__myserviceCallExterminationTimer);
@@ -8632,8 +8635,9 @@ function resetDeveloperAICallForRestart() {
   enforceMyServiceTouchSafety();
 }
 
-async function startDeveloperAIFreeCall(provider = "gemini") {
+async function startDeveloperAIFreeCall(provider = "gemini", startupToken = developerAICallStartupToken) {
   const setup = await callMyServiceEdgeFunction("developer-ai", { action: provider + "_status" });
+  if (startupToken !== developerAICallStartupToken) return false;
   if (!setup.configured) throw new Error(provider + " voice needs its server configuration.");
 
   developerAICallMode = true;
@@ -8642,7 +8646,7 @@ async function startDeveloperAIFreeCall(provider = "gemini") {
   developerAISpeakerMode = false;
   unlockDeveloperAIAudio();
 
-  openDeveloperAICallWindow();
+  if (!$("developer-ai-call-window")) openDeveloperAICallWindow();
   updateDeveloperAICallWindow("Connecting…", "Starting stable no-credit voice");
   setDeveloperAICallScrollSafe();
 
@@ -8655,6 +8659,10 @@ async function startDeveloperAIFreeCall(provider = "gemini") {
   // This avoids Safari's repeated speech-recognition start/stop chimes.
   try {
     const mediaStarted = await startDeveloperAIFreeMediaCapture();
+    if (startupToken !== developerAICallStartupToken) {
+      stopDeveloperAIFreeMediaCapture();
+      return false;
+    }
     if (mediaStarted) {
       updateDeveloperAICallWindow("Listening…", "Stable microphone ready");
       if (status) status.textContent = "Seth no-credit call connected.";
@@ -8664,6 +8672,7 @@ async function startDeveloperAIFreeCall(provider = "gemini") {
   } catch (_) {
     stopDeveloperAIFreeMediaCapture();
   }
+  if (startupToken !== developerAICallStartupToken) return false;
 
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!Recognition) {
@@ -8766,45 +8775,64 @@ async function greetDeveloperAIFreeCall(provider) {
   }
 }
 
+let developerAICallStartupToken = 0;
+let developerAICallStarting = false;
+
 async function toggleDeveloperAICall() {
   if (!developerAIIsAllowed()) return;
-  if (developerAICallMode) {
+  if (developerAICallStarting || developerAICallMode) {
     stopDeveloperAICall();
     return;
   }
 
+  const startupToken = ++developerAICallStartupToken;
+  developerAICallStarting = true;
   resetDeveloperAICallForRestart();
-  unlockDeveloperAIAudio();
+  unlockDeveloperAIAudio(); // Keep this in the original tap for iPhone playback.
   openDeveloperAICallWindow();
-  updateDeveloperAICallWindow("Connecting…", "Call Manager is checking available voice paths.");
+  updateDeveloperAICallWindow("Connecting…", "Checking Gemini and Cloudflare voice.");
 
   const failures = [];
-  // Paid OpenAI realtime is intentionally disabled. Only attempt approved free
-  // providers so a known-disabled path cannot turn a recoverable outage into a
-  // misleading third failure.
   const attempts = [
-    ["gemini", () => startDeveloperAIFreeCall("gemini")],
-    ["cloudflare", () => startDeveloperAIFreeCall("cloudflare")]
+    ["gemini", () => startDeveloperAIFreeCall("gemini", startupToken)],
+    ["cloudflare", () => startDeveloperAIFreeCall("cloudflare", startupToken)]
   ];
 
-  for (const [name, start] of attempts) {
-    try {
-      updateDeveloperAICallWindow("Connecting…", "Trying " + name + " voice.");
-      await start();
-      startDeveloperAICallManager();
-      developerAICallManagerHealth.provider = name;
-      return;
-    } catch (error) {
-      failures.push(name + ": " + String(error?.message || "startup failed").slice(0, 90));
-      stopDeveloperAICall();
-      openDeveloperAICallWindow();
+  try {
+    for (const [name, start] of attempts) {
+      if (startupToken !== developerAICallStartupToken) return;
+      try {
+        updateDeveloperAICallWindow("Connecting…", "Trying " + name + " voice.");
+        const connected = await start();
+        if (startupToken !== developerAICallStartupToken) return;
+        if (!connected && !developerAICallMode) return;
+        startDeveloperAICallManager();
+        developerAICallManagerHealth.provider = name;
+        return;
+      } catch (error) {
+        if (startupToken !== developerAICallStartupToken) return;
+        failures.push(name + ": " + String(error?.message || "startup failed").slice(0, 90));
+        // Tear down the failed provider before the next attempt, then keep the
+        // same visible call surface and its already attached button handlers.
+        try { developerAIRecognition?.abort?.(); } catch (_) {}
+        developerAIRecognition = null;
+        developerAIRecognitionActive = false;
+        stopDeveloperAIFreeMediaCapture();
+        developerAIFreeCallMode = false;
+        developerAIFreeProvider = "";
+        developerAICallMode = false;
+        stopDeveloperAIAudio();
+      }
     }
-  }
 
-  developerAICallManagerSet("failure", "Voice startup failed", "Tried all approved voice paths", "No voice path connected");
-  updateDeveloperAICallWindow("🔴 CALL FAILURE", failures.join(" • ") || "No voice path connected.");
-  const status = $("developer-ai-status");
-  if (status) status.textContent = "Call Manager: " + (failures.join(" • ") || "voice startup failed");
+    if (startupToken !== developerAICallStartupToken) return;
+    developerAICallManagerSet("failure", "Voice startup failed", "Tried approved voice paths", "No voice path connected");
+    updateDeveloperAICallWindow("🔴 CALL FAILURE", failures.join(" • ") || "No voice path connected.");
+    const status = $("developer-ai-status");
+    if (status) status.textContent = "Call Manager: " + (failures.join(" • ") || "voice startup failed");
+  } finally {
+    if (startupToken === developerAICallStartupToken) developerAICallStarting = false;
+  }
 }
 
 async function generateDeveloperAIImage() {
