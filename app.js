@@ -6876,15 +6876,27 @@ async function toggleDeveloperAICall() {
     return;
   }
 
+  // Prefer the true streaming WebRTC call path. It has semantic turn detection,
+  // natural barge-in, noise reduction, and streamed audio. Keep the existing
+  // no-credit/browser path only as a fallback so CALL never becomes unusable.
   try {
-    await startDeveloperAIFreeCall();
-  } catch (error) {
-    const message = String(error?.message || "No-credit voice could not start.");
+    await startDeveloperAIRealtimeCall();
+    return;
+  } catch (realtimeError) {
     stopDeveloperAICall();
-    openDeveloperAICallWindow();
-    updateDeveloperAICallWindow("Couldn’t connect", message);
-    const status = $("developer-ai-status");
-    if (status) status.textContent = "No-credit Developer AI unavailable — " + message;
+    try {
+      await startDeveloperAIFreeCall();
+      const status = $("developer-ai-status");
+      if (status) status.textContent = "Developer AI fallback call connected.";
+      return;
+    } catch (fallbackError) {
+      const message = String(fallbackError?.message || realtimeError?.message || "Voice could not start.");
+      stopDeveloperAICall();
+      openDeveloperAICallWindow();
+      updateDeveloperAICallWindow("Couldn’t connect", message);
+      const status = $("developer-ai-status");
+      if (status) status.textContent = "Developer AI voice unavailable — " + message;
+    }
   }
 }
 
