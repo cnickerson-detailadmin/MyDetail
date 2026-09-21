@@ -7792,7 +7792,7 @@ async function runDeveloperAICallTroubleshooter(issue) {
     // Re-arm the call state so a failed startup can be actively recovered.
     developerAICallMode = true;
     developerAIFreeCallMode = true;
-    if (!developerAIFreeProvider) developerAIFreeProvider = "gemini";
+    if (!developerAIFreeProvider) developerAIFreeProvider = "groq";
     unlockDeveloperAIAudio();
     updateDeveloperAICallWindow("🛠 AUTO TROUBLESHOOT", "Checking provider, microphone, playback, and recovery paths…");
     try {
@@ -8565,7 +8565,7 @@ function developerAIProviderRecoverableError(error) {
 }
 
 async function switchDeveloperAIFreeProvider(failedProvider, reason = "") {
-  const approved = ["cloudflare", "gemini"].filter(name => name !== failedProvider);
+  const approved = ["groq", "gemini", "cloudflare"].filter(name => name !== failedProvider);
   let lastError = null;
   for (const fallback of approved) {
     try {
@@ -8987,22 +8987,37 @@ async function toggleDeveloperAICall() {
   resetDeveloperAICallForRestart();
   unlockDeveloperAIAudio(); // Keep this in the original tap for iPhone playback.
   openDeveloperAICallWindow();
-  updateDeveloperAICallWindow("Connecting…", "Starting primary Gemini Live voice.");
+  updateDeveloperAICallWindow("Connecting…", "Starting primary Groq voice.");
 
   try {
     if (startupToken !== developerAICallStartupToken) return;
-    await startDeveloperAIRealtimeCall(false);
+    await startDeveloperAIFreeCall("groq");
     if (startupToken !== developerAICallStartupToken) return;
     startDeveloperAICallManager();
-    developerAICallManagerHealth.provider = "gemini-live";
-  } catch (error) {
+    developerAICallManagerHealth.provider = "groq";
+  } catch (groqError) {
     if (startupToken !== developerAICallStartupToken) return;
-    const message = String(error?.message || "Gemini Live startup failed.").slice(0, 180);
-    developerAICallManagerSet("failure", "Gemini Live startup failed", "Primary Live path attempted", message);
-    updateDeveloperAICallWindow("🔴 CALL FAILURE", "gemini-live: " + message);
-    const status = $("developer-ai-status");
-    if (status) status.textContent = "Call Manager: Gemini Live startup failed — " + message;
-    developerAICallMode = false;
+    const groqMessage = String(groqError?.message || "Groq voice startup failed.").slice(0, 180);
+    developerAICallManagerSet("degraded", "Groq voice startup failed", "Trying Gemini Live fallback", groqMessage);
+    updateDeveloperAICallWindow("🟠 SWITCHING PROVIDER", "Groq unavailable. Trying Gemini Live.");
+    try {
+      resetDeveloperAICallForRestart();
+      developerAICallMode = true;
+      openDeveloperAICallWindow();
+      await startDeveloperAIRealtimeCall(false);
+      if (startupToken !== developerAICallStartupToken) return;
+      startDeveloperAICallManager();
+      developerAICallManagerHealth.provider = "gemini-live";
+    } catch (error) {
+      if (startupToken !== developerAICallStartupToken) return;
+      const message = String(error?.message || "Voice startup failed.").slice(0, 180);
+      developerAICallManagerSet("failure", "Groq and Gemini Live startup failed", "Voice paths attempted", message);
+      updateDeveloperAICallWindow("🔴 CALL FAILURE", message);
+      const status = $("developer-ai-status");
+      if (status) status.textContent = "Call Manager: voice startup failed — " + message;
+      developerAICallMode = false;
+    }
+  }
   } finally {
     if (startupToken === developerAICallStartupToken) developerAICallStarting = false;
   }
