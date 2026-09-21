@@ -6879,7 +6879,9 @@ async function playDeveloperAIWebAudio(base64, mimeType = "audio/mpeg") {
   };
 
   source.start(0);
+  developerAICallManagerRecord("web-audio-started", mimeType + " • duration " + Number(decoded.duration || 0).toFixed(2) + "s");
   developerAICallManagerMarkPlaybackStarted();
+  updateDeveloperAICallWindow("Speaking…", "Seth • " + developerAIFreeProvider + " • audio playback verified");
   developerAICallManagerLastRecoveryAt = 0;
   developerAICallManagerPlaybackFailures = 0;
   developerAICallManagerLastHealthyAt = Date.now();
@@ -6910,7 +6912,9 @@ function playDeveloperAIAudio(base64, mimeType = "audio/mpeg") {
   updateDeveloperAICallWindow("Speaking…", DEVELOPER_AI_NAME);
 
   // Web Audio is preferred on iPhone because CALL unlocks its audio context.
-  playDeveloperAIWebAudio(base64, mimeType).catch(() => {
+  playDeveloperAIWebAudio(base64, mimeType).catch((webAudioError) => {
+    developerAICallManagerRecord("web-audio-failed", String(webAudioError?.name || "decode/play failure") + " • " + String(webAudioError?.message || "").slice(0, 120));
+    developerAICallManagerSet("degraded", "Web Audio could not play Seth", "Try HTML audio fallback", String(webAudioError?.message || "Web Audio failed").slice(0, 120));
     try {
       developerAIAudio = new Audio("data:" + mimeType + ";base64," + base64);
       developerAIAudio.playsInline = true;
@@ -8055,8 +8059,10 @@ async function greetDeveloperAIFreeCall(provider) {
     });
     if (developerAICallMode && developerAIFreeProvider === provider && voice.audioBase64) {
       developerAICallManagerHealth.provider = provider;
+      developerAICallManagerRecord("greeting-audio-received", provider + " • " + String(voice.audioMimeType || "audio/mpeg") + " • base64 chars " + String(voice.audioBase64.length));
       developerAICallManagerMarkProviderReply(true);
       developerAIUserIsSpeaking = false;
+      updateDeveloperAICallWindow("Greeting received…", "MyService received Seth’s voice from " + provider + "; verifying iPhone playback.");
       playDeveloperAIAudio(voice.audioBase64, voice.audioMimeType || "audio/mpeg");
       if (firstIntroduction) {
         try { localStorage.setItem(introKey, "1"); } catch (_) {}
