@@ -7160,13 +7160,40 @@ async function playDeveloperAIWebAudio(base64, mimeType = "audio/mpeg") {
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
 
   let decoded;
-  if (mimeType.startsWith("audio/pcm")) {
-    const sampleRate = Number(mimeType.match(/rate=(\d+)/)?.[1] || 24000);
+  const normalizedMime = String(mimeType || "").toLowerCase();
+  const rawPcm =
+    normalizedMime.startsWith("audio/pcm") ||
+    normalizedMime.startsWith("audio/l16") ||
+    normalizedMime.includes("codec=pcm") ||
+    normalizedMime.includes("pcm;");
+
+  if (rawPcm) {
+    const sampleRate = Number(normalizedMime.match(/rate=(\d+)/)?.[1] || 24000);
     const samples = Math.floor(bytes.byteLength / 2);
     decoded = developerAIAudioContext.createBuffer(1, samples, sampleRate);
     const channel = decoded.getChannelData(0);
     const view = new DataView(bytes.buffer);
-    for (let i = 0; i < samples; i++) channel[i] = view.getInt16(i * 2, true) / 32768;
+
+    // Gemini TTS commonly returns raw 16-bit PCM as audio/L16;codec=pcm.
+    // Treat the payload as little-endian first. If the waveform is implausibly
+    // quiet, retry big-endian so both common raw-PCM encodings remain audible.
+    let peak = 0;
+    for (let i = 0; i < samples; i++) {
+      const value = view.getInt16(i * 2, true) / 32768;
+      channel[i] = value;
+      peak = Math.max(peak, Math.abs(value));
+    }
+
+    if (peak < 0.0005 && samples > 0) {
+      peak = 0;
+      for (let i = 0; i < samples; i++) {
+        const value = view.getInt16(i * 2, false) / 32768;
+        channel[i] = value;
+        peak = Math.max(peak, Math.abs(value));
+      }
+    }
+
+    developerAICallManagerRecord("raw-pcm-decoded", normalizedMime + " • " + sampleRate + "Hz • peak " + peak.toFixed(4));
   } else {
     decoded = await developerAIAudioContext.decodeAudioData(bytes.buffer.slice(0));
   }
