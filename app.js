@@ -8538,3 +8538,217 @@ function installTrainingCenter() {
   }
   renderTrainingCenter();
 }
+
+
+/* =========================================================
+   MYSERVICE BUG EXTERMINATION TEAM
+   DEVELOPER-ONLY RUNTIME BUG HUNTER
+   Detects common frontend failures without changing app state.
+   It reports findings; it never auto-edits business data or code.
+   ========================================================= */
+
+(function installMyServiceBugExterminationTeam() {
+  const EXTERM_KEY = "myservice_extermination_findings_v1";
+  const findings = [];
+  let scanStarted = false;
+
+  function addFinding(severity, title, detail) {
+    findings.push({
+      severity: String(severity || "info"),
+      title: String(title || "Finding"),
+      detail: String(detail || ""),
+      time: new Date().toISOString()
+    });
+  }
+
+  function isDeveloper() {
+    try {
+      const user = typeof getCurrentUser === "function" ? getCurrentUser() : null;
+      return !!user && String(user.role).toLowerCase() === "developer";
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function scanRuntimeErrors() {
+    addFinding("green", "Runtime monitor armed", "Unhandled JavaScript errors and promise rejections will be captured for this session.");
+  }
+
+  function scanDuplicateIds() {
+    const seen = new Map();
+    document.querySelectorAll("[id]").forEach(el => {
+      const id = el.id;
+      if (!id) return;
+      seen.set(id, (seen.get(id) || 0) + 1);
+    });
+    let count = 0;
+    seen.forEach((n, id) => {
+      if (n > 1) {
+        count++;
+        addFinding("red", "Duplicate element ID", '"' + id + '" appears ' + n + " times. This can make buttons/forms target the wrong element.");
+      }
+    });
+    if (!count) addFinding("green", "Element IDs clean", "No duplicate HTML IDs detected.");
+  }
+
+  function scanButtons() {
+    let broken = 0;
+    document.querySelectorAll("button").forEach(button => {
+      const onclick = button.getAttribute("onclick") || "";
+      const matches = [...onclick.matchAll(/([A-Za-z_$][\w$]*)\\s*\\(/g)];
+      matches.forEach(match => {
+        const fn = match[1];
+        if (fn === "alert" || fn === "confirm" || fn === "prompt") return;
+        if (typeof window[fn] !== "function") {
+          broken++;
+          addFinding("red", "Dead button action", 'Button "' + (button.textContent || "").trim().slice(0, 70) + '" calls missing function ' + fn + "().");
+        }
+      });
+    });
+    if (!broken) addFinding("green", "Button actions resolved", "No missing inline button handlers were detected.");
+  }
+
+  function scanNavigation() {
+    const pages = [...document.querySelectorAll(".page")];
+    let broken = 0;
+    pages.forEach(page => {
+      if (!page.id) {
+        broken++;
+        addFinding("red", "Page missing ID", "A .page element cannot be reliably navigated without an ID.");
+      }
+    });
+    document.querySelectorAll(".nav[onclick]").forEach(nav => {
+      const match = (nav.getAttribute("onclick") || "").match(/showSection\(['"]([^'"]+)['"]\)/);
+      if (match && !document.getElementById(match[1])) {
+        broken++;
+        addFinding("red", "Broken navigation target", 'Navigation item points to missing page "' + match[1] + '".');
+      }
+    });
+    if (!broken) addFinding("green", "Navigation targets clean", "All detected showSection() navigation targets currently exist.");
+  }
+
+  function scanTouchSafety() {
+    const offenders = [];
+    document.querySelectorAll("button, a, input, select, textarea").forEach(el => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0 && rect.bottom > window.innerHeight + 2) return;
+      if (rect.width > 0 && rect.height > 0 && rect.left < -2) offenders.push(el);
+    });
+    if (offenders.length) {
+      addFinding("orange", "Off-screen interactive controls", offenders.length + " visible interactive control(s) extend outside the viewport. Review mobile layout before release.");
+    } else {
+      addFinding("green", "Touch layout check passed", "No visible interactive controls were detected off the left edge.");
+    }
+  }
+
+  function scanStorage() {
+    try {
+      const raw = localStorage.getItem(typeof STORAGE_KEY !== "undefined" ? STORAGE_KEY : "");
+      if (!raw) {
+        addFinding("orange", "Workspace storage not initialized", "No active MyService state was found in localStorage at scan time.");
+        return;
+      }
+      JSON.parse(raw);
+      addFinding("green", "Workspace state parse passed", "Active local workspace state is valid JSON.");
+    } catch (error) {
+      addFinding("red", "Workspace state corruption", String(error && error.message || error));
+    }
+  }
+
+  function scan() {
+    findings.length = 0;
+    addFinding("green", "Extermination Team online", "Developer-only diagnostics are running in read-only mode.");
+    scanRuntimeErrors();
+    scanDuplicateIds();
+    scanButtons();
+    scanNavigation();
+    scanTouchSafety();
+    scanStorage();
+
+    try {
+      localStorage.setItem(EXTERM_KEY, JSON.stringify(findings.slice(-100)));
+    } catch (_) {}
+
+    renderExterminationTeam();
+    return findings;
+  }
+
+  function renderExterminationTeam() {
+    if (!isDeveloper()) return;
+    let section = document.getElementById("extermination");
+    if (!section) {
+      const main = document.querySelector(".main-content");
+      if (!main) return;
+      section = document.createElement("section");
+      section.id = "extermination";
+      section.className = "page";
+      main.appendChild(section);
+    }
+
+    if (!document.querySelector("[data-extermination-nav]")) {
+      const sidebar = document.getElementById("sidebar");
+      if (sidebar) {
+        const navSection = document.createElement("div");
+        navSection.className = "nav-section";
+        navSection.innerHTML =
+          '<div class="nav-title">DEVELOPER SECURITY</div>' +
+          '<button class="nav" type="button" data-extermination-nav="1" onclick="showSection(\'extermination\')"><span>☠</span>Extermination Team</button>';
+        sidebar.appendChild(navSection);
+      }
+    }
+
+    const red = findings.filter(x => x.severity === "red").length;
+    const orange = findings.filter(x => x.severity === "orange").length;
+    const green = findings.filter(x => x.severity === "green").length;
+
+    section.innerHTML =
+      '<div class="page-header"><div>' +
+      '<div class="eyebrow">DEVELOPER-ONLY DIAGNOSTICS</div>' +
+      '<h1>☠ Extermination Team</h1>' +
+      '<p>Dragon-level bug hunting for MyService. Read-only diagnostics — no automatic code or business-data changes.</p>' +
+      '</div><button class="primary-button" type="button" onclick="myServiceRunExterminationScan()">RUN FULL SCAN</button></div>' +
+      '<div class="stats-grid">' +
+      '<div class="stat-card"><span>Critical</span><strong>' + red + '</strong><small>Requires attention</small></div>' +
+      '<div class="stat-card"><span>Review</span><strong>' + orange + '</strong><small>Potential issue</small></div>' +
+      '<div class="stat-card"><span>Passed</span><strong>' + green + '</strong><small>Checks passed</small></div>' +
+      '</div>' +
+      '<div class="panel"><div class="panel-header"><div><h2>Bug Kill Log</h2><p>Each finding explains what can break and why it matters.</p></div></div>' +
+      (findings.length ? findings.map(x =>
+        '<div class="list-row"><div><strong>' + escapeHTML(x.title) + '</strong><small>' + escapeHTML(x.detail) + '</small></div><strong>' + escapeHTML(x.severity.toUpperCase()) + '</strong></div>'
+      ).join("") : '<div class="list-row"><strong>Scan has not run yet.</strong></div>') +
+      '</div>';
+  }
+
+  window.myServiceRunExterminationScan = function () {
+    if (!isDeveloper()) {
+      alert("Developer-only diagnostics.");
+      return;
+    }
+    scan();
+    if (typeof showSection === "function") showSection("extermination");
+  };
+
+  window.addEventListener("error", function(event) {
+    if (!isDeveloper()) return;
+    addFinding("red", "Runtime JavaScript error", String(event.message || "Unknown error") + (event.filename ? " • " + event.filename.split("/").pop() : "") + (event.lineno ? " • line " + event.lineno : ""));
+    try { localStorage.setItem(EXTERM_KEY, JSON.stringify(findings.slice(-100))); } catch (_) {}
+    renderExterminationTeam();
+  });
+
+  window.addEventListener("unhandledrejection", function(event) {
+    if (!isDeveloper()) return;
+    const reason = event.reason && event.reason.message ? event.reason.message : String(event.reason || "Unknown rejection");
+    addFinding("red", "Unhandled promise rejection", reason);
+    try { localStorage.setItem(EXTERM_KEY, JSON.stringify(findings.slice(-100))); } catch (_) {}
+    renderExterminationTeam();
+  });
+
+  window.myServiceExterminationTeam = { scan, render: renderExterminationTeam };
+
+  document.addEventListener("DOMContentLoaded", function () {
+    setTimeout(function () {
+      if (isDeveloper()) scan();
+    }, 500);
+  });
+})();
+
