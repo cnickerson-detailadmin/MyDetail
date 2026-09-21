@@ -7770,7 +7770,10 @@ let developerAITroubleshootOpenedAt = 0;
 function openDeveloperAITroubleshootMenu(event) {
   event?.preventDefault?.();
   event?.stopPropagation?.();
-  if (!developerAICallMode) return;
+  // Troubleshooting must remain available even when provider startup failed.
+  // The call overlay itself is sufficient context for diagnostics.
+  const callWindow = $("developer-ai-call-window");
+  if (!callWindow) return;
 
   const existing = $("developer-ai-call-troubleshoot-menu");
   if (existing) {
@@ -7780,9 +7783,6 @@ function openDeveloperAITroubleshootMenu(event) {
     existing.remove();
     return;
   }
-
-  const callWindow = $("developer-ai-call-window");
-  if (!callWindow) return;
 
   const menu = document.createElement("div");
   menu.id = "developer-ai-call-troubleshoot-menu";
