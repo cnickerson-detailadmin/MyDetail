@@ -1,5 +1,5 @@
-const CACHE_NAME = "myservice-cache-v39";
-const BUILD_ID = "61-seth-greeting-diagnostics";
+const CACHE_NAME = "myservice-cache-v40";
+const BUILD_ID = "62-black-screen-recovery";
 
 const APP_SHELL = [
   "./styles.css?v=4-pro-desktop",
@@ -34,7 +34,7 @@ self.addEventListener("activate", (event) => {
         const url = new URL(client.url);
         if (!url.pathname.endsWith("/install.html")) {
           url.searchParams.set("build", BUILD_ID);
-          await client.navigate(url.href);
+          // Do not force-navigate an already-open iOS standalone app during activation.\n          // WebKit can briefly replace the document with a blank/black surface.
         }
       } catch (_) {}
     }
