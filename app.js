@@ -6803,6 +6803,7 @@ async function startDeveloperAIRealtimeCall(isReconnect = false) {
   developerAICallMode = true;
   if (!isReconnect) {
     clearDeveloperAIReconnect();
+    primeDeveloperAIFreeSpeech();
     openDeveloperAICallWindow();
   }
   updateDeveloperAICallWindow(isReconnect ? "Reconnecting…" : "Connecting…", isReconnect ? "Restoring realtime voice" : "Starting realtime voice");
@@ -7027,6 +7028,18 @@ function buildDeveloperAIFreeReply(message) {
   return "I heard you. The no-credit call is working, but that request needs cloud-level reasoning. I can still help with MyService status, navigation, staffing, clock, schedule, or support tickets without charging API credits.";
 }
 
+function primeDeveloperAIFreeSpeech() {
+  try {
+    const synth = window.speechSynthesis;
+    if (!synth || typeof SpeechSynthesisUtterance === "undefined") return;
+    synth.cancel();
+    const u = new SpeechSynthesisUtterance(" ");
+    u.volume = 0.01;
+    u.rate = 1;
+    synth.speak(u);
+  } catch (_) {}
+}
+
 function speakDeveloperAIFreeReply(reply) {
   return new Promise(resolve => {
     const synth = window.speechSynthesis;
@@ -7037,6 +7050,13 @@ function speakDeveloperAIFreeReply(reply) {
     }
 
     const micTracks = developerAIFreeMicStream?.getAudioTracks?.() || [];
+
+    // Keep the microphone permission/session alive, but pause recording while the
+    // phone speaks. iOS is much more reliable when it is not simultaneously
+    // recording and trying to start SpeechSynthesis.
+    try {
+      if (developerAIFreeRecorder?.state === "recording") developerAIFreeRecorder.pause();
+    } catch (_) {}
     micTracks.forEach(track => { track.enabled = false; });
 
     try {
@@ -7057,6 +7077,9 @@ function speakDeveloperAIFreeReply(reply) {
     let started = false;
     const finish = () => {
       micTracks.forEach(track => { track.enabled = true; });
+      try {
+        if (developerAIFreeRecorder?.state === "paused") developerAIFreeRecorder.resume();
+      } catch (_) {}
       developerAISpeaking = false;
       developerAISpeechUtterance = null;
       updateDeveloperAICallWindow("Listening…", "Stable microphone ready");
@@ -7065,7 +7088,9 @@ function speakDeveloperAIFreeReply(reply) {
 
     const watchdog = setTimeout(() => {
       if (!started) {
-        updateDeveloperAICallWindow("Voice blocked", "Tap Play reply / test audio once, then replies should play automatically.");
+        updateDeveloperAICallWindow("Voice blocked", "iPhone blocked speech output. Tap Play reply / test audio once.");
+        const status = $("developer-ai-status");
+        if (status) status.textContent = "iPhone blocked Developer AI speech output.";
         finish();
       }
     }, 1800);
@@ -7259,6 +7284,7 @@ async function startDeveloperAIFreeCall() {
   developerAICallMode = true;
   developerAIFreeCallMode = true;
   developerAISpeakerMode = true;
+  primeDeveloperAIFreeSpeech();
   unlockDeveloperAIAudio();
   window.speechSynthesis?.getVoices?.();
 
