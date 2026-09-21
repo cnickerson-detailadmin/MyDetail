@@ -6352,6 +6352,67 @@ async function runSethSelfCheck() {
   renderDeveloperAIChat();
   if (status) status.textContent = failed.length ? "Seth captured the failing stage(s)." : "Seth full self-check passed.";
 }
+async function runSethDeepAICodeCheck() {
+  if (!developerAIIsAllowed()) return;
+  const status = $("developer-ai-status");
+  if (status) status.textContent = "Seth is testing the complete AI code path…";
+
+  const findings = [];
+  const add = (stage, ok, detail) => findings.push({ stage, ok: ok === true, detail: String(detail || "") });
+  const test = async (stage, work) => {
+    const started = Date.now();
+    try { const detail = await work(); add(stage, true, String(detail || "passed") + " • " + (Date.now()-started) + "ms"); return true; }
+    catch (e) { add(stage, false, String(e?.message || e).slice(0,220)); return false; }
+  };
+
+  await test("Browser / AI UI", async () => {
+    for (const id of ["developer-ai-call","developer-ai-status"]) if (!$(id)) throw new Error("Missing required element: " + id);
+    return "required controls present";
+  });
+  await test("Protected AI backend", async () => {
+    const health = await callMyServiceEdgeFunction("developer-ai", { action:"myservice_ai_health" });
+    const failed = (health?.checks || []).filter(x => x.ok !== true);
+    if (failed.length) throw new Error(failed.map(x => (x.name||"server")+": "+(x.detail||"failed")).join("; "));
+    return "server health checks passed";
+  });
+
+  let workingProvider = "";
+  for (const provider of ["gemini","cloudflare"]) {
+    await test(provider + " configuration", async () => {
+      const s = await callMyServiceEdgeFunction("developer-ai", { action: provider + "_status" });
+      if (!s?.configured) throw new Error(provider + " server configuration unavailable");
+      return "configured";
+    });
+    const voiceOK = await test(provider + " TTS", async () => {
+      const v = await callMyServiceEdgeFunction("developer-ai", { action: provider + "_tts", text:"Seth AI diagnostic voice test.", voiceRepairMode:developerAIVoiceRepairMode });
+      if (!v?.audioBase64) throw new Error(v?.voiceError || "No audio returned");
+      if (!workingProvider) workingProvider = provider;
+      return (v.audioMimeType || "audio") + " • " + v.audioBase64.length + " base64 chars";
+    });
+    if (voiceOK && !workingProvider) workingProvider = provider;
+  }
+
+  await test("Audio engine", async () => {
+    unlockDeveloperAIAudio();
+    if (!developerAIAudioContext) throw new Error("AudioContext unavailable");
+    await developerAIAudioContext.resume?.();
+    if (developerAIAudioContext.state !== "running") throw new Error("AudioContext state: " + developerAIAudioContext.state);
+    return "AudioContext running";
+  });
+
+  const failed = findings.filter(x => !x.ok);
+  const exact = failed[0];
+  const summary = findings.map(x => (x.ok ? "✓ " : "✕ ") + x.stage + " — " + x.detail).join("\n");
+  const headline = exact ? "🔴 EXACT FAILURE: " + exact.stage : "🟢 AI CODE PATH PASSED";
+  const history = getDeveloperAIHistory();
+  history.push({role:"assistant",content:headline+"\n\n"+summary});
+  saveDeveloperAIHistory(history);
+  renderDeveloperAIChat();
+  updateDeveloperAICallWindow?.(headline, exact ? exact.detail : "All testable AI layers passed.");
+  if (status) status.textContent = exact ? "Seth pinpointed the first failing AI stage: "+exact.stage : "Seth deep AI check passed.";
+  return { findings, firstFailure: exact || null, workingProvider };
+}
+
 async function askSethToDiagnose() {
   if (!developerAIIsAllowed()) return;
   const input = $("developer-ai-input");
@@ -7799,6 +7860,7 @@ function openDeveloperAITroubleshootMenu(event) {
     <button id="developer-ai-fix-no-answer" type="button" style="width:100%;min-height:52px;margin:5px 0;border:1px solid #d7e2f0;border-radius:16px;background:#f8fbff;font-weight:850;">AI NOT ANSWERING</button>
     <button id="developer-ai-fix-robotic" type="button" style="width:100%;min-height:52px;margin:5px 0;border:1px solid #d7e2f0;border-radius:16px;background:#f8fbff;font-weight:850;">AI TOO ROBOTIC</button>
     <button id="developer-ai-fix-full-check" type="button" style="width:100%;min-height:52px;margin:5px 0;border:1px solid #d7e2f0;border-radius:16px;background:#f8fbff;font-weight:850;">RUN FULL SELF-CHECK</button>
+    <button id="developer-ai-fix-deep-code" type="button" style="width:100%;min-height:52px;margin:5px 0;border:1px solid #d7e2f0;border-radius:16px;background:#eef6ff;font-weight:900;">DEEP AI CODE CHECK</button>
     <button id="developer-ai-fix-close" type="button" style="width:100%;min-height:48px;margin-top:7px;border:0;border-radius:16px;background:#eaf1fa;font-weight:850;">CLOSE</button>
   `;
 
@@ -7825,6 +7887,7 @@ function openDeveloperAITroubleshootMenu(event) {
   $("developer-ai-fix-no-answer").onclick = async () => { clearInterval(watchdog); menu.remove(); await runDeveloperAICallTroubleshooter("not-answering"); };
   $("developer-ai-fix-robotic").onclick = async () => { clearInterval(watchdog); menu.remove(); await runDeveloperAICallTroubleshooter("too-robotic"); };
   $("developer-ai-fix-full-check").onclick = async () => { clearInterval(watchdog); menu.remove(); await runSethSelfCheck(); };
+  $("developer-ai-fix-deep-code").onclick = async () => { clearInterval(watchdog); menu.remove(); await runSethDeepAICodeCheck(); };
   $("developer-ai-fix-close").onclick = () => { clearInterval(watchdog); menu.remove(); };
 }
 
