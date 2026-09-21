@@ -2927,7 +2927,7 @@ function installDeveloperExperience() {
 
         <input id="developer-ai-media-input" type="file" accept="image/*,video/*" multiple hidden onchange="handleDeveloperAIMediaSelection(event)">
         <form onsubmit="sendDeveloperAIMessage(event)" style="display:flex;gap:8px;align-items:center;">
-          <button type="button" class="outline-button" onclick="document.getElementById('developer-ai-media-input')?.click()" aria-label="Add photo or video" style="min-width:44px;min-height:42px;border-radius:18px;padding:0 12px;">＋</button>
+          <button id="developer-ai-add-media" type="button" class="outline-button" onclick="document.getElementById('developer-ai-media-input')?.click()" aria-label="Add photos or videos" style="min-width:118px;min-height:42px;flex:0 0 auto;border-radius:18px;padding:0 12px;font-weight:850;">📎 PHOTO/VIDEO</button>
           <textarea id="developer-ai-input" rows="1" maxlength="5000" placeholder="Message Seth…" style="width:100%;min-height:42px;max-height:90px;resize:vertical;padding:9px 12px;box-sizing:border-box;border-radius:18px;"></textarea>
           <button id="developer-ai-send" class="primary-button" type="submit" style="min-height:42px;flex:0 0 auto;border-radius:18px;">SEND</button>
         </form>
