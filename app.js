@@ -2925,7 +2925,9 @@ function installDeveloperExperience() {
           </div>
         </div>
 
+        <input id="developer-ai-media-input" type="file" accept="image/*,video/*" multiple hidden onchange="handleDeveloperAIMediaSelection(event)">
         <form onsubmit="sendDeveloperAIMessage(event)" style="display:flex;gap:8px;align-items:center;">
+          <button type="button" class="outline-button" onclick="document.getElementById('developer-ai-media-input')?.click()" aria-label="Add photo or video" style="min-width:44px;min-height:42px;border-radius:18px;padding:0 12px;">＋</button>
           <textarea id="developer-ai-input" rows="1" maxlength="5000" placeholder="Message Seth…" style="width:100%;min-height:42px;max-height:90px;resize:vertical;padding:9px 12px;box-sizing:border-box;border-radius:18px;"></textarea>
           <button id="developer-ai-send" class="primary-button" type="submit" style="min-height:42px;flex:0 0 auto;border-radius:18px;">SEND</button>
         </form>
@@ -8973,6 +8975,35 @@ async function generateDeveloperAIImage() {
   }
 }
 
+let developerAIPendingMedia = [];
+
+function handleDeveloperAIMediaSelection(event) {
+  const files = Array.from(event?.target?.files || []).filter(file =>
+    String(file.type || "").startsWith("image/") || String(file.type || "").startsWith("video/")
+  );
+  developerAIPendingMedia = files.slice(0, 4);
+  const status = $("developer-ai-status");
+  if (status) status.textContent = developerAIPendingMedia.length
+    ? developerAIPendingMedia.length + " photo/video file" + (developerAIPendingMedia.length === 1 ? "" : "s") + " attached to Seth."
+    : "No supported photo/video selected.";
+}
+
+async function developerAIReadMediaAttachments() {
+  const files = developerAIPendingMedia.slice();
+  const attachments = [];
+  for (const file of files) {
+    if (file.size > 20 * 1024 * 1024) throw new Error(file.name + " is over the 20 MB Seth attachment limit.");
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(new Error("Could not read " + file.name));
+      reader.readAsDataURL(file);
+    });
+    attachments.push({ name: file.name, type: file.type, dataUrl });
+  }
+  return attachments;
+}
+
 async function sendDeveloperAIMessage(event) {
   event?.preventDefault?.();
 
@@ -9005,6 +9036,8 @@ async function sendDeveloperAIMessage(event) {
     const memory = await handleDeveloperAIMemoryCommand(message, history);
     const context = getDeveloperAISafeContext();
     if (memory?.context) context.resumeNote = "Saved progress for " + memory.topic + ": " + memory.context;
+    const media = await developerAIReadMediaAttachments();
+    if (media.length) context.mediaAttachments = media;
     let response = memory?.reply ? { reply: memory.reply } : null;
     if (!response) {
       // Free-first Seth chat: do not depend on paid OpenAI. Try Gemini first,
@@ -9038,6 +9071,9 @@ async function sendDeveloperAIMessage(event) {
       role: "assistant",
       content: String(response.reply || "No response returned.")
     });
+    developerAIPendingMedia = [];
+    const mediaInput = $("developer-ai-media-input");
+    if (mediaInput) mediaInput.value = "";
     saveDeveloperAIHistory(history);
     renderDeveloperAIChat();
 
