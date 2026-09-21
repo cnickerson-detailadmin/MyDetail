@@ -6027,6 +6027,7 @@ function toggleDeveloperAICodePush() {
 
 let developerAICallMode = false;
 let developerAIRecognition = null;
+let developerAIRecognitionActive = false;
 let developerAIAudio = null;
 let developerAISpeaking = false;
 let developerAIAudioContext = null;
@@ -6402,6 +6403,7 @@ function stopDeveloperAICall() {
   try { developerAIRecognition?.abort?.(); } catch (_) {}
   try { developerAIRecognition?.stop?.(); } catch (_) {}
   developerAIRecognition = null;
+  developerAIRecognitionActive = false;
 
   try { developerAIRealtimeChannel?.close?.(); } catch (_) {}
   developerAIRealtimeChannel = null;
@@ -6453,12 +6455,12 @@ function stopDeveloperAICall() {
   }
   if (status) status.textContent = "Developer AI call ended.";
 }
-function restartDeveloperAIListening(delay = 350) {
-  if (!developerAICallMode || !developerAIRecognition || developerAIFreeRequestBusy || developerAISpeaking) return;
+function restartDeveloperAIListening(delay = 1200) {
+  if (!developerAICallMode || !developerAIRecognition || developerAIRecognitionActive) return;
   if (developerAIListenTimer) clearTimeout(developerAIListenTimer);
 
   developerAIListenTimer = setTimeout(() => {
-    if (!developerAICallMode || !developerAIRecognition) return;
+    if (!developerAICallMode || !developerAIRecognition || developerAIRecognitionActive) return;
     try { developerAIRecognition.start(); } catch (_) {}
   }, delay);
 }
@@ -7041,13 +7043,11 @@ function speakDeveloperAIFreeReply(reply) {
       developerAISpeaking = false;
       developerAISpeechUtterance = null;
       updateDeveloperAICallWindow("Listening…", "Voice input ready");
-      restartDeveloperAIListening(250);
       resolve();
     };
     utterance.onerror = () => {
       developerAISpeaking = false;
       developerAISpeechUtterance = null;
-      restartDeveloperAIListening(250);
       resolve();
     };
 
@@ -7058,7 +7058,8 @@ function speakDeveloperAIFreeReply(reply) {
 async function answerDeveloperAIFreeCall(message) {
   if (!developerAIIsAllowed() || developerAIFreeRequestBusy) return;
   developerAIFreeRequestBusy = true;
-  try { developerAIRecognition?.abort(); } catch (_) {}
+  // Keep the iPhone speech-recognition session alive during the reply. Repeated
+  // abort/start cycles cause the system microphone start/stop chime.
   const history = getDeveloperAIHistory();
   history.push({ role: "user", content: String(message).slice(0,5000) });
   saveDeveloperAIHistory(history);
@@ -7083,7 +7084,7 @@ async function answerDeveloperAIFreeCall(message) {
     if ($("developer-ai-status")) $("developer-ai-status").textContent = message;
   } finally {
     developerAIFreeRequestBusy = false;
-    if (developerAICallMode) restartDeveloperAIListening(350);
+    if (developerAICallMode && !developerAIRecognitionActive) restartDeveloperAIListening(1200);
   }
 }
 
@@ -7113,26 +7114,33 @@ async function startDeveloperAIFreeCall() {
   const recognition = new Recognition();
   developerAIRecognition = recognition;
   recognition.lang = "en-US";
-  recognition.continuous = false;
-  recognition.interimResults = false;
+  recognition.continuous = true;
+  recognition.interimResults = true;
   recognition.maxAlternatives = 1;
 
   recognition.onstart = () => {
+    developerAIRecognitionActive = true;
     developerAIUserIsSpeaking = false;
     updateDeveloperAICallWindow("Listening…", "Voice input ready");
   };
   recognition.onspeechstart = () => {
+    // If the phone is currently speaking, ignore its own speaker audio instead
+    // of canceling/restarting the microphone session.
+    if (developerAISpeaking) return;
     developerAIUserIsSpeaking = true;
-    try { window.speechSynthesis.cancel(); } catch (_) {}
     updateDeveloperAICallWindow("Listening…", "Go ahead — I won’t interrupt.");
   };
   recognition.onresult = event => {
-    const transcript = Array.from(event.results || [])
-      .map(result => result?.[0]?.transcript || "")
-      .join(" ")
-      .trim();
+    if (developerAISpeaking || developerAIFreeRequestBusy) return;
+    const finals = [];
+    for (let i = event.resultIndex || 0; i < event.results.length; i++) {
+      const result = event.results[i];
+      if (result?.isFinal) finals.push(result?.[0]?.transcript || "");
+    }
+    const transcript = finals.join(" ").trim();
+    if (!transcript) return;
     developerAIUserIsSpeaking = false;
-    if (transcript) queueDeveloperAIUserSpeech(transcript);
+    queueDeveloperAIUserSpeech(transcript);
   };
   recognition.onerror = event => {
     if (!developerAICallMode || !developerAIFreeCallMode) return;
@@ -7144,8 +7152,11 @@ async function startDeveloperAIFreeCall() {
     restartDeveloperAIListening(500);
   };
   recognition.onend = () => {
-    if (developerAICallMode && developerAIFreeCallMode && !developerAISpeaking && !developerAIFreeRequestBusy) {
-      restartDeveloperAIListening(350);
+    developerAIRecognitionActive = false;
+    if (developerAICallMode && developerAIFreeCallMode) {
+      // iOS may still end a long recognition session occasionally. Restart only
+      // after an actual end, not after every user turn.
+      restartDeveloperAIListening(1500);
     }
   };
 
