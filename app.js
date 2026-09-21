@@ -7193,15 +7193,21 @@ function openDeveloperAICallWindow() {
   wrap.id = "developer-ai-call-window";
   wrap.style.cssText = [
     "position:fixed",
-    "inset:0",
+    "top:0",
+    "left:0",
+    "right:0",
+    "height:100dvh",
     "z-index:2147483646",
     "background:linear-gradient(180deg,#0f5fc7,#1677f2)",
     "color:white",
     "display:flex",
     "flex-direction:column",
-    "padding:max(18px,env(safe-area-inset-top)) 18px max(18px,env(safe-area-inset-bottom))",
+    "padding:max(18px,env(safe-area-inset-top)) 18px calc(max(18px,env(safe-area-inset-bottom)) + 8px)",
     "box-sizing:border-box",
-    "overflow:auto",
+    "overflow-y:auto",
+    "overflow-x:hidden",
+    "overscroll-behavior:contain",
+    "touch-action:pan-y",
     "-webkit-overflow-scrolling:touch"
   ].join(";");
 
@@ -7245,6 +7251,11 @@ function openDeveloperAICallWindow() {
   `;
 
   document.body.appendChild(wrap);
+  // Never let the full-screen call overlay poison page scrolling. This is
+  // intentionally reapplied after insertion because iOS standalone PWAs can
+  // recalculate touch handling when a fixed overlay mounts.
+  setDeveloperAICallScrollSafe();
+  wrap.addEventListener("touchmove", () => {}, { passive: true });
   refreshDeveloperAIAudioOutputControl();
 
   $("developer-ai-test-record").onclick = () => {
