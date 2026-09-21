@@ -1,0 +1,59 @@
+name: MyService Extermination Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout MyService
+        uses: actions/checkout@v4
+
+      - name: Check JavaScript syntax
+        run: node --check app.js
+
+      - name: Check required application files
+        run: |
+          test -f index.html
+          test -f styles.css
+          test -f app.js
+          test -f service-worker.js
+
+      - name: Scan for accidental credential exposure
+        shell: bash
+        run: |
+          set -e
+          if grep -RInE --exclude-dir=.git --exclude='*.lock'             'sk-[A-Za-z0-9_-]{20,}|AIza[A-Za-z0-9_-]{20,}|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|gh[pousr]_[A-Za-z0-9]{20,}|SUPABASE_SERVICE_ROLE_KEY[[:space:]]*[:=]' .; then
+            echo "::error::Potential credential/private-key exposure detected."
+            exit 1
+          fi
+
+      - name: Basic HTML integrity check
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          html = Path("index.html").read_text(encoding="utf-8")
+          required = [
+              '<script src="app.js',
+              'id="myservice-auth-boot"',
+              '<link rel="stylesheet" href="styles.css'
+          ]
+          missing = [x for x in required if x not in html]
+          if missing:
+              raise SystemExit("Missing required application structure: " + ", ".join(missing))
+          print("Basic MyService HTML integrity check passed.")
+          PY
+
+      - name: Report
+        run: echo "MyService Extermination Scan completed successfully."
