@@ -8644,19 +8644,26 @@ async function startDeveloperAIFreeCall(provider = "gemini", startupToken = deve
   developerAIFreeCallMode = true;
   developerAIFreeProvider = provider;
   developerAISpeakerMode = false;
+
+  // iPhone/Safari: unlock playback from the original CALL tap and let Seth own
+  // the first audio turn. Do not request microphone permission or start VAD
+  // until the greeting has begun, otherwise the input audio session can steal
+  // or suppress the opening TTS route.
   unlockDeveloperAIAudio();
 
-  if (!$("developer-ai-call-window")) openDeveloperAICallWindow();
-  updateDeveloperAICallWindow("Connecting…", "Starting stable no-credit voice");
+  if (!("#developer-ai-call-window")) openDeveloperAICallWindow();
+  updateDeveloperAICallWindow("Connecting…", "Preparing Seth’s opening audio");
   setDeveloperAICallScrollSafe();
 
-  const button = $("developer-ai-call");
-  const status = $("developer-ai-status");
+  const button = ("#developer-ai-call");
+  const status = ("#developer-ai-status");
   if (button) button.textContent = "■ END CALL";
   if (status) status.textContent = "Starting Seth voice…";
 
-  // Prefer one persistent microphone stream + local voice activity detection.
-  // This avoids Safari's repeated speech-recognition start/stop chimes.
+  await greetDeveloperAIFreeCall(provider);
+  if (startupToken !== developerAICallStartupToken || !developerAICallMode) return false;
+
+  // Only after Seth has been given the opening audio turn do we enable the mic.
   try {
     const mediaStarted = await startDeveloperAIFreeMediaCapture();
     if (startupToken !== developerAICallStartupToken) {
@@ -8666,8 +8673,7 @@ async function startDeveloperAIFreeCall(provider = "gemini", startupToken = deve
     if (mediaStarted) {
       updateDeveloperAICallWindow("Listening…", "Stable microphone ready");
       if (status) status.textContent = "Seth no-credit call connected.";
-      await greetDeveloperAIFreeCall(provider);
-      return;
+      return true;
     }
   } catch (_) {
     stopDeveloperAIFreeMediaCapture();
@@ -8717,7 +8723,7 @@ async function startDeveloperAIFreeCall(provider = "gemini", startupToken = deve
   try { recognition.start(); } catch (_) {}
   updateDeveloperAICallWindow("Listening…", "Voice input ready");
   if (status) status.textContent = "Seth browser fallback connected.";
-  await greetDeveloperAIFreeCall(provider);
+  return true;
 }
 
 async function greetDeveloperAIFreeCall(provider) {
