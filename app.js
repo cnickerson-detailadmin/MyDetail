@@ -1954,6 +1954,7 @@ function renderAll() {
   installDeveloperExperience();
   installStateLaborLawStrip();
   installLogoutButton();
+  installTrainingCenter();
 }/* =========================================================
    STATE-SCOPED LABOR LAW STRIP
    ========================================================= */
@@ -7040,3 +7041,123 @@ async function installMyServiceApp() {
     location.replace(new URL("./install.html", location.href).href);
   }
 })();
+
+
+/* =========================================================
+   ONBOARDING + TRAINING CENTER (NO PAYROLL)
+   ========================================================= */
+function ensureTrainingState() {
+  if (!Array.isArray(state.trainingModules)) state.trainingModules = [
+    {id:"orientation",title:"New Employee Orientation",type:"orientation",description:"Company welcome, workplace expectations, safety basics, and who to contact for help.",videoUrl:"",required:true},
+    {id:"role-training",title:"Role Training",type:"training",description:"Job-specific training assigned by management.",videoUrl:"",required:true}
+  ];
+  if (!Array.isArray(state.trainingProgress)) state.trainingProgress = [];
+}
+
+function trainingProgressFor(userId,moduleId) {
+  ensureTrainingState();
+  return state.trainingProgress.find(x => x.userId === userId && x.moduleId === moduleId);
+}
+
+function completeTrainingModule(moduleId) {
+  ensureTrainingState();
+  const user=getCurrentUser();
+  if (!user) return;
+  let row=trainingProgressFor(user.id,moduleId);
+  if (!row) {
+    row={id:uid("training"),userId:user.id,moduleId,status:"completed",completedAt:new Date().toISOString()};
+    state.trainingProgress.push(row);
+  } else {
+    row.status="completed";
+    row.completedAt=new Date().toISOString();
+  }
+  addActivity("Training completed", user.name+" completed a training module.", "✓");
+  saveState();
+  renderTrainingCenter();
+}
+
+function addTrainingModule(event) {
+  event.preventDefault();
+  if (!canManageEmployees()) return;
+  ensureTrainingState();
+  const title=$("trainingTitle")?.value.trim();
+  if (!title) return;
+  state.trainingModules.push({
+    id:uid("module"),
+    title,
+    type:$("trainingType")?.value || "training",
+    description:$("trainingDescription")?.value.trim() || "",
+    videoUrl:$("trainingVideoUrl")?.value.trim() || "",
+    required:$("trainingRequired")?.checked !== false
+  });
+  saveState();
+  $("trainingModuleForm")?.reset();
+  renderTrainingCenter();
+}
+
+function renderTrainingCenter() {
+  const root=$("trainingCenterBody");
+  if (!root) return;
+  ensureTrainingState();
+  const user=getCurrentUser();
+  const manager=canManageEmployees();
+  const completed=state.trainingModules.filter(m => trainingProgressFor(user.id,m.id)?.status==="completed").length;
+  const pct=state.trainingModules.length ? Math.round(completed/state.trainingModules.length*100) : 100;
+
+  root.innerHTML=`
+    <div class="stats-grid">
+      <div class="stat-card"><span>My progress</span><strong>${pct}%</strong><small>${completed} of ${state.trainingModules.length} complete</small></div>
+      <div class="stat-card"><span>Required</span><strong>${state.trainingModules.filter(m=>m.required).length}</strong><small>orientation + training</small></div>
+    </div>
+    <div class="dashboard-grid">
+      <div class="panel">
+        <div class="panel-header"><div><h2>My onboarding & training</h2><p>Complete assigned orientation, videos, and training.</p></div></div>
+        ${state.trainingModules.map(m => {
+          const done=trainingProgressFor(user.id,m.id)?.status==="completed";
+          const safeUrl=escapeHTML(m.videoUrl||"");
+          return `<div class="list-row" style="align-items:flex-start;">
+            <div><strong>${escapeHTML(m.title)}</strong><small>${escapeHTML(m.type)}${m.required?" • Required":""}</small>
+            <p style="margin:7px 0;font-size:12px;">${escapeHTML(m.description||"")}</p>
+            ${safeUrl ? `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="outline-button" style="display:inline-block;text-decoration:none;">Watch training video</a>` : ""}
+            </div>
+            <button class="${done?"outline-button":"primary-button"}" type="button" ${done?"disabled":""} onclick="completeTrainingModule('${m.id}')">${done?"Completed ✓":"Mark complete"}</button>
+          </div>`;
+        }).join("")}
+      </div>
+      ${manager ? `<div class="panel">
+        <div class="panel-header"><div><h2>Manage training</h2><p>Add orientation steps or training videos. No payroll features are included.</p></div></div>
+        <form id="trainingModuleForm" onsubmit="addTrainingModule(event)">
+          <label>Title</label><input id="trainingTitle" required placeholder="Example: Food safety orientation">
+          <label>Type</label><select id="trainingType"><option value="orientation">Orientation</option><option value="training">Training</option><option value="video">Training video</option></select>
+          <label>Description</label><textarea id="trainingDescription" placeholder="What the employee should learn"></textarea>
+          <label>Video link (optional)</label><input id="trainingVideoUrl" type="url" placeholder="https://…">
+          <label style="display:flex;gap:8px;align-items:center;"><input id="trainingRequired" type="checkbox" checked style="width:auto;min-height:auto;"> Required</label>
+          <button class="primary-button" type="submit" style="margin-top:14px;">Add training</button>
+        </form>
+      </div>` : ""}
+    </div>`;
+}
+
+function installTrainingCenter() {
+  if (!$("training")) {
+    const main=document.querySelector(".main-content");
+    if (main) {
+      const section=document.createElement("section");
+      section.id="training";
+      section.className="page";
+      section.innerHTML=`<div class="page-header"><div><div class="eyebrow">PEOPLE</div><h1>Onboarding & Training</h1><p>Orientation, training videos, required learning, and completion tracking.</p></div></div><div id="trainingCenterBody"></div>`;
+      main.appendChild(section);
+    }
+  }
+  if (!document.querySelector('[data-training-nav]')) {
+    const employeeNav=[...document.querySelectorAll(".nav")].find(b => (b.getAttribute("onclick")||"").includes("employees"));
+    if (employeeNav) {
+      const b=document.createElement("button");
+      b.className="nav"; b.type="button"; b.dataset.trainingNav="1";
+      b.setAttribute("onclick","showSection('training')");
+      b.innerHTML="<span>▶</span>Training";
+      employeeNav.insertAdjacentElement("afterend",b);
+    }
+  }
+  renderTrainingCenter();
+}
