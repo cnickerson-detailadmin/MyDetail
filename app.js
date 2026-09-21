@@ -6440,6 +6440,7 @@ let developerAIPendingVoiceReply = null;
 let developerAIUserIsSpeaking = false;
 let developerAIFreeCallMode = false;
 let developerAIFreeProvider = "";
+let developerAIVoiceRepairMode = "default";
 let developerAISpeakerMode = false;
 let developerAIPreferredAudioOutput = "auto";
 let developerAIFreeRequestBusy = false;
@@ -7050,6 +7051,7 @@ function startDeveloperAICallManager() {
 }
 
 function stopDeveloperAICall() {
+  $("developer-ai-call-troubleshoot-menu")?.remove();
   if (window.__myserviceCallExterminationTimer) {
     clearInterval(window.__myserviceCallExterminationTimer);
     window.__myserviceCallExterminationTimer = null;
@@ -7489,6 +7491,107 @@ async function refreshDeveloperAIAudioOutputControl() {
   }
 }
 
+
+async function runDeveloperAICallTroubleshooter(issue) {
+  if (!developerAICallMode) return;
+
+  if (issue === "not-answering") {
+    updateDeveloperAICallWindow("🛠 AUTO TROUBLESHOOT", "Checking provider, microphone, playback, and recovery paths…");
+    try {
+      await runSethSelfCheck();
+    } catch (_) {}
+
+    try {
+      if (developerAIFreeMicStream) {
+        const live = developerAIFreeMicStream.getAudioTracks?.().some(t => t.readyState === "live");
+        if (!live) {
+          stopDeveloperAIFreeMediaCapture();
+          await startDeveloperAIFreeMediaCapture();
+        }
+      }
+    } catch (_) {}
+
+    try {
+      const probe = await callMyServiceEdgeFunction("developer-ai", {
+        action: developerAIFreeProvider + "_tts",
+        text: "Seth recovery check.",
+        voiceRepairMode: developerAIVoiceRepairMode
+      });
+      if (probe?.audioBase64) {
+        updateDeveloperAICallWindow("🟢 RECOVERED", "Seth voice path responded. Testing playback now.");
+        playDeveloperAIAudio(probe.audioBase64, probe.audioMimeType || "audio/mpeg");
+        return;
+      }
+    } catch (primaryError) {
+      try {
+        const replacement = await switchDeveloperAIFreeProvider(
+          developerAIFreeProvider,
+          String(primaryError?.message || "Voice provider did not respond.")
+        );
+        const probe = await callMyServiceEdgeFunction("developer-ai", {
+          action: replacement + "_tts",
+          text: "Seth recovery check.",
+          voiceRepairMode: developerAIVoiceRepairMode
+        });
+        if (probe?.audioBase64) {
+          updateDeveloperAICallWindow("🟢 RECOVERED", "Switched provider and restored Seth audio.");
+          playDeveloperAIAudio(probe.audioBase64, probe.audioMimeType || "audio/mpeg");
+          return;
+        }
+      } catch (fallbackError) {
+        updateDeveloperAICallWindow(
+          "🔴 COULD NOT AUTO-FIX",
+          String(fallbackError?.message || primaryError?.message || "No working voice path was available.").slice(0, 220)
+        );
+        return;
+      }
+    }
+
+    updateDeveloperAICallWindow("🟠 STILL CHECKING", "No verified recovery yet. Call details now contain the failing stage.");
+    return;
+  }
+
+  if (issue === "too-robotic") {
+    developerAIVoiceRepairMode = "natural";
+    updateDeveloperAICallWindow("🛠 VOICE SELF-TUNE", "Applying a more natural, less assistant-like delivery and testing it…");
+    try {
+      const test = await callMyServiceEdgeFunction("developer-ai", {
+        action: developerAIFreeProvider + "_tts",
+        text: "Yeah, that sounds better. What are we working on?",
+        voiceRepairMode: "natural"
+      });
+      if (!test?.audioBase64) throw new Error(test?.voiceError || "No test audio returned.");
+      playDeveloperAIAudio(test.audioBase64, test.audioMimeType || "audio/mpeg");
+      updateDeveloperAICallWindow("🟢 VOICE RETUNED", "Natural-call mode is active for the rest of this call.");
+    } catch (error) {
+      updateDeveloperAICallWindow("🟠 RETUNE NEEDS HELP", String(error?.message || "Could not verify the voice retune.").slice(0, 220));
+    }
+  }
+}
+
+function openDeveloperAITroubleshootMenu() {
+  if (!developerAICallMode) return;
+  const existing = $("developer-ai-call-troubleshoot-menu");
+  if (existing) { existing.remove(); return; }
+
+  const menu = document.createElement("div");
+  menu.id = "developer-ai-call-troubleshoot-menu";
+  menu.style.cssText = "position:fixed;left:18px;right:18px;bottom:max(18px,env(safe-area-inset-bottom));z-index:2147483647;background:white;color:#0f2344;border-radius:22px;padding:14px;box-shadow:0 20px 60px rgba(0,0,0,.35);";
+  menu.innerHTML = `
+    <div style="font-weight:900;font-size:17px;margin:2px 4px 10px;">What’s wrong with Seth?</div>
+    <button id="developer-ai-fix-no-answer" type="button" style="width:100%;min-height:52px;margin:5px 0;border:1px solid #d7e2f0;border-radius:16px;background:#f8fbff;font-weight:850;">AI NOT ANSWERING</button>
+    <button id="developer-ai-fix-robotic" type="button" style="width:100%;min-height:52px;margin:5px 0;border:1px solid #d7e2f0;border-radius:16px;background:#f8fbff;font-weight:850;">AI TOO ROBOTIC</button>
+    <button id="developer-ai-fix-full-check" type="button" style="width:100%;min-height:52px;margin:5px 0;border:1px solid #d7e2f0;border-radius:16px;background:#f8fbff;font-weight:850;">RUN FULL SELF-CHECK</button>
+    <button id="developer-ai-fix-close" type="button" style="width:100%;min-height:48px;margin-top:7px;border:0;border-radius:16px;background:#eaf1fa;font-weight:850;">CLOSE</button>
+  `;
+  document.body.appendChild(menu);
+
+  $("developer-ai-fix-no-answer").onclick = async () => { menu.remove(); await runDeveloperAICallTroubleshooter("not-answering"); };
+  $("developer-ai-fix-robotic").onclick = async () => { menu.remove(); await runDeveloperAICallTroubleshooter("too-robotic"); };
+  $("developer-ai-fix-full-check").onclick = async () => { menu.remove(); await runSethSelfCheck(); };
+  $("developer-ai-fix-close").onclick = () => menu.remove();
+}
+
 function openDeveloperAICallWindow() {
   if ($("developer-ai-call-window")) return;
 
@@ -7544,6 +7647,8 @@ function openDeveloperAICallWindow() {
         style="min-height:54px;border:0;border-radius:18px;background:rgba(255,255,255,.16);color:white;font-weight:850;">🎙️ MIC ON</button>
       <button id="developer-ai-call-details" type="button"
         style="min-height:54px;border:0;border-radius:18px;background:rgba(255,255,255,.16);color:white;font-weight:850;">CALL DETAILS</button>
+      <button id="developer-ai-call-troubleshoot" type="button"
+        style="grid-column:1 / -1;min-height:54px;border:0;border-radius:18px;background:rgba(255,255,255,.22);color:white;font-weight:900;">🛠 TROUBLESHOOT SETH</button>
       </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
       <button id="developer-ai-call-speaker" type="button"
@@ -7577,6 +7682,8 @@ function openDeveloperAICallWindow() {
     this.style.background = developerMicEnabled ? "rgba(255,255,255,.16)" : "white";
     this.style.color = developerMicEnabled ? "white" : "#0f5fc7";
   };
+  $("developer-ai-call-troubleshoot").onclick = () => openDeveloperAITroubleshootMenu();
+
   $("developer-ai-call-details").onclick = function () {
     const h = developerAICallManagerSnapshot();
     updateDeveloperAICallWindow(
@@ -8041,7 +8148,7 @@ async function switchDeveloperAIFreeProvider(failedProvider, reason = "") {
       updateDeveloperAICallWindow("🟠 SWITCHING PROVIDER", "MyService is testing " + fallback + " automatically.");
       const setup = await callMyServiceEdgeFunction("developer-ai", { action: fallback + "_status" });
       if (!setup?.configured) throw new Error(fallback + " is not configured.");
-      const probe = await callMyServiceEdgeFunction("developer-ai", { action: fallback + "_tts", text: "Provider recovery check." });
+      const probe = await callMyServiceEdgeFunction("developer-ai", { action: fallback + "_tts", text: "Provider recovery check.", voiceRepairMode: developerAIVoiceRepairMode });
       if (!probe?.audioBase64) throw new Error(fallback + " returned no recovery audio.");
       developerAIFreeProvider = fallback;
       developerAICallManagerHealth.provider = fallback;
@@ -8076,10 +8183,10 @@ async function answerDeveloperAIFreeCall(message) {
     if (memory?.context) context.resumeNote = "Saved progress for " + memory.topic + ": " + memory.context;
     const response = memory?.reply
       ? { reply: memory.reply, ...await callMyServiceEdgeFunction("developer-ai", {
-          action: developerAIFreeProvider + "_tts", text: memory.reply }) }
+          action: developerAIFreeProvider + "_tts", text: memory.reply, voiceRepairMode: developerAIVoiceRepairMode }) }
       : await callMyServiceEdgeFunction("developer-ai", {
           action: developerAIFreeProvider + "_chat", messages: history.slice(-12), voice: true,
-          context
+          voiceRepairMode: developerAIVoiceRepairMode, context
         });
     const reply = cleanDeveloperAIFreeReply(response.reply);
     history.push({ role: "assistant", content: reply });
@@ -8369,7 +8476,7 @@ async function greetDeveloperAIFreeCall(provider) {
       ? "Hey, I’m Seth. I’m your MyService AI for coding, troubleshooting, business guidance, and realistic estimates. I’ll stay inside the access you approve, I’ll be direct when something won’t work, and you make the final decisions. What’re we working on?"
       : greeting;
     const voice = await callMyServiceEdgeFunction("developer-ai", {
-      action: provider + "_tts", text: startupGreeting
+      action: provider + "_tts", text: startupGreeting, voiceRepairMode: developerAIVoiceRepairMode
     });
     if (developerAICallMode && developerAIFreeProvider === provider && voice.audioBase64) {
       developerAICallManagerHealth.provider = provider;
