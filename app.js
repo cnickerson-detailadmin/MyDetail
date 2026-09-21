@@ -6284,8 +6284,18 @@ function developerAICallManagerMarkProviderReply(hasAudio) {
   developerAICallManagerHealth.provider = developerAIFreeProvider || (developerAIRealtimePc ? "realtime" : "unknown");
   developerAICallManagerHealth.playback = hasAudio ? "audio-received" : "text-only";
   clearTimeout(developerAICallManagerNoReplyTimer);
-  if (!hasAudio && developerAICallMode) {
-    developerAICallManagerSet("degraded", "Provider returned no playable audio", "Keep text reply visible", "No blind restart");
+  if (hasAudio && developerAICallMode) {
+    developerAICallManagerSet("degraded", "Provider audio received", "Verify decoder and audible playback", "Audio packet reached iPhone");
+    clearTimeout(developerAICallManagerNoReplyTimer);
+    developerAICallManagerNoReplyTimer = setTimeout(() => {
+      if (!developerAICallMode) return;
+      if (developerAICallManagerHealth.playback === "audio-received") {
+        developerAICallManagerSet("failure", "Audio received but playback never started", "Check audio MIME/decoder and iPhone output route", "Provider is responding; local playback path failed");
+        updateDeveloperAICallWindow("🔴 PLAYBACK DIAGNOSIS", "Seth received voice audio, but your iPhone never started playback. Provider is working; checking the local audio decoder/output path.");
+      }
+    }, 3500);
+  } else if (!hasAudio && developerAICallMode) {
+    developerAICallManagerSet("degraded", "Provider returned no playable audio", "Keep text reply visible", "Provider/TTS path needs diagnosis");
   }
 }
 
@@ -6296,7 +6306,7 @@ function developerAICallManagerMarkPlaybackStarted() {
 }
 
 function developerAICallManagerSnapshot() {
-  const streamLive = !!developerAIFreeMediaStream?.getAudioTracks?.().some(t => t.readyState === "live");
+  const streamLive = !!developerAIFreeMicStream?.getAudioTracks?.().some(t => t.readyState === "live");
   developerAICallManagerHealth.mic = streamLive || developerAIRecognitionActive ? "live" : "unverified";
   developerAICallManagerHealth.connection = developerAIRealtimePc?.connectionState || (developerAIFreeCallMode ? "free-provider" : "none");
   developerAICallManagerHealth.provider = developerAIFreeProvider || (developerAIRealtimePc ? "realtime" : "none");
@@ -6902,7 +6912,9 @@ function playDeveloperAIAudio(base64, mimeType = "audio/mpeg") {
       developerAIAudio.onerror = () => {
         developerAICallManagerPlaybackFailures += 1;
         developerAISpeaking = false;
-        if (status) status.textContent = "Voice playback failed. AI reply is still shown in chat.";
+        developerAICallManagerSet("failure", "Browser audio element could not decode/play Seth audio", "Inspect returned MIME type and iPhone audio route", "Fallback playback failed");
+        updateDeveloperAICallWindow("🔴 AUDIO DIAGNOSIS", "Voice data arrived, but Safari could not play it. This points to audio format/decoder or output routing, not Seth's AI response.");
+        if (status) status.textContent = "Voice playback failed — diagnostic captured.";
         restartDeveloperAIListening(250);
       };
 
