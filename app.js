@@ -6048,6 +6048,10 @@ let developerAILastSpokenReply = "";
 let developerAIPendingWebsiteChange = "";
 let developerAIQuietMode = false;
 let developerAIQuietRecognition = null;
+let developerAIWakeLock = null;
+let developerAIReconnectTimer = null;
+let developerAIReconnectAttempts = 0;
+let developerAIReconnectInProgress = false;
 const DEVELOPER_AI_RESUME_PHRASES = ["developer ai", "hey developer", "hey ai", "myservice ai"];
 
 const DEVELOPER_AI_SITE_WORDS = [
@@ -6063,6 +6067,72 @@ const DEVELOPER_AI_CUSTOMER_PHRASES = [
   "your total","have a good day","have a nice day","anything else for you",
   "rewards number","phone number for rewards","can i see your id","may i see your id"
 ];
+
+async function requestDeveloperAIWakeLock() {
+  if (!developerAICallMode || !navigator.wakeLock?.request) return;
+  try {
+    developerAIWakeLock = await navigator.wakeLock.request("screen");
+    developerAIWakeLock.addEventListener?.("release", () => {
+      developerAIWakeLock = null;
+    });
+  } catch (_) {}
+}
+
+async function releaseDeveloperAIWakeLock() {
+  try { await developerAIWakeLock?.release?.(); } catch (_) {}
+  developerAIWakeLock = null;
+}
+
+function clearDeveloperAIReconnect() {
+  if (developerAIReconnectTimer) clearTimeout(developerAIReconnectTimer);
+  developerAIReconnectTimer = null;
+  developerAIReconnectAttempts = 0;
+  developerAIReconnectInProgress = false;
+}
+
+function scheduleDeveloperAIReconnect() {
+  if (!developerAICallMode || developerAIReconnectInProgress) return;
+  if (developerAIReconnectAttempts >= 4) {
+    updateDeveloperAICallWindow("Connection interrupted", "Tap CALL to reconnect.");
+    return;
+  }
+
+  developerAIReconnectAttempts += 1;
+  const delay = Math.min(1200 * Math.pow(2, developerAIReconnectAttempts - 1), 8000);
+
+  if (developerAIReconnectTimer) clearTimeout(developerAIReconnectTimer);
+  developerAIReconnectTimer = setTimeout(async () => {
+    if (!developerAICallMode) return;
+    developerAIReconnectInProgress = true;
+    try {
+      // Tear down only the realtime transport, not the whole call UI/session state.
+      try { developerAIRealtimeChannel?.close?.(); } catch (_) {}
+      developerAIRealtimeChannel = null;
+      try { developerAIRealtimePc?.close?.(); } catch (_) {}
+      developerAIRealtimePc = null;
+      try {
+        developerAIRealtimeStream?.getTracks?.().forEach(track => track.stop());
+      } catch (_) {}
+      developerAIRealtimeStream = null;
+      try {
+        if (developerAIRealtimeAudio) {
+          developerAIRealtimeAudio.pause();
+          developerAIRealtimeAudio.srcObject = null;
+          developerAIRealtimeAudio.remove();
+        }
+      } catch (_) {}
+      developerAIRealtimeAudio = null;
+
+      await startDeveloperAIRealtimeCall(true);
+      developerAIReconnectAttempts = 0;
+    } catch (_) {
+      developerAIReconnectInProgress = false;
+      scheduleDeveloperAIReconnect();
+      return;
+    }
+    developerAIReconnectInProgress = false;
+  }, delay);
+}
 
 function developerAIAddressed(text) {
   const value = String(text || "").toLowerCase().trim();
@@ -6320,6 +6390,8 @@ function stopDeveloperAIAudio() {
 
 function stopDeveloperAICall() {
   developerAICallMode = false;
+  clearDeveloperAIReconnect();
+  releaseDeveloperAIWakeLock();
 
   if (developerAIListenTimer) clearTimeout(developerAIListenTimer);
   developerAIListenTimer = null;
@@ -6655,14 +6727,18 @@ function handleDeveloperAIRealtimeEvent(event) {
   }
 }
 
-async function startDeveloperAIRealtimeCall() {
+async function startDeveloperAIRealtimeCall(isReconnect = false) {
   if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) {
     throw new Error("Realtime voice is not supported by this browser.");
   }
 
   developerAICallMode = true;
-  openDeveloperAICallWindow();
-  updateDeveloperAICallWindow("Connecting…", "Starting realtime voice");
+  if (!isReconnect) {
+    clearDeveloperAIReconnect();
+    openDeveloperAICallWindow();
+  }
+  updateDeveloperAICallWindow(isReconnect ? "Reconnecting…" : "Connecting…", isReconnect ? "Restoring realtime voice" : "Starting realtime voice");
+  requestDeveloperAIWakeLock();
   setDeveloperAICallScrollSafe();
   $("developer-ai-input")?.blur?.();
 
@@ -6701,11 +6777,13 @@ async function startDeveloperAIRealtimeCall() {
   pc.onconnectionstatechange = () => {
     const state = pc.connectionState;
     if (state === "connected") {
+      developerAIReconnectAttempts = 0;
       updateDeveloperAICallWindow("Listening…", "Realtime voice connected");
       if (status) status.textContent = "Developer AI realtime call connected.";
     } else if (state === "failed" || state === "disconnected") {
-      updateDeveloperAICallWindow("Connection interrupted", "Trying again may help.");
-      if (status) status.textContent = "Developer AI realtime call connection interrupted.";
+      updateDeveloperAICallWindow("Connection interrupted", "Reconnecting automatically…");
+      if (status) status.textContent = "Developer AI connection interrupted — reconnecting…";
+      scheduleDeveloperAIReconnect();
     }
   };
 
@@ -7160,6 +7238,16 @@ document.addEventListener("DOMContentLoaded", () => {
     renderDeveloperAIChat();
     renderDeveloperAICodePushState();
   }, 0);
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && developerAICallMode) {
+    requestDeveloperAIWakeLock();
+    const state = developerAIRealtimePc?.connectionState;
+    if (!developerAIRealtimePc || state === "failed" || state === "disconnected" || state === "closed") {
+      scheduleDeveloperAIReconnect();
+    }
+  }
 });
 
 
