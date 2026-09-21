@@ -7949,9 +7949,11 @@ async function greetDeveloperAIFreeCall(provider) {
     }
     throw new Error(provider + " connected but returned no greeting audio.");
   } catch (error) {
+    const message = String(error?.message || "Seth could not speak.");
     if (developerAICallMode && developerAIFreeProvider === provider) {
-      updateDeveloperAICallWindow("Voice unavailable", String(error?.message || "Seth could not speak."));
+      updateDeveloperAICallWindow("Voice unavailable", message);
     }
+    throw new Error(message);
   }
 }
 
