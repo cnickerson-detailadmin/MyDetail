@@ -8942,8 +8942,12 @@ async function generateDeveloperAIImage() {
   const status = $("developer-ai-status");
   const prompt = String(input?.value || "").trim();
 
+  if (!prompt && developerAIPendingMedia.length) {
+    sendDeveloperAIMessage({ preventDefault() {} });
+    return;
+  }
   if (!prompt) {
-    if (status) status.textContent = "Type what image you want first.";
+    if (status) status.textContent = "Type what image you want first, or attach a photo to send it to Seth.";
     return;
   }
 
@@ -9021,6 +9025,12 @@ async function sendDeveloperAIMessage(event) {
   const input = $("developer-ai-input");
   const send = $("developer-ai-send");
   const status = $("developer-ai-status");
+  // Read the picker directly too. iOS can preserve FileList even if a rerender
+  // reset the in-memory attachment array.
+  const pickerFiles = Array.from($("developer-ai-media-input")?.files || []).filter(file =>
+    String(file.type || "").startsWith("image/") || String(file.type || "").startsWith("video/")
+  );
+  if (pickerFiles.length) developerAIPendingMedia = pickerFiles.slice(0, 4);
   let message = String(input?.value || "").trim();
   const hasPendingMedia = developerAIPendingMedia.length > 0;
   if (!message && !hasPendingMedia) return;
