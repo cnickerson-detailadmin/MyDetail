@@ -8031,8 +8031,14 @@ async function greetDeveloperAIFreeCall(provider) {
   developerAIUserIsSpeaking = false;
   developerAIPendingVoiceReply = null;
   try {
+    // Keep startup TTS intentionally short. Some providers enforce tighter
+    // speech-input limits than chat, and a long introduction should never block
+    // the entire call from connecting.
+    const startupGreeting = firstIntroduction
+      ? "Hey, I’m Seth. I’m your MyService AI for coding, troubleshooting, business guidance, and realistic estimates. I’ll stay inside the access you approve, I’ll be direct when something won’t work, and you make the final decisions. What’re we working on?"
+      : greeting;
     const voice = await callMyServiceEdgeFunction("developer-ai", {
-      action: provider + "_tts", text: greeting
+      action: provider + "_tts", text: startupGreeting
     });
     if (developerAICallMode && developerAIFreeProvider === provider && voice.audioBase64) {
       developerAICallManagerHealth.provider = provider;
@@ -8066,18 +8072,13 @@ async function toggleDeveloperAICall() {
   updateDeveloperAICallWindow("Connecting…", "Call Manager is checking available voice paths.");
 
   const failures = [];
-  const isiPhone = /iPhone/i.test(navigator.userAgent);
-  const attempts = isiPhone
-    ? [
-        ["cloudflare", () => startDeveloperAIFreeCall("cloudflare")],
-        ["gemini", () => startDeveloperAIFreeCall("gemini")],
-        ["realtime", () => startDeveloperAIRealtimeCall()]
-      ]
-    : [
-        ["realtime", () => startDeveloperAIRealtimeCall()],
-        ["cloudflare", () => startDeveloperAIFreeCall("cloudflare")],
-        ["gemini", () => startDeveloperAIFreeCall("gemini")]
-      ];
+  // Paid OpenAI realtime is intentionally disabled. Only attempt approved free
+  // providers so a known-disabled path cannot turn a recoverable outage into a
+  // misleading third failure.
+  const attempts = [
+    ["cloudflare", () => startDeveloperAIFreeCall("cloudflare")],
+    ["gemini", () => startDeveloperAIFreeCall("gemini")]
+  ];
 
   for (const [name, start] of attempts) {
     try {
