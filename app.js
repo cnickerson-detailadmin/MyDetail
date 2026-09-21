@@ -8769,6 +8769,18 @@ function installTrainingCenter() {
   const findings = [];
   const recentErrors = [];
   let scanTimer = null;
+
+  // Import failures captured before app.js could initialize.
+  try {
+    const bootErrors = typeof window.__myserviceReadPreflightErrors === "function"
+      ? window.__myserviceReadPreflightErrors()
+      : [];
+    bootErrors.forEach(e => recentErrors.push({
+      message: String(e.message || "Startup failure"),
+      time: Date.parse(e.time) || Date.now(),
+      type: String(e.type || "startup")
+    }));
+  } catch (_) {}
   let lastFingerprint = "";
 
   function developerOnly() {
