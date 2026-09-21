@@ -8352,10 +8352,12 @@ async function startDeveloperAIRealtimeCall(isReconnect = false) {
     send({
       setup: {
         model: "models/" + model,
-        responseModalities: ["AUDIO"],
+        generationConfig: {
+          responseModalities: ["AUDIO"],
+          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Algenib" } } }
+        },
         inputAudioTranscription: {},
         outputAudioTranscription: {},
-        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Algenib" } } },
         realtimeInputConfig: {
           automaticActivityDetection: {
             disabled: false,
