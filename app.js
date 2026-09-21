@@ -7569,14 +7569,29 @@ async function runDeveloperAICallTroubleshooter(issue) {
   }
 }
 
-function openDeveloperAITroubleshootMenu() {
+let developerAITroubleshootOpenedAt = 0;
+
+function openDeveloperAITroubleshootMenu(event) {
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
   if (!developerAICallMode) return;
+
   const existing = $("developer-ai-call-troubleshoot-menu");
-  if (existing) { existing.remove(); return; }
+  if (existing) {
+    // iOS can synthesize a second click from the same tap. Never let that
+    // immediately close a menu that was just opened.
+    if (Date.now() - developerAITroubleshootOpenedAt < 900) return;
+    existing.remove();
+    return;
+  }
+
+  const callWindow = $("developer-ai-call-window");
+  if (!callWindow) return;
 
   const menu = document.createElement("div");
   menu.id = "developer-ai-call-troubleshoot-menu";
-  menu.style.cssText = "position:fixed;left:18px;right:18px;bottom:max(18px,env(safe-area-inset-bottom));z-index:2147483647;background:white;color:#0f2344;border-radius:22px;padding:14px;box-shadow:0 20px 60px rgba(0,0,0,.35);";
+  menu.dataset.myserviceTroubleshootOpen = "1";
+  menu.style.cssText = "position:fixed;left:18px;right:18px;bottom:max(18px,env(safe-area-inset-bottom));z-index:2147483647;background:white;color:#0f2344;border-radius:22px;padding:14px;box-shadow:0 20px 60px rgba(0,0,0,.35);pointer-events:auto;touch-action:manipulation;";
   menu.innerHTML = `
     <div style="font-weight:900;font-size:17px;margin:2px 4px 10px;">What’s wrong with Seth?</div>
     <button id="developer-ai-fix-no-answer" type="button" style="width:100%;min-height:52px;margin:5px 0;border:1px solid #d7e2f0;border-radius:16px;background:#f8fbff;font-weight:850;">AI NOT ANSWERING</button>
@@ -7584,12 +7599,31 @@ function openDeveloperAITroubleshootMenu() {
     <button id="developer-ai-fix-full-check" type="button" style="width:100%;min-height:52px;margin:5px 0;border:1px solid #d7e2f0;border-radius:16px;background:#f8fbff;font-weight:850;">RUN FULL SELF-CHECK</button>
     <button id="developer-ai-fix-close" type="button" style="width:100%;min-height:48px;margin-top:7px;border:0;border-radius:16px;background:#eaf1fa;font-weight:850;">CLOSE</button>
   `;
-  document.body.appendChild(menu);
 
-  $("developer-ai-fix-no-answer").onclick = async () => { menu.remove(); await runDeveloperAICallTroubleshooter("not-answering"); };
-  $("developer-ai-fix-robotic").onclick = async () => { menu.remove(); await runDeveloperAICallTroubleshooter("too-robotic"); };
-  $("developer-ai-fix-full-check").onclick = async () => { menu.remove(); await runSethSelfCheck(); };
-  $("developer-ai-fix-close").onclick = () => menu.remove();
+  developerAITroubleshootOpenedAt = Date.now();
+  callWindow.appendChild(menu);
+
+  // Independent mini-watchdog: if something removes the menu while the call
+  // is still active, restore it once and surface that the watchdog intervened.
+  const watchdogStartedAt = Date.now();
+  const watchdog = setInterval(() => {
+    if (!developerAICallMode) { clearInterval(watchdog); return; }
+    if (document.getElementById("developer-ai-call-troubleshoot-menu")) return;
+    if (Date.now() - watchdogStartedAt < 1200) {
+      callWindow.appendChild(menu);
+      const caption = $("developer-ai-call-window-caption");
+      if (caption) caption.textContent = "Troubleshoot menu was unexpectedly removed — watchdog restored it.";
+    }
+    clearInterval(watchdog);
+  }, 250);
+
+  menu.addEventListener("click", e => e.stopPropagation());
+  menu.addEventListener("touchend", e => e.stopPropagation(), { passive: true });
+
+  $("developer-ai-fix-no-answer").onclick = async () => { clearInterval(watchdog); menu.remove(); await runDeveloperAICallTroubleshooter("not-answering"); };
+  $("developer-ai-fix-robotic").onclick = async () => { clearInterval(watchdog); menu.remove(); await runDeveloperAICallTroubleshooter("too-robotic"); };
+  $("developer-ai-fix-full-check").onclick = async () => { clearInterval(watchdog); menu.remove(); await runSethSelfCheck(); };
+  $("developer-ai-fix-close").onclick = () => { clearInterval(watchdog); menu.remove(); };
 }
 
 function openDeveloperAICallWindow() {
@@ -7682,7 +7716,7 @@ function openDeveloperAICallWindow() {
     this.style.background = developerMicEnabled ? "rgba(255,255,255,.16)" : "white";
     this.style.color = developerMicEnabled ? "white" : "#0f5fc7";
   };
-  $("developer-ai-call-troubleshoot").onclick = () => openDeveloperAITroubleshootMenu();
+  $("developer-ai-call-troubleshoot").onclick = event => openDeveloperAITroubleshootMenu(event);
 
   $("developer-ai-call-details").onclick = function () {
     const h = developerAICallManagerSnapshot();
