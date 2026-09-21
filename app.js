@@ -7685,6 +7685,7 @@ async function answerDeveloperAIFreeCall(message) {
   try {
     const memory = await handleDeveloperAIMemoryCommand(message, history);
     const context = getDeveloperAISafeContext();
+    context.voiceStyle = "Talk like a calm adult guy on a normal Bluetooth call: low-key, direct, brief, slightly dry, conversational, with contractions and short natural phrasing. No cheerful assistant tone, announcer cadence, fake enthusiasm, theatrical emphasis, or repetitive acknowledgements.";
     if (memory?.context) context.resumeNote = "Saved progress for " + memory.topic + ": " + memory.context;
     const response = memory?.reply
       ? { reply: memory.reply, ...await callMyServiceEdgeFunction("developer-ai", {
