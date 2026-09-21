@@ -2378,7 +2378,7 @@ function getResolvedDeveloperChecks() {
   return [
     "Company roles and company data are protected by tested RLS policies.",
     "All protected tables now have access policies.",
-    "Returning users must verify their PIN; five failed attempts cause a 15-minute lockout."
+    "The 4-digit login code is created once during first setup; valid saved sessions open directly."
   ];
 }
 
@@ -4252,11 +4252,9 @@ document.addEventListener(
         return;
       }
 
-      if (!isQuickPinVerified(userId)) {
-        showQuickPinVerificationScreen(accessToken, userId);
-        return;
-      }
-
+      // The 4-digit code is mandatory to create once, but it must not become a
+      // recurring lock screen. A valid saved Supabase session opens directly.
+      // Explicit LOG OUT still clears the saved session and requires full sign-in.
       const activeRole =
         loggedIn.role === "Developer"
           ? getDeveloperView()
