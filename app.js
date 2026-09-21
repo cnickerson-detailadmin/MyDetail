@@ -6978,7 +6978,10 @@ async function sendDeveloperAIMessage(event) {
 
   try {
     const response = await callMyServiceEdgeFunction("developer-ai", {
-      action: "gemini_chat",
+      // Use the full Developer AI brain/tool path here. Gemini remains only as
+      // a no-tools fallback; the primary developer chat can inspect approved
+      // repo files and use the guarded code broker after explicit confirmation.
+      action: "chat",
       messages: history.slice(-12),
       voice: developerAICallMode === true,
       voiceNetwork: developerAICallMode ? developerAIVoiceModeForNetwork() : null,
