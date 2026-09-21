@@ -2926,8 +2926,11 @@ function installDeveloperExperience() {
         </div>
 
         <input id="developer-ai-media-input" type="file" accept="image/*,video/*" multiple hidden onchange="handleDeveloperAIMediaSelection(event)">
+        <div style="display:flex;gap:8px;margin:0 0 8px;align-items:center;">
+          <button id="developer-ai-add-media" type="button" onclick="document.getElementById('developer-ai-media-input')?.click()" aria-label="Add photos or videos" style="display:inline-flex!important;visibility:visible!important;opacity:1!important;min-height:42px;border:1px solid #1677f2;background:#fff;color:#0f5fc7;border-radius:18px;padding:0 14px;font-weight:900;align-items:center;justify-content:center;">📷 ADD PHOTO / VIDEO</button>
+          <span id="developer-ai-media-label" style="font-size:12px;color:#61728c;font-weight:700;">No media selected</span>
+        </div>
         <form onsubmit="sendDeveloperAIMessage(event)" style="display:flex;gap:8px;align-items:center;">
-          <button id="developer-ai-add-media" type="button" class="outline-button" onclick="document.getElementById('developer-ai-media-input')?.click()" aria-label="Add photos or videos" style="min-width:118px;min-height:42px;flex:0 0 auto;border-radius:18px;padding:0 12px;font-weight:850;">📎 PHOTO/VIDEO</button>
           <textarea id="developer-ai-input" rows="1" maxlength="5000" placeholder="Message Seth…" style="width:100%;min-height:42px;max-height:90px;resize:vertical;padding:9px 12px;box-sizing:border-box;border-radius:18px;"></textarea>
           <button id="developer-ai-send" class="primary-button" type="submit" style="min-height:42px;flex:0 0 auto;border-radius:18px;">SEND</button>
         </form>
@@ -8983,9 +8986,12 @@ function handleDeveloperAIMediaSelection(event) {
   );
   developerAIPendingMedia = files.slice(0, 4);
   const status = $("developer-ai-status");
-  if (status) status.textContent = developerAIPendingMedia.length
-    ? developerAIPendingMedia.length + " photo/video file" + (developerAIPendingMedia.length === 1 ? "" : "s") + " attached to Seth."
-    : "No supported photo/video selected.";
+  const label = $("developer-ai-media-label");
+  const mediaText = developerAIPendingMedia.length
+    ? developerAIPendingMedia.length + " photo/video file" + (developerAIPendingMedia.length === 1 ? "" : "s") + " attached"
+    : "No supported photo/video selected";
+  if (status) status.textContent = mediaText + (developerAIPendingMedia.length ? " to Seth." : ".");
+  if (label) label.textContent = mediaText;
 }
 
 async function developerAIReadMediaAttachments() {
