@@ -8675,7 +8675,7 @@ async function startDeveloperAIFreeCall(provider = "gemini", startupToken = deve
   // or suppress the opening TTS route.
   unlockDeveloperAIAudio();
 
-  if (!("#developer-ai-call-window")) openDeveloperAICallWindow();
+  if (!$("developer-ai-call-window")) openDeveloperAICallWindow();
   updateDeveloperAICallWindow("Connecting…", "Preparing Seth’s opening audio");
   setDeveloperAICallScrollSafe();
 
