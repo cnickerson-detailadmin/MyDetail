@@ -6667,6 +6667,10 @@ function playDeveloperAIAudio(base64, mimeType = "audio/mpeg") {
     return;
   }
 
+  // Seth must have exactly one local playback source at a time.
+  // Kill any prior HTMLAudio/WebAudio output before starting the next reply.
+  stopDeveloperAIAudio();
+  developerAIPendingVoiceReply = null;
   developerAISpeaking = true;
   setDeveloperAICallScrollSafe();
 
