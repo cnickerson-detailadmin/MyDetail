@@ -6185,6 +6185,8 @@ let developerAIFreeRequestBusy = false;
 let developerAICallManagerTimer = null;
 let developerAICallManagerRecoveries = 0;
 let developerAICallManagerLastRecoveryAt = 0;
+let developerAICallManagerPlaybackFailures = 0;
+let developerAICallManagerLastHealthyAt = 0;
 let developerAILastSpokenReply = "";
 let developerAIPendingWebsiteChange = "";
 let developerAIQuietMode = false;
@@ -6558,6 +6560,14 @@ function stopDeveloperAICallManager() {
   developerAICallManagerLastRecoveryAt = 0;
 }
 
+function reportDeveloperAICallHealth(label, detail = "") {
+  developerAICallManagerLastHealthyAt = Date.now();
+  const status = $("developer-ai-status");
+  if (status && developerAICallMode) {
+    status.textContent = "Call Manager • " + label + (detail ? " • " + detail : "");
+  }
+}
+
 function startDeveloperAICallManager() {
   stopDeveloperAICallManager();
   developerAICallManagerTimer = setInterval(async () => {
@@ -6716,6 +6726,8 @@ async function playDeveloperAIWebAudio(base64, mimeType = "audio/mpeg") {
 
   source.start(0);
   developerAICallManagerLastRecoveryAt = 0;
+  developerAICallManagerPlaybackFailures = 0;
+  developerAICallManagerLastHealthyAt = Date.now();
 }
 
 function playDeveloperAIAudio(base64, mimeType = "audio/mpeg") {
@@ -6756,12 +6768,14 @@ function playDeveloperAIAudio(base64, mimeType = "audio/mpeg") {
       };
 
       developerAIAudio.onerror = () => {
+        developerAICallManagerPlaybackFailures += 1;
         developerAISpeaking = false;
         if (status) status.textContent = "Voice playback failed. AI reply is still shown in chat.";
         restartDeveloperAIListening(250);
       };
 
       developerAIAudio.play().catch(() => {
+        developerAICallManagerPlaybackFailures += 1;
         developerAISpeaking = false;
         if (status) status.textContent = "Tap CALL once to re-enable iPhone audio, then try again.";
         restartDeveloperAIListening(250);
@@ -7902,6 +7916,10 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 document.addEventListener("visibilitychange", () => {
+  if (document.hidden && developerAICallMode) {
+    stopDeveloperAICall();
+    return;
+  }
   if (!document.hidden && developerAICallMode) {
     requestDeveloperAIWakeLock();
     const state = developerAIRealtimePc?.connectionState;
