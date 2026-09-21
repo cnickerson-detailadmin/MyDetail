@@ -6561,6 +6561,31 @@ function setDeveloperAICallScrollSafe() {
   }
 }
 
+const MYSERVICE_STABILITY_BUILD = "63-extermination-team";
+
+function runMyServiceExterminationTeam() {
+  // Lightweight regression guard. It repairs only global UI invariants and
+  // never mutates business records, auth, schedules, employees, or settings.
+  enforceMyServiceTouchSafety();
+
+  const staleCallWindow = $("developer-ai-call-window");
+  if (staleCallWindow && !developerAICallMode) staleCallWindow.remove();
+
+  // Development/Seth UI must never leave an invisible full-screen blocker.
+  document.querySelectorAll('[data-myservice-temporary-overlay="true"]').forEach((overlay) => {
+    const style = getComputedStyle(overlay);
+    if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0) {
+      overlay.style.pointerEvents = "none";
+    }
+  });
+
+  return {
+    build: MYSERVICE_STABILITY_BUILD,
+    scrolling: getComputedStyle(document.body).overflowY !== "hidden",
+    staleCallOverlay: Boolean($("developer-ai-call-window") && !developerAICallMode)
+  };
+}
+
 function enforceMyServiceTouchSafety() {
   // Global invariant: normal MyService pages must always remain vertically
   // scrollable. Seth's overlay owns only its own scrolling while it exists.
@@ -6582,10 +6607,10 @@ function enforceMyServiceTouchSafety() {
   }
 }
 
-window.addEventListener("pageshow", enforceMyServiceTouchSafety);
-window.addEventListener("focus", enforceMyServiceTouchSafety);
+window.addEventListener("pageshow", () => runMyServiceExterminationTeam());
+window.addEventListener("focus", () => runMyServiceExterminationTeam());
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) enforceMyServiceTouchSafety();
+  if (!document.hidden) runMyServiceExterminationTeam();
 });
 
 function unlockDeveloperAIAudio() {
