@@ -6182,6 +6182,9 @@ let developerAIFreeCallMode = false;
 let developerAIFreeProvider = "";
 let developerAISpeakerMode = false;
 let developerAIFreeRequestBusy = false;
+let developerAICallManagerTimer = null;
+let developerAICallManagerRecoveries = 0;
+let developerAICallManagerLastRecoveryAt = 0;
 let developerAILastSpokenReply = "";
 let developerAIPendingWebsiteChange = "";
 let developerAIQuietMode = false;
@@ -6548,9 +6551,54 @@ function stopDeveloperAIAudio() {
   developerAISpeaking = false;
 }
 
+function stopDeveloperAICallManager() {
+  if (developerAICallManagerTimer) clearInterval(developerAICallManagerTimer);
+  developerAICallManagerTimer = null;
+  developerAICallManagerRecoveries = 0;
+  developerAICallManagerLastRecoveryAt = 0;
+}
+
+function startDeveloperAICallManager() {
+  stopDeveloperAICallManager();
+  developerAICallManagerTimer = setInterval(async () => {
+    if (!developerAICallMode || document.hidden) return;
+    try {
+      if (developerAIAudioContext?.state === "suspended") {
+        await developerAIAudioContext.resume().catch(() => {});
+      }
+
+      const mic = developerAIFreeMicStream || developerAIRealtimeStream;
+      const liveMic = mic?.getAudioTracks?.().some(track => track.readyState === "live");
+      const realtimeBad = developerAIRealtimePc &&
+        ["failed", "disconnected", "closed"].includes(developerAIRealtimePc.connectionState);
+
+      if (realtimeBad) {
+        scheduleDeveloperAIReconnect?.("Call Manager detected a dropped realtime connection.");
+        return;
+      }
+
+      if (developerAIFreeCallMode && !liveMic && !developerAIFreeRequestBusy) {
+        const now = Date.now();
+        if (now - developerAICallManagerLastRecoveryAt > 10000 && developerAICallManagerRecoveries < 2) {
+          developerAICallManagerLastRecoveryAt = now;
+          developerAICallManagerRecoveries += 1;
+          stopDeveloperAIFreeMediaCapture();
+          try {
+            const restored = await startDeveloperAIFreeMediaCapture();
+            if (!restored) startDeveloperAIListening?.();
+            const status = $("developer-ai-status");
+            if (status) status.textContent = "Call Manager restored the microphone.";
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+  }, 3000);
+}
+
 function stopDeveloperAICall() {
   if (developerAITestRecording) stopDeveloperAITestRecording(true);
   developerAICallMode = false;
+  stopDeveloperAICallManager();
   clearDeveloperAIReconnect();
   releaseDeveloperAIWakeLock();
 
@@ -6667,6 +6715,7 @@ async function playDeveloperAIWebAudio(base64, mimeType = "audio/mpeg") {
   };
 
   source.start(0);
+  developerAICallManagerLastRecoveryAt = 0;
 }
 
 function playDeveloperAIAudio(base64, mimeType = "audio/mpeg") {
@@ -7672,6 +7721,7 @@ async function toggleDeveloperAICall() {
     for (const provider of ["gemini", "cloudflare"]) {
       try {
         await startDeveloperAIFreeCall(provider);
+        startDeveloperAICallManager();
         return;
       } catch (_) {
         stopDeveloperAICall();
@@ -7679,6 +7729,7 @@ async function toggleDeveloperAICall() {
     }
     try {
       await startDeveloperAIRealtimeCall();
+      startDeveloperAICallManager();
       return;
     } catch (_) {
       stopDeveloperAICall();
@@ -7686,12 +7737,14 @@ async function toggleDeveloperAICall() {
   } else {
     try {
       await startDeveloperAIRealtimeCall();
+      startDeveloperAICallManager();
       return;
     } catch (realtimeError) {
       stopDeveloperAICall();
       for (const provider of ["cloudflare", "gemini"]) {
         try {
           await startDeveloperAIFreeCall(provider);
+          startDeveloperAICallManager();
           return;
         } catch (_) {
           stopDeveloperAICall();
