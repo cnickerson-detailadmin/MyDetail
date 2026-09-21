@@ -6047,11 +6047,103 @@ let developerAIFreeRequestBusy = false;
 let developerAILastSpokenReply = "";
 let developerAIPendingWebsiteChange = "";
 let developerAIQuietMode = false;
+let developerAIQuietRecognition = null;
 const DEVELOPER_AI_RESUME_PHRASES = ["developer ai", "hey developer", "hey ai", "myservice ai"];
+
+const DEVELOPER_AI_SITE_WORDS = [
+  "myservice","site","website","app","dashboard","login","github","supabase","code",
+  "button","page","screen","menu","auth","authentication","employee","schedule",
+  "clock","time clock","security","database","backend","frontend","developer ai",
+  "support ticket","feature","bug","function","deployment","deploy","repository","repo"
+];
+
+const DEVELOPER_AI_CUSTOMER_PHRASES = [
+  "cash or card","credit or debit","do you need a bag","need a bag","would you like a bag",
+  "do you want a receipt","need a receipt","would you like a receipt","your total is",
+  "your total","have a good day","have a nice day","anything else for you",
+  "rewards number","phone number for rewards","can i see your id","may i see your id"
+];
 
 function developerAIAddressed(text) {
   const value = String(text || "").toLowerCase().trim();
   return DEVELOPER_AI_RESUME_PHRASES.some(phrase => value.includes(phrase));
+}
+
+function developerAIIsSiteTalk(text) {
+  const value = String(text || "").toLowerCase();
+  return DEVELOPER_AI_SITE_WORDS.some(term => value.includes(term));
+}
+
+function developerAILooksLikeCustomerInteraction(text) {
+  const value = String(text || "").toLowerCase().trim();
+  if (!value || developerAIIsSiteTalk(value) || developerAIAddressed(value)) return false;
+  return DEVELOPER_AI_CUSTOMER_PHRASES.some(phrase => value.includes(phrase));
+}
+
+function developerAIContinuesRecentTopic(text) {
+  const value = String(text || "").toLowerCase().trim();
+  if (!value) return false;
+  if (developerAIIsSiteTalk(value) || developerAIAddressed(value)) return true;
+
+  const history = getDeveloperAIHistory?.() || [];
+  const previous = [...history].reverse().find(item => item?.role === "user")?.content || "";
+  const stop = new Set(["the","and","that","this","with","from","have","just","what","about","would","could","should","then","like","your","youre","into","make","site","app"]);
+  const words = str => String(str || "").toLowerCase().match(/[a-z0-9_-]{4,}/g) || [];
+  const recent = new Set(words(previous).filter(word => !stop.has(word)));
+  const overlap = words(value).filter(word => recent.has(word));
+  return overlap.length >= 2;
+}
+
+function stopDeveloperAIQuietWakeListener() {
+  try { developerAIQuietRecognition?.abort?.(); } catch (_) {}
+  try { developerAIQuietRecognition?.stop?.(); } catch (_) {}
+  developerAIQuietRecognition = null;
+}
+
+function startDeveloperAIQuietWakeListener() {
+  stopDeveloperAIQuietWakeListener();
+  if (!developerAIQuietMode || !developerAICallMode) return;
+
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!Recognition) return;
+
+  try {
+    const recognition = new Recognition();
+    developerAIQuietRecognition = recognition;
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = "en-US";
+
+    recognition.onresult = event => {
+      const transcript = Array.from(event.results || [])
+        .map(result => result?.[0]?.transcript || "")
+        .join(" ")
+        .trim();
+
+      if (
+        developerAIAddressed(transcript) ||
+        developerAIIsSiteTalk(transcript) ||
+        developerAIContinuesRecentTopic(transcript)
+      ) {
+        setDeveloperAIQuietMode(false, "I’m back with you.");
+        queueDeveloperAIUserSpeech(transcript);
+      }
+    };
+
+    recognition.onend = () => {
+      if (developerAIQuietMode && developerAICallMode && developerAIQuietRecognition === recognition) {
+        setTimeout(startDeveloperAIQuietWakeListener, 250);
+      }
+    };
+
+    recognition.onerror = () => {
+      if (developerAIQuietMode && developerAICallMode && developerAIQuietRecognition === recognition) {
+        setTimeout(startDeveloperAIQuietWakeListener, 600);
+      }
+    };
+
+    recognition.start();
+  } catch (_) {}
 }
 
 function setDeveloperAIQuietMode(enabled, reason = "") {
@@ -6078,12 +6170,19 @@ function setDeveloperAIQuietMode(enabled, reason = "") {
   }
 
   const realtimeActive = Boolean(developerAIRealtimePc && developerAIRealtimeStream);
+
+  if (developerAIQuietMode) {
+    startDeveloperAIQuietWakeListener();
+  } else {
+    stopDeveloperAIQuietWakeListener();
+  }
+
   updateDeveloperAICallWindow(
     developerAIQuietMode ? "Quiet mode" : "Listening…",
     developerAIQuietMode
       ? (realtimeActive
-          ? "Microphone muted to Developer AI. Tap RESUME AI when you’re ready."
-          : "Customer/coworker conversation is ignored. Say “Developer AI” or tap RESUME AI.")
+          ? "Developer AI audio is muted. I’ll stay quiet and only resume for Developer AI/MyService/site talk or a clear continuation."
+          : "Quiet mode. I’ll stay quiet until you clearly return to Developer AI/MyService/site talk.")
       : (reason || "Talk naturally — I’ll wait for you to finish.")
   );
 }
@@ -6160,8 +6259,17 @@ function queueDeveloperAIUserSpeech(transcript) {
     return;
   }
 
+  if (developerAILooksLikeCustomerInteraction(text)) {
+    setDeveloperAIQuietMode(true, "Customer interaction detected.");
+    return;
+  }
+
   if (developerAIQuietMode) {
-    if (!developerAIAddressed(text)) return;
+    if (
+      !developerAIAddressed(text) &&
+      !developerAIIsSiteTalk(text) &&
+      !developerAIContinuesRecentTopic(text)
+    ) return;
     setDeveloperAIQuietMode(false, "I’m back with you.");
   }
 
@@ -6247,6 +6355,7 @@ function stopDeveloperAICall() {
   developerAIPendingVoiceReply = null;
   developerAIFreeCallMode = false;
   developerAIQuietMode = false;
+  stopDeveloperAIQuietWakeListener();
 
   try { window.speechSynthesis?.cancel?.(); } catch (_) {}
   developerAISpeechUtterance = null;
@@ -6502,6 +6611,17 @@ function handleDeveloperAIRealtimeEvent(event) {
   if (type === "input_audio_buffer.speech_stopped") {
     developerAIUserIsSpeaking = false;
     updateDeveloperAICallWindow("Thinking…", "");
+    return;
+  }
+
+  if (
+    type === "conversation.item.input_audio_transcription.completed" ||
+    type === "input_audio_transcription.completed"
+  ) {
+    const transcript = String(data?.transcript || data?.text || "").trim();
+    if (transcript && developerAILooksLikeCustomerInteraction(transcript)) {
+      setDeveloperAIQuietMode(true, "Customer interaction detected.");
+    }
     return;
   }
 
