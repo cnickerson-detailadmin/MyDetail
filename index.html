@@ -33,6 +33,38 @@
 
 <body>
 
+<script>
+  // Preflight bug catcher: this runs BEFORE app.js, so startup/parse failures
+  // can be recorded even when the application itself never finishes loading.
+  (function () {
+    var key = "myservice_preflight_errors_v1";
+    function save(type, message) {
+      try {
+        var list = JSON.parse(sessionStorage.getItem(key) || "[]");
+        list.push({
+          type: String(type || "startup"),
+          message: String(message || "Unknown startup failure").slice(0, 500),
+          time: new Date().toISOString()
+        });
+        sessionStorage.setItem(key, JSON.stringify(list.slice(-20)));
+      } catch (_) {}
+    }
+    window.addEventListener("error", function (event) {
+      save("javascript-startup-error", event && event.message ? event.message : "Script failed to load or parse.");
+    }, true);
+    window.addEventListener("unhandledrejection", function (event) {
+      save("startup-promise-rejection", event && event.reason ? (event.reason.message || event.reason) : "Unhandled startup promise rejection.");
+    });
+    window.__myserviceReadPreflightErrors = function () {
+      try {
+        var list = JSON.parse(sessionStorage.getItem(key) || "[]");
+        sessionStorage.removeItem(key);
+        return Array.isArray(list) ? list : [];
+      } catch (_) { return []; }
+    };
+  })();
+</script>
+
 <div id="myservice-auth-boot" style="
   position:fixed;
   inset:0;
