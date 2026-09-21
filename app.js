@@ -6064,6 +6064,12 @@ let developerAIWakeLock = null;
 let developerAIReconnectTimer = null;
 let developerAIReconnectAttempts = 0;
 let developerAIReconnectInProgress = false;
+let developerAITestRecordDestination = null;
+let developerAITestRecorder = null;
+let developerAITestRecordChunks = [];
+let developerAITestRecordMicSource = null;
+let developerAITestRecording = false;
+let developerAITestRecordingUrl = "";
 const DEVELOPER_AI_RESUME_PHRASES = ["developer ai", "hey developer", "hey ai", "myservice ai"];
 
 const DEVELOPER_AI_SITE_WORDS = [
@@ -6401,6 +6407,7 @@ function stopDeveloperAIAudio() {
 }
 
 function stopDeveloperAICall() {
+  if (developerAITestRecording) stopDeveloperAITestRecording(true);
   developerAICallMode = false;
   clearDeveloperAIReconnect();
   releaseDeveloperAIWakeLock();
@@ -6575,6 +6582,107 @@ function developerAIVoiceModeForNetwork() {
   };
 }
 
+function developerAITestRecordingStream() {
+  return developerAIRealtimeStream || developerAIFreeMicStream || null;
+}
+
+function stopDeveloperAITestRecording(showSave = true) {
+  if (!developerAITestRecorder) return;
+  const recorder = developerAITestRecorder;
+  developerAITestRecorder = null;
+  developerAITestRecording = false;
+
+  try {
+    if (recorder.state !== "inactive") recorder.stop();
+  } catch (_) {}
+
+  try { developerAITestRecordMicSource?.disconnect?.(); } catch (_) {}
+  developerAITestRecordMicSource = null;
+
+  const btn = $("developer-ai-test-record");
+  if (btn) {
+    btn.textContent = "● TEST REC";
+    btn.style.background = "rgba(255,255,255,.16)";
+    btn.style.color = "white";
+  }
+
+  recorder.onstop = () => {
+    const chunks = developerAITestRecordChunks.splice(0);
+    if (!chunks.length) return;
+
+    const mimeType = recorder.mimeType || "audio/mp4";
+    const blob = new Blob(chunks, { type: mimeType });
+    if (developerAITestRecordingUrl) {
+      try { URL.revokeObjectURL(developerAITestRecordingUrl); } catch (_) {}
+    }
+    developerAITestRecordingUrl = URL.createObjectURL(blob);
+
+    if (showSave) {
+      let save = $("developer-ai-save-test-recording");
+      if (!save) {
+        save = document.createElement("a");
+        save.id = "developer-ai-save-test-recording";
+        save.style.cssText = "position:fixed;left:18px;right:18px;bottom:max(18px,env(safe-area-inset-bottom));z-index:2147483647;padding:14px 16px;border-radius:16px;background:#111;color:#fff;text-align:center;font-weight:900;text-decoration:none;";
+        document.body.appendChild(save);
+      }
+      save.href = developerAITestRecordingUrl;
+      save.download = "myservice-developer-ai-test-" + Date.now() + (mimeType.includes("mp4") ? ".m4a" : ".webm");
+      save.textContent = "SAVE TEST CALL RECORDING";
+      save.onclick = () => setTimeout(() => save.remove(), 2500);
+    }
+  };
+}
+
+async function toggleDeveloperAITestRecording() {
+  if (developerAITestRecording) {
+    stopDeveloperAITestRecording(true);
+    updateDeveloperAICallWindow("Listening…", "Test recording stopped — save button ready.");
+    return;
+  }
+
+  const stream = developerAITestRecordingStream();
+  if (!stream || !stream.getAudioTracks?.().length) {
+    updateDeveloperAICallWindow("Recording unavailable", "Wait until the call says Listening, then tap TEST REC.");
+    return;
+  }
+
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx || typeof MediaRecorder === "undefined") {
+    updateDeveloperAICallWindow("Recording unavailable", "This iPhone browser cannot create the test recording.");
+    return;
+  }
+
+  if (!developerAIAudioContext) developerAIAudioContext = new AudioCtx();
+  if (developerAIAudioContext.state === "suspended") {
+    await developerAIAudioContext.resume().catch(() => {});
+  }
+
+  developerAITestRecordDestination = developerAIAudioContext.createMediaStreamDestination();
+  developerAITestRecordMicSource = developerAIAudioContext.createMediaStreamSource(stream);
+  developerAITestRecordMicSource.connect(developerAITestRecordDestination);
+
+  try { developerAIRealtimeAudioSource?.connect?.(developerAITestRecordDestination); } catch (_) {}
+
+  const choices = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"];
+  const mimeType = choices.find(type => MediaRecorder.isTypeSupported?.(type)) || "";
+  const recorder = new MediaRecorder(developerAITestRecordDestination.stream, mimeType ? { mimeType } : undefined);
+  developerAITestRecorder = recorder;
+  developerAITestRecordChunks = [];
+  recorder.ondataavailable = event => {
+    if (event.data?.size) developerAITestRecordChunks.push(event.data);
+  };
+  recorder.start(500);
+  developerAITestRecording = true;
+
+  const btn = $("developer-ai-test-record");
+  if (btn) {
+    btn.textContent = "■ STOP TEST REC";
+    btn.style.background = "#fff";
+    btn.style.color = "#d92d20";
+  }
+  updateDeveloperAICallWindow("Listening…", "TEST RECORDING • local only");
+}
+
 function openDeveloperAICallWindow() {
   if ($("developer-ai-call-window")) return;
 
@@ -6612,6 +6720,8 @@ function openDeveloperAICallWindow() {
       </div>
     </div>
 
+    <button id="developer-ai-test-record" type="button"
+      style="padding:12px;margin-bottom:10px;border:0;border-radius:14px;background:rgba(255,255,255,.16);color:white;font-weight:900;">● TEST REC</button>
     <button id="developer-ai-play-reply" type="button" style="padding:12px;margin-bottom:12px;border:0;border-radius:14px;">Play reply / test audio</button>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
       <button id="developer-ai-call-quiet" type="button"
@@ -6629,6 +6739,11 @@ function openDeveloperAICallWindow() {
 
   document.body.appendChild(wrap);
 
+  $("developer-ai-test-record").onclick = () => {
+    toggleDeveloperAITestRecording().catch(() => {
+      updateDeveloperAICallWindow("Recording unavailable", "Could not start the local test recording.");
+    });
+  };
   $("developer-ai-play-reply").onclick = () => {
     try { developerAIRecognition?.abort(); } catch (_) {}
     speakDeveloperAIFreeReply(developerAILastSpokenReply || "Audio test. Can you hear me?").catch(() => {});
