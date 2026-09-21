@@ -6054,7 +6054,6 @@ let developerAIPendingVoiceReply = null;
 let developerAIUserIsSpeaking = false;
 let developerAIFreeCallMode = false;
 let developerAISpeakerMode = true;
-let developerAISpeechUtterance = null;
 let developerAIFreeRequestBusy = false;
 let developerAILastSpokenReply = "";
 let developerAIPendingWebsiteChange = "";
@@ -6240,7 +6239,6 @@ function setDeveloperAIQuietMode(enabled, reason = "") {
   if (developerAISpeechDebounce) clearTimeout(developerAISpeechDebounce);
   developerAISpeechDebounce = null;
   stopDeveloperAIAudio();
-  try { window.speechSynthesis?.cancel?.(); } catch (_) {}
 
   // In realtime WebRTC mode, actually mute the outgoing microphone track.
   // This prevents customer/coworker audio from being sent upstream while HOLD UP is active.
@@ -6391,7 +6389,7 @@ function queueDeveloperAIUserSpeech(transcript) {
     } else {
       await sendDeveloperAIMessage();
     }
-  }, 2400);
+  }, /^(?:hi|hello|hey|yo)[.!?]*$/i.test(developerAISpeechBuffer.trim()) ? 250 : 650);
 }
 
 function stopDeveloperAIAudio() {
@@ -6455,8 +6453,6 @@ function stopDeveloperAICall() {
   developerAILastRealtimeUserTranscript = "";
   stopDeveloperAIQuietWakeListener();
 
-  try { window.speechSynthesis?.cancel?.(); } catch (_) {}
-  developerAISpeechUtterance = null;
 
   stopDeveloperAIAudio();
   setDeveloperAICallScrollSafe();
@@ -6735,7 +6731,6 @@ function openDeveloperAICallWindow() {
 
     <button id="developer-ai-test-record" type="button"
       style="padding:12px;margin-bottom:10px;border:0;border-radius:14px;background:rgba(255,255,255,.16);color:white;font-weight:900;">● RECORD TEST CALL</button>
-    <button id="developer-ai-play-reply" type="button" style="padding:12px;margin-bottom:12px;border:0;border-radius:14px;">Play reply / test audio</button>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
       <button id="developer-ai-call-quiet" type="button"
         style="min-height:54px;border:0;border-radius:18px;background:rgba(255,255,255,.16);color:white;font-weight:850;">HOLD UP</button>
@@ -6757,10 +6752,6 @@ function openDeveloperAICallWindow() {
       updateDeveloperAICallWindow("Recording unavailable", "Could not start the local test recording.");
     });
   };
-  $("developer-ai-play-reply").onclick = () => {
-    try { developerAIRecognition?.abort(); } catch (_) {}
-    speakDeveloperAIFreeReply(developerAILastSpokenReply || "Audio test. Can you hear me?").catch(() => {});
-  };
   $("developer-ai-call-quiet").onclick = () => setDeveloperAIQuietMode(!developerAIQuietMode);
   $("developer-ai-call-end").onclick = () => stopDeveloperAICall();
   $("developer-ai-call-close").onclick = () => {
@@ -6773,8 +6764,6 @@ function openDeveloperAICallWindow() {
     if (developerAIAudio) developerAIAudio.muted = muted;
     if (developerAIRealtimeAudio) developerAIRealtimeAudio.muted = muted;
     try {
-      if (muted) window.speechSynthesis?.pause?.();
-      else window.speechSynthesis?.resume?.();
       if (developerAIAudioContext) {
         if (muted) developerAIAudioContext.suspend();
         else developerAIAudioContext.resume();
@@ -6931,7 +6920,6 @@ async function startDeveloperAIRealtimeCall(isReconnect = false) {
   developerAICallMode = true;
   if (!isReconnect) {
     clearDeveloperAIReconnect();
-    primeDeveloperAIFreeSpeech();
     openDeveloperAICallWindow();
   }
   updateDeveloperAICallWindow(isReconnect ? "Reconnecting…" : "Connecting…", isReconnect ? "Restoring realtime voice" : "Starting realtime voice");
@@ -7012,7 +7000,31 @@ async function startDeveloperAIRealtimeCall(isReconnect = false) {
   developerAIRealtimeChannel = dc;
   dc.onmessage = handleDeveloperAIRealtimeEvent;
   dc.onopen = () => {
-    updateDeveloperAICallWindow("Listening…", "Realtime voice connected");
+    // Fast, natural turn-taking: reply as soon as a thought sounds complete.
+    // A plain greeting such as "hello" should be treated as a complete turn.
+    try {
+      dc.send(JSON.stringify({
+        type: "session.update",
+        session: {
+          type: "realtime",
+          instructions:
+            "Sound like a real person: natural, chill, laid-back, warm, and conversational. " +
+            "Reply promptly after Caleb finishes speaking, including after a simple hello. " +
+            "Never use an announcer tone, a robotic cadence, or spoken system/status messages.",
+          audio: {
+            input: {
+              turn_detection: {
+                type: "semantic_vad",
+                eagerness: "high",
+                create_response: true,
+                interrupt_response: true
+              }
+            }
+          }
+        }
+      }));
+    } catch (_) {}
+    updateDeveloperAICallWindow("Listening…", "Natural realtime voice connected");
   };
 
   const offer = await pc.createOffer();
@@ -7037,24 +7049,6 @@ async function startDeveloperAIRealtimeCall(isReconnect = false) {
   if (status) status.textContent = "Developer AI realtime voice ready.";
 }
 
-
-function getDeveloperAIFreeVoice() {
-  const voices = window.speechSynthesis?.getVoices?.() || [];
-  const preferredNames = ["Ava", "Samantha", "Zoe", "Nicky", "Evan", "Aaron", "Alex"];
-  for (const name of preferredNames) {
-    const voice = voices.find(item =>
-      String(item.name || "").toLowerCase().includes(name.toLowerCase()) &&
-      String(item.lang || "").toLowerCase().startsWith("en")
-    );
-    if (voice) return voice;
-  }
-  return voices.find(item =>
-    String(item.lang || "").toLowerCase().startsWith("en-us") &&
-    item.localService !== false
-  ) || voices.find(item =>
-    String(item.lang || "").toLowerCase().startsWith("en")
-  ) || null;
-}
 
 function cleanDeveloperAIFreeReply(value) {
   const banned = /\b(fuck|shit|bitch|asshole|damn|cunt)\b/gi;
@@ -7156,94 +7150,6 @@ function buildDeveloperAIFreeReply(message) {
   return "I heard you. The no-credit call is working, but that request needs cloud-level reasoning. I can still help with MyService status, navigation, staffing, clock, schedule, or support tickets without charging API credits.";
 }
 
-function primeDeveloperAIFreeSpeech() {
-  try {
-    const synth = window.speechSynthesis;
-    if (!synth || typeof SpeechSynthesisUtterance === "undefined") return;
-    synth.cancel();
-    const u = new SpeechSynthesisUtterance(" ");
-    u.volume = 0.01;
-    u.rate = 1;
-    synth.speak(u);
-  } catch (_) {}
-}
-
-function speakDeveloperAIFreeReply(reply) {
-  return new Promise(resolve => {
-    const synth = window.speechSynthesis;
-    if (!synth || typeof SpeechSynthesisUtterance === "undefined") {
-      updateDeveloperAICallWindow("Voice unavailable", "This iPhone browser did not expose speech output.");
-      resolve();
-      return;
-    }
-
-    const micTracks = developerAIFreeMicStream?.getAudioTracks?.() || [];
-
-    // Keep the microphone permission/session alive, but pause recording while the
-    // phone speaks. iOS is much more reliable when it is not simultaneously
-    // recording and trying to start SpeechSynthesis.
-    try {
-      if (developerAIFreeRecorder?.state === "recording") developerAIFreeRecorder.pause();
-    } catch (_) {}
-    micTracks.forEach(track => { track.enabled = false; });
-
-    try {
-      if (developerAIAudioContext?.state === "suspended") {
-        developerAIAudioContext.resume().catch(() => {});
-      }
-    } catch (_) {}
-
-    synth.cancel();
-    const utterance = new SpeechSynthesisUtterance(cleanDeveloperAIFreeReply(reply));
-    developerAISpeechUtterance = utterance;
-    utterance.voice = getDeveloperAIFreeVoice();
-    utterance.lang = utterance.voice?.lang || "en-US";
-    utterance.rate = 0.92;
-    utterance.pitch = 0.98;
-    utterance.volume = developerAISpeakerMode ? 1 : 0.45;
-
-    let started = false;
-    const finish = () => {
-      micTracks.forEach(track => { track.enabled = true; });
-      try {
-        if (developerAIFreeRecorder?.state === "paused") developerAIFreeRecorder.resume();
-      } catch (_) {}
-      developerAISpeaking = false;
-      developerAISpeechUtterance = null;
-      updateDeveloperAICallWindow("Listening…", "Stable microphone ready");
-      resolve();
-    };
-
-    const watchdog = setTimeout(() => {
-      if (!started) {
-        updateDeveloperAICallWindow("Voice blocked", "iPhone blocked speech output. Tap Play reply / test audio once.");
-        const status = $("developer-ai-status");
-        if (status) status.textContent = "iPhone blocked Developer AI speech output.";
-        finish();
-      }
-    }, 1800);
-
-    utterance.onstart = () => {
-      started = true;
-      clearTimeout(watchdog);
-      developerAISpeaking = true;
-      updateDeveloperAICallWindow("Speaking…", "Developer AI");
-    };
-    utterance.onend = () => {
-      clearTimeout(watchdog);
-      finish();
-    };
-    utterance.onerror = () => {
-      clearTimeout(watchdog);
-      updateDeveloperAICallWindow("Voice playback issue", "Tap Play reply / test audio once.");
-      finish();
-    };
-
-    synth.resume?.();
-    synth.speak(utterance);
-  });
-}
-
 async function answerDeveloperAIFreeCall(message) {
   if (!developerAIIsAllowed() || developerAIFreeRequestBusy) return;
   developerAIFreeRequestBusy = true;
@@ -7264,8 +7170,11 @@ async function answerDeveloperAIFreeCall(message) {
     renderDeveloperAIChat();
     developerAILastSpokenReply = reply;
     if (developerAICallMode) {
-      updateDeveloperAICallWindow("Reply ready", reply);
-      await speakDeveloperAIFreeReply(reply);
+      updateDeveloperAICallWindow("Text reply", reply);
+      if ($("developer-ai-status")) {
+        $("developer-ai-status").textContent =
+          "Natural realtime audio is required for spoken replies.";
+      }
     }
   } catch (error) {
     const message = String(error.message || "AI connection failed.");
@@ -7392,7 +7301,7 @@ async function startDeveloperAIFreeMediaCapture() {
         developerAIUserIsSpeaking = true;
         updateDeveloperAICallWindow("Listening…", "Go ahead — I’m listening.");
       }
-    } else if (developerAIFreeVadSpeaking && now - developerAIFreeVadLastVoiceAt > 1300) {
+    } else if (developerAIFreeVadSpeaking && now - developerAIFreeVadLastVoiceAt > 650) {
       developerAIFreeVadSpeaking = false;
       developerAIUserIsSpeaking = false;
       updateDeveloperAICallWindow("Thinking…", "");
@@ -7412,9 +7321,7 @@ async function startDeveloperAIFreeCall() {
   developerAICallMode = true;
   developerAIFreeCallMode = true;
   developerAISpeakerMode = true;
-  primeDeveloperAIFreeSpeech();
   unlockDeveloperAIAudio();
-  window.speechSynthesis?.getVoices?.();
 
   openDeveloperAICallWindow();
   updateDeveloperAICallWindow("Connecting…", "Starting stable no-credit voice");
@@ -7439,7 +7346,7 @@ async function startDeveloperAIFreeCall() {
   }
 
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!Recognition || !window.speechSynthesis) {
+  if (!Recognition) {
     throw new Error("This device does not support the available voice input modes.");
   }
 
@@ -7491,27 +7398,19 @@ async function toggleDeveloperAICall() {
     return;
   }
 
-  // Prefer the true streaming WebRTC call path. It has semantic turn detection,
-  // natural barge-in, noise reduction, and streamed audio. Keep the existing
-  // no-credit/browser path only as a fallback so CALL never becomes unusable.
+  // Natural realtime speech-to-speech only. Never fall back to the iPhone/browser
+  // speech synthesizer: if realtime is unavailable, keep the reply in text.
   try {
     await startDeveloperAIRealtimeCall();
     return;
   } catch (realtimeError) {
+    const message = String(realtimeError?.message || "Natural realtime voice could not start.");
     stopDeveloperAICall();
-    try {
-      await startDeveloperAIFreeCall();
-      const status = $("developer-ai-status");
-      if (status) status.textContent = "Developer AI fallback call connected.";
-      return;
-    } catch (fallbackError) {
-      const message = String(fallbackError?.message || realtimeError?.message || "Voice could not start.");
-      stopDeveloperAICall();
-      openDeveloperAICallWindow();
-      updateDeveloperAICallWindow("Couldn’t connect", message);
-      const status = $("developer-ai-status");
-      if (status) status.textContent = "Developer AI voice unavailable — " + message;
-    }
+    openDeveloperAICallWindow();
+    updateDeveloperAICallWindow("Natural voice unavailable", message);
+    const status = $("developer-ai-status");
+    if (status) status.textContent =
+      "Natural voice unavailable — robotic browser voice is disabled. " + message;
   }
 }
 
@@ -7615,7 +7514,11 @@ async function sendDeveloperAIMessage(event) {
         }
       } else {
         developerAILastSpokenReply = String(response.reply || "");
-        await speakDeveloperAIFreeReply(developerAILastSpokenReply);
+        updateDeveloperAICallWindow("Text reply", developerAILastSpokenReply);
+        const callStatus = $("developer-ai-status");
+        if (callStatus) {
+          callStatus.textContent = "Natural audio was unavailable — reply shown as text.";
+        }
       }
     }
 
