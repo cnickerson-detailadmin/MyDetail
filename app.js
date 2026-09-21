@@ -7030,6 +7030,9 @@ function handleDeveloperAIRealtimeEvent(event) {
 
   if (type === "input_audio_buffer.speech_started") {
     developerAIUserIsSpeaking = true;
+    // True barge-in: immediately silence any local/fallback reply if Caleb
+    // starts speaking, instead of making him wait for Seth to finish.
+    pauseDeveloperAIForUserSpeech();
     updateDeveloperAICallWindow("Listening…", "Go ahead — I won’t interrupt.");
     return;
   }
@@ -7202,8 +7205,10 @@ async function startDeveloperAIRealtimeCall(isReconnect = false) {
           instructions:
             "Your name is Seth. You are the advanced AI assistant for MyService Support. " +
             "Sound like a real guy: natural, chill, laid-back, warm, and conversational. " +
-            "Use relaxed pacing and short spoken sentences. Reply promptly after Caleb finishes speaking, " +
-            "including after a simple hello. Never use an announcer tone, robotic cadence, or spoken system messages. " +
+            "Use contractions, natural sentence lengths, subtle conversational acknowledgements, and vary phrasing so repeated replies do not sound scripted. " +
+            "Keep answers concise in voice, but do not sound rushed. Reply promptly after Caleb clearly finishes speaking, including after a simple hello. " +
+            "If he pauses briefly mid-thought, give him room to continue. If he interrupts you, stop immediately and listen. " +
+            "Never use an announcer tone, robotic cadence, repetitive filler, fake emotion, or spoken system messages. " +
             "You are the troubleshooting assistant too: check the safe diagnostic context before guessing, explain the real cause plainly, and give one practical next action at a time. Never reveal secrets or private records, and never authorize a website, code, security, or destructive change from voice alone.",
           audio: {
             input: {
@@ -7496,6 +7501,9 @@ async function startDeveloperAIFreeMediaCapture() {
 
   recorder.start();
   const samples = new Uint8Array(developerAIFreeAnalyser.fftSize);
+  // iPhone Safari/WebKit tuning: keep quiet speech sensitive while requiring
+  // a short run of voice frames before treating background noise as speech.
+  let developerAIFreeVadVoiceFrames = 0;
   developerAIFreeVadTimer = setInterval(() => {
     if (!developerAICallMode || !developerAIFreeAnalyser || developerAISpeaking) return;
     developerAIFreeAnalyser.getByteTimeDomainData(samples);
@@ -7512,22 +7520,27 @@ async function startDeveloperAIFreeMediaCapture() {
       updateDeveloperAICallWindow("Listening…", "Mic level " + levelPercent + "%");
     }
 
-    if (rms > 0.015) {
+    if (rms > 0.010) {
+      developerAIFreeVadVoiceFrames += 1;
       developerAIFreeVadLastVoiceAt = now;
-      if (!developerAIFreeVadSpeaking) {
+      if (!developerAIFreeVadSpeaking && developerAIFreeVadVoiceFrames >= 2) {
         developerAIFreeVadSpeaking = true;
         developerAIUserIsSpeaking = true;
+        pauseDeveloperAIForUserSpeech();
         updateDeveloperAICallWindow("Listening…", "Go ahead — I’m listening.");
       }
-    } else if (developerAIFreeVadSpeaking && now - developerAIFreeVadLastVoiceAt > 650) {
-      developerAIFreeVadSpeaking = false;
-      developerAIUserIsSpeaking = false;
-      updateDeveloperAICallWindow("Thinking…", "");
-      try {
-        if (recorder.state === "recording") recorder.stop();
-      } catch (_) {}
+    } else {
+      developerAIFreeVadVoiceFrames = 0;
+      if (developerAIFreeVadSpeaking && now - developerAIFreeVadLastVoiceAt > 900) {
+        developerAIFreeVadSpeaking = false;
+        developerAIUserIsSpeaking = false;
+        updateDeveloperAICallWindow("Thinking…", "");
+        try {
+          if (recorder.state === "recording") recorder.stop();
+        } catch (_) {}
+      }
     }
-  }, 120);
+  }, 90);
 
   return true;
 }
