@@ -2930,9 +2930,9 @@ function installDeveloperExperience() {
           <button id="developer-ai-add-media" type="button" onclick="document.getElementById('developer-ai-media-input')?.click()" aria-label="Add photos or videos" style="display:inline-flex!important;visibility:visible!important;opacity:1!important;min-height:42px;border:1px solid #1677f2;background:#fff;color:#0f5fc7;border-radius:18px;padding:0 14px;font-weight:900;align-items:center;justify-content:center;">📷 ADD PHOTO / VIDEO</button>
           <span id="developer-ai-media-label" style="font-size:12px;color:#61728c;font-weight:700;">No media selected</span>
         </div>
-        <form onsubmit="sendDeveloperAIMessage(event)" style="display:flex;gap:8px;align-items:center;">
-          <textarea id="developer-ai-input" rows="1" maxlength="5000" placeholder="Message Seth…" style="width:100%;min-height:42px;max-height:90px;resize:vertical;padding:9px 12px;box-sizing:border-box;border-radius:18px;"></textarea>
-          <button id="developer-ai-send" class="primary-button" type="submit" style="min-height:42px;flex:0 0 auto;border-radius:18px;">SEND</button>
+        <form id="developer-ai-message-form" onsubmit="sendDeveloperAIMessage(event)" style="display:flex;gap:8px;align-items:center;position:relative;z-index:20;pointer-events:auto!important;">
+          <textarea id="developer-ai-input" rows="1" maxlength="5000" placeholder="Message Seth…" autocomplete="off" style="position:relative;z-index:21;width:100%;min-height:46px;max-height:90px;resize:vertical;padding:10px 12px;box-sizing:border-box;border-radius:18px;pointer-events:auto!important;touch-action:manipulation;-webkit-user-select:text;user-select:text;"></textarea>
+          <button id="developer-ai-send" class="primary-button" type="submit" style="position:relative;z-index:21;min-height:46px;flex:0 0 auto;border-radius:18px;pointer-events:auto!important;touch-action:manipulation;">SEND</button>
         </form>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
           <div id="developer-ai-audio-output-wrap" style="margin:10px 0 8px;">
@@ -6200,6 +6200,33 @@ document.addEventListener("click", event => {
   openDeveloperAI();
 }, true);
 
+function repairDeveloperAIInputTouch() {
+  const card = $("developer-ai-card");
+  const form = $("developer-ai-message-form");
+  const input = $("developer-ai-input");
+  const send = $("developer-ai-send");
+  [card, form, input, send].forEach(el => {
+    if (!el) return;
+    el.style.pointerEvents = "auto";
+  });
+  if (form) {
+    form.style.position = "relative";
+    form.style.zIndex = "20";
+  }
+  if (input) {
+    input.disabled = false;
+    input.readOnly = false;
+    input.style.position = "relative";
+    input.style.zIndex = "21";
+    input.style.touchAction = "manipulation";
+  }
+  if (send) {
+    send.disabled = false;
+    send.style.position = "relative";
+    send.style.zIndex = "21";
+  }
+}
+
 function openDeveloperAI() {
   if (!developerAIIsAllowed()) {
     alert("Seth is available only to the platform developer account.");
@@ -6236,6 +6263,7 @@ function openDeveloperAI() {
 
     const send = $("developer-ai-send");
     if (send) send.style.pointerEvents = "auto";
+    repairDeveloperAIInputTouch();
 
     renderDeveloperAIChat();
     renderDeveloperAICodePushState();
