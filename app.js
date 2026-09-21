@@ -6586,6 +6586,19 @@ function developerAITestRecordingStream() {
   return developerAIRealtimeStream || developerAIFreeMicStream || null;
 }
 
+function developerAITestRecordingFilename(mimeType = "audio/mp4") {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, "0");
+  const stamp =
+    d.getFullYear() +
+    pad(d.getMonth() + 1) +
+    pad(d.getDate()) + "-" +
+    pad(d.getHours()) +
+    pad(d.getMinutes()) +
+    pad(d.getSeconds());
+  return "MyServiceTstDgnstcs-" + stamp + (mimeType.includes("mp4") ? ".m4a" : ".webm");
+}
+
 function stopDeveloperAITestRecording(showSave = true) {
   if (!developerAITestRecorder) return;
   const recorder = developerAITestRecorder;
@@ -6601,7 +6614,7 @@ function stopDeveloperAITestRecording(showSave = true) {
 
   const btn = $("developer-ai-test-record");
   if (btn) {
-    btn.textContent = "● TEST REC";
+    btn.textContent = "● RECORD TEST CALL";
     btn.style.background = "rgba(255,255,255,.16)";
     btn.style.color = "white";
   }
@@ -6626,8 +6639,8 @@ function stopDeveloperAITestRecording(showSave = true) {
         document.body.appendChild(save);
       }
       save.href = developerAITestRecordingUrl;
-      save.download = "myservice-developer-ai-test-" + Date.now() + (mimeType.includes("mp4") ? ".m4a" : ".webm");
-      save.textContent = "SAVE TEST CALL RECORDING";
+      save.download = developerAITestRecordingFilename(mimeType);
+      save.textContent = "SAVE MyServiceTstDgnstcs";
       save.onclick = () => setTimeout(() => save.remove(), 2500);
     }
   };
@@ -6676,7 +6689,7 @@ async function toggleDeveloperAITestRecording() {
 
   const btn = $("developer-ai-test-record");
   if (btn) {
-    btn.textContent = "■ STOP TEST REC";
+    btn.textContent = "■ STOP + SAVE";
     btn.style.background = "#fff";
     btn.style.color = "#d92d20";
   }
@@ -6721,7 +6734,7 @@ function openDeveloperAICallWindow() {
     </div>
 
     <button id="developer-ai-test-record" type="button"
-      style="padding:12px;margin-bottom:10px;border:0;border-radius:14px;background:rgba(255,255,255,.16);color:white;font-weight:900;">● TEST REC</button>
+      style="padding:12px;margin-bottom:10px;border:0;border-radius:14px;background:rgba(255,255,255,.16);color:white;font-weight:900;">● RECORD TEST CALL</button>
     <button id="developer-ai-play-reply" type="button" style="padding:12px;margin-bottom:12px;border:0;border-radius:14px;">Play reply / test audio</button>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
       <button id="developer-ai-call-quiet" type="button"
