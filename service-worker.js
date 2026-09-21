@@ -1,5 +1,5 @@
-const CACHE_NAME = "myservice-cache-v38";
-const BUILD_ID = "53-login-interaction";
+const CACHE_NAME = "myservice-cache-v39";
+const BUILD_ID = "61-seth-greeting-diagnostics";
 
 const APP_SHELL = [
   "./styles.css?v=4-pro-desktop",
