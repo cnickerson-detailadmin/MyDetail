@@ -6418,18 +6418,33 @@ function unlockDeveloperAIAudio() {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtx) return;
-    if (!developerAIAudioContext) developerAIAudioContext = new AudioCtx();
+    if (!developerAIAudioContext) {
+      developerAIAudioContext = new AudioCtx({ latencyHint: "interactive" });
+    }
+
+    // iPhone/iPad: explicitly request a playback-capable audio session when
+    // WebKit exposes the API. This prevents microphone capture from leaving
+    // Seth's output on an inaudible/record-only route.
+    try {
+      if (navigator.audioSession && "type" in navigator.audioSession) {
+        navigator.audioSession.type = "play-and-record";
+      }
+    } catch (_) {}
+
     if (developerAIAudioContext.state === "suspended") {
       developerAIAudioContext.resume().catch(() => {});
     }
 
-    // Play a nearly silent buffer during the user's CALL tap so iOS grants
-    // audio playback permission for the later AI response.
-    const buffer = developerAIAudioContext.createBuffer(1, 1, 22050);
-    const source = developerAIAudioContext.createBufferSource();
-    source.buffer = buffer;
-    source.connect(developerAIAudioContext.destination);
-    source.start(0);
+    // Unlock playback synchronously from the CALL tap. A short low-level tone
+    // is more reliable on iOS than a one-sample silent buffer.
+    const oscillator = developerAIAudioContext.createOscillator();
+    const gain = developerAIAudioContext.createGain();
+    oscillator.frequency.value = 440;
+    gain.gain.value = 0.00001;
+    oscillator.connect(gain);
+    gain.connect(developerAIAudioContext.destination);
+    oscillator.start();
+    oscillator.stop(developerAIAudioContext.currentTime + 0.04);
   } catch (_) {}
 }
 
