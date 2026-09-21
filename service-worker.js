@@ -1,5 +1,5 @@
-const CACHE_NAME = "myservice-cache-v34";
-const BUILD_ID = "49-seth-troubleshooting";
+const CACHE_NAME = "myservice-cache-v35";
+const BUILD_ID = "50-seth-cloudflare-voice";
 
 const APP_SHELL = [
   "./styles.css?v=4-pro-desktop",

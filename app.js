@@ -2704,10 +2704,11 @@ function installDeveloperExperience() {
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
           <button id="developer-ai-call" class="outline-button" type="button" onclick="toggleDeveloperAICall()" style="border-radius:18px;">☎ CALL</button>
           <button id="developer-ai-self-check" class="outline-button" type="button" onclick="runSethSelfCheck()" style="border-radius:18px;">✓ SELF-CHECK</button>
+          <button id="developer-ai-diagnose" class="outline-button" type="button" onclick="askSethToDiagnose()" style="border-radius:18px;">✦ DIAGNOSE / FIX</button>
           <button id="developer-ai-image" class="outline-button" type="button" onclick="generateDeveloperAIImage()" style="border-radius:18px;">▧ IMAGE</button>
           <button id="developer-ai-code-push" class="outline-button" type="button" onclick="toggleDeveloperAICodePush()" style="border-radius:18px;">CODE PUSH: OFF</button>
         </div>
-        <small style="display:block;margin-top:8px;">Gemini free tier has limits. Messages go to Google; keep private business data out. Audio follows your iPhone output selection.</small>
+        <small style="display:block;margin-top:8px;">Voice fallback may use Cloudflare or Google if realtime voice fails. Free usage has limits. Keep private business data out of calls.</small>
         <small id="developer-ai-status" style="display:block;margin-top:8px;color:#61728c;">Seth is developer-only. Sensitive or destructive actions still require confirmation.</small>
         <small style="display:block;margin-top:4px;color:#7b8aa0;">Voice is AI-generated. Call mode uses speech recognition when supported by your device.</small>
       </section>
@@ -5847,17 +5848,56 @@ renderAll = function () {
 
 const DEVELOPER_AI_CHAT_KEY = "myservice_developer_ai_chat_v1";
 
+function developerAIContainsSecret(value) {
+  const text = String(value || "");
+  return /\bcfut_[A-Za-z0-9_-]{8,}\b|\bsk-[A-Za-z0-9_-]{16,}\b|\bBearer\s+[A-Za-z0-9._-]{16,}\b|\b(?:password|passcode|api[_ -]?key|access[_ -]?token|pin|company[_ -]?code)\s*(?:is|[:=])\s*[^\s,;]{4,}/i.test(text);
+}
+
 function getDeveloperAIHistory() {
   try {
     const parsed = JSON.parse(sessionStorage.getItem(DEVELOPER_AI_CHAT_KEY) || "[]");
-    return Array.isArray(parsed) ? parsed.slice(-20) : [];
+    if (!Array.isArray(parsed)) return [];
+    const safe = parsed.slice(-20).filter(message =>
+      message && !developerAIContainsSecret(message.content)
+    );
+    if (safe.length !== parsed.length) {
+      sessionStorage.setItem(DEVELOPER_AI_CHAT_KEY, JSON.stringify(safe));
+    }
+    return safe;
   } catch (_) {
     return [];
   }
 }
 
 function saveDeveloperAIHistory(messages) {
-  sessionStorage.setItem(DEVELOPER_AI_CHAT_KEY, JSON.stringify((messages || []).slice(-20)));
+  const safe = (messages || []).slice(-20).filter(message =>
+    message && !developerAIContainsSecret(message.content)
+  );
+  sessionStorage.setItem(DEVELOPER_AI_CHAT_KEY, JSON.stringify(safe));
+}
+
+async function handleDeveloperAIMemoryCommand(message, history) {
+  const remember = String(message).match(/^remember\s+(.+)$/i);
+  const resume = String(message).match(/^resume\s+(.+)$/i);
+  if (!remember && !resume) return null;
+  const raw = (remember || resume)[1].trim();
+  const separator = raw.indexOf(":");
+  const topic = (remember && separator >= 0 ? raw.slice(0, separator) : raw).trim().slice(0, 120);
+  if (!topic) return { reply: "Tell me what topic to remember or resume." };
+  if (remember) {
+    const explicitNote = separator >= 0 ? raw.slice(separator + 1).trim() : "";
+    const previous = history.slice(0, -1).filter(item => item?.role === "user" || item?.role === "assistant")
+      .filter(item => !developerAIContainsSecret(item.content) && !/^(remember|resume)\s/i.test(item.content))
+      .slice(-4).map(item => (item.role === "user" ? "Request: " : "Progress: ") +
+        String(item.content).replace(/```[\s\S]*?```/g, "[code omitted]").slice(0, 350)).join("\n");
+    const note = (explicitNote || previous || "Project topic: " + topic + ". No progress details were supplied.").slice(0, 1800);
+    if (developerAIContainsSecret(note)) throw new Error("Memory contains a private code; it was not saved.");
+    await callMyServiceEdgeFunction("developer-ai", { action: "memory_save", topic, note });
+    return { reply: "I saved the " + topic + " progress note. Say ‘resume " + topic + "’ to bring it back." };
+  }
+  const result = await callMyServiceEdgeFunction("developer-ai", { action: "memory_recall", topic });
+  if (!result.found) return { reply: "I don't have a saved note for " + topic + " yet. Say ‘remember " + topic + ":’ followed by what to save." };
+  return { context: String(result.note || "").slice(0, 2000), topic: String(result.topic || topic) };
 }
 
 function developerAIIsAllowed() {
@@ -6005,13 +6045,37 @@ function getSethSelfDiagnostics() {
   };
 }
 
-function runSethSelfCheck() {
+async function runSethSelfCheck() {
   if (!developerAIIsAllowed()) {
     alert("Seth is available only to the platform developer account.");
     return;
   }
 
   const diagnostics = getSethSelfDiagnostics();
+  try {
+    const cloudflare = await callMyServiceEdgeFunction("developer-ai", { action: "cloudflare_status" });
+    diagnostics.checks.push({
+      name: "Cloudflare fallback",
+      ok: cloudflare.configured === true,
+      detail: cloudflare.configured ? "Server configuration ready" :
+        "Server is missing " + [
+          !cloudflare.tokenConfigured && "Cloudflare token",
+          !cloudflare.accountConfigured && "Cloudflare Account ID"
+        ].filter(Boolean).join(" and ")
+    });
+    if (cloudflare.configured) {
+      try {
+        const probe = await callMyServiceEdgeFunction("developer-ai", { action: "cloudflare_probe" });
+        diagnostics.checks.push({ name: "Cloudflare connection", ok: probe.ready === true,
+          detail: probe.ready ? "AI model responded" : "AI model did not respond" });
+      } catch (error) {
+        diagnostics.checks.push({ name: "Cloudflare connection", ok: false,
+          detail: String(error?.message || "Model request failed").slice(0, 160) });
+      }
+    }
+  } catch (_) {
+    diagnostics.checks.push({ name: "Cloudflare fallback", ok: false, detail: "Could not reach the server check" });
+  }
   const failed = diagnostics.checks.filter(check => !check.ok);
   const lines = diagnostics.checks.map(check =>
     (check.ok ? "✓ " : "⚠ ") + check.name + " — " + check.detail
@@ -6026,6 +6090,20 @@ function runSethSelfCheck() {
   renderDeveloperAIChat();
   const status = $("developer-ai-status");
   if (status) status.textContent = failed.length ? "Seth found items that need attention." : "Seth self-check passed.";
+}
+
+async function askSethToDiagnose() {
+  if (!developerAIIsAllowed()) return;
+  const input = $("developer-ai-input");
+  if (!input) return;
+  const symptom = String(input.value || "").trim();
+  const diagnostics = getSethSelfDiagnostics();
+  const failed = diagnostics.checks.filter(check => !check.ok)
+    .map(check => check.name + ": " + check.detail).join("; ");
+  input.value = "Diagnose this MyService/Seth issue and propose the smallest safe fix: " +
+    (symptom || (failed || "Check the current support AI, call audio, and fallback paths for errors.")) +
+    " Inspect the affected code and explain what you can verify. If code must change, ask me to confirm the exact edit before pushing it.";
+  await sendDeveloperAIMessage();
 }
 
 
@@ -6086,6 +6164,7 @@ let developerAIAudio = null;
 let developerAISpeaking = false;
 let developerAIAudioContext = null;
 let developerAIAudioSource = null;
+let developerAIFreeOutputGain = null;
 let developerAIListenTimer = null;
 let developerAIRealtimePc = null;
 let developerAIRealtimeStream = null;
@@ -6100,6 +6179,7 @@ let developerAISpeechDebounce = null;
 let developerAIPendingVoiceReply = null;
 let developerAIUserIsSpeaking = false;
 let developerAIFreeCallMode = false;
+let developerAIFreeProvider = "";
 let developerAISpeakerMode = false;
 let developerAIFreeRequestBusy = false;
 let developerAILastSpokenReply = "";
@@ -6448,6 +6528,8 @@ function stopDeveloperAIAudio() {
 
   try { developerAIAudioSource?.stop?.(); } catch (_) {}
   developerAIAudioSource = null;
+  try { developerAIFreeOutputGain?.disconnect?.(); } catch (_) {}
+  developerAIFreeOutputGain = null;
   developerAISpeaking = false;
 }
 
@@ -6497,6 +6579,7 @@ function stopDeveloperAICall() {
   developerAIUserIsSpeaking = false;
   developerAIPendingVoiceReply = null;
   developerAIFreeCallMode = false;
+  developerAIFreeProvider = "";
   developerAIQuietMode = false;
   clearDeveloperAIRealtimeReplyTimer();
   developerAILastRealtimeUserTranscript = "";
@@ -6526,7 +6609,7 @@ function restartDeveloperAIListening(delay = 1200) {
   }, delay);
 }
 
-async function playDeveloperAIWebAudio(base64) {
+async function playDeveloperAIWebAudio(base64, mimeType = "audio/mpeg") {
   if (!developerAIAudioContext || !base64) throw new Error("Web Audio unavailable.");
 
   if (developerAIAudioContext.state === "suspended") {
@@ -6537,11 +6620,27 @@ async function playDeveloperAIWebAudio(base64) {
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
 
-  const decoded = await developerAIAudioContext.decodeAudioData(bytes.buffer.slice(0));
+  let decoded;
+  if (mimeType.startsWith("audio/pcm")) {
+    const sampleRate = Number(mimeType.match(/rate=(\d+)/)?.[1] || 24000);
+    const samples = Math.floor(bytes.byteLength / 2);
+    decoded = developerAIAudioContext.createBuffer(1, samples, sampleRate);
+    const channel = decoded.getChannelData(0);
+    const view = new DataView(bytes.buffer);
+    for (let i = 0; i < samples; i++) channel[i] = view.getInt16(i * 2, true) / 32768;
+  } else {
+    decoded = await developerAIAudioContext.decodeAudioData(bytes.buffer.slice(0));
+  }
   const source = developerAIAudioContext.createBufferSource();
   developerAIAudioSource = source;
   source.buffer = decoded;
-  source.connect(developerAIAudioContext.destination);
+  developerAIFreeOutputGain = developerAIAudioContext.createGain();
+  developerAIFreeOutputGain.gain.value = developerAISpeakerMode ? 1 : 0.35;
+  source.connect(developerAIFreeOutputGain);
+  developerAIFreeOutputGain.connect(developerAIAudioContext.destination);
+  if (developerAITestRecording && developerAITestRecordDestination) {
+    developerAIFreeOutputGain.connect(developerAITestRecordDestination);
+  }
 
   source.onended = () => {
     if (developerAIAudioSource !== source) return;
@@ -6576,11 +6675,11 @@ function playDeveloperAIAudio(base64, mimeType = "audio/mpeg") {
   updateDeveloperAICallWindow("Speaking…", DEVELOPER_AI_NAME);
 
   // Web Audio is preferred on iPhone because CALL unlocks its audio context.
-  playDeveloperAIWebAudio(base64).catch(() => {
+  playDeveloperAIWebAudio(base64, mimeType).catch(() => {
     try {
       developerAIAudio = new Audio("data:" + mimeType + ";base64," + base64);
       developerAIAudio.playsInline = true;
-      developerAIAudio.volume = 1;
+      developerAIAudio.volume = developerAISpeakerMode ? 1 : 0.35;
 
       developerAIAudio.onended = () => {
         developerAISpeaking = false;
@@ -6686,6 +6785,7 @@ function stopDeveloperAITestRecording(showSave = true) {
 
   try { developerAITestRecordMicSource?.disconnect?.(); } catch (_) {}
   developerAITestRecordMicSource = null;
+  try { developerAIFreeOutputGain?.disconnect?.(developerAITestRecordDestination); } catch (_) {}
 
   const btn = $("developer-ai-test-record");
   if (btn) {
@@ -6740,6 +6840,7 @@ async function toggleDeveloperAITestRecording() {
   developerAITestRecordMicSource.connect(developerAITestRecordDestination);
 
   try { developerAIRealtimeAudioSource?.connect?.(developerAITestRecordDestination); } catch (_) {}
+  try { developerAIFreeOutputGain?.connect?.(developerAITestRecordDestination); } catch (_) {}
 
   const choices = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"];
   const mimeType = choices.find(type => MediaRecorder.isTypeSupported?.(type)) || "";
@@ -6850,6 +6951,7 @@ function openDeveloperAICallWindow() {
     if (developerAIRealtimeAudio) developerAIRealtimeAudio.volume = developerAISpeakerMode ? 1 : 0.35;
     if (developerAIAudio) developerAIAudio.volume = developerAISpeakerMode ? 1 : 0.35;
     if (developerAIRealtimeOutputGain) developerAIRealtimeOutputGain.gain.value = developerAISpeakerMode ? 1 : 0.35;
+    if (developerAIFreeOutputGain) developerAIFreeOutputGain.gain.value = developerAISpeakerMode ? 1 : 0.35;
     this.textContent = developerAISpeakerMode ? "🔊 LOUD" : "🔉 LOW";
     this.style.background = developerAISpeakerMode ? "white" : "rgba(255,255,255,.16)";
     this.style.color = developerAISpeakerMode ? "#0f5fc7" : "white";
@@ -6963,8 +7065,9 @@ function handleDeveloperAIRealtimeEvent(event) {
     clearDeveloperAIRealtimeReplyTimer();
     try {
       if (developerAIRealtimeAudio) {
-        developerAIRealtimeAudio.muted = false;
-        developerAIRealtimeAudio.volume = 1;
+        // Keep the HTML element silent when Web Audio is handling the same stream.
+        developerAIRealtimeAudio.muted = Boolean(developerAIRealtimeAudioSource);
+        developerAIRealtimeAudio.volume = developerAISpeakerMode ? 1 : 0.35;
         developerAIRealtimeAudio.play().catch(() => {});
       }
     } catch (_) {}
@@ -7028,6 +7131,7 @@ async function startDeveloperAIRealtimeCall(isReconnect = false) {
   pc.ontrack = event => {
     const remote = event.streams?.[0];
     if (!remote) return;
+    let routedToWebAudio = false;
 
     // iPhone Safari can block a late HTMLMediaElement play() even though CALL was user-initiated.
     // Route the remote WebRTC stream through the already-unlocked Web Audio context as the
@@ -7045,16 +7149,23 @@ async function startDeveloperAIRealtimeCall(isReconnect = false) {
         developerAIRealtimeOutputGain.gain.value = 0.35;
         developerAIRealtimeAudioSource.connect(developerAIRealtimeOutputGain);
         developerAIRealtimeOutputGain.connect(developerAIAudioContext.destination);
+        routedToWebAudio = true;
       }
     } catch (_) {}
 
     developerAIRealtimeAudio.srcObject = remote;
-    developerAIRealtimeAudio.muted = false;
+    developerAIRealtimeAudio.muted = routedToWebAudio;
     developerAIRealtimeAudio.volume = 0.35;
     developerAIRealtimeAudio.play().catch(() => {
-      // Web Audio above remains the primary iPhone speaker path.
-      updateDeveloperAICallWindow("Connected", "Audio is using the iPhone speaker fallback path.");
+      if (!routedToWebAudio) {
+        updateDeveloperAICallWindow("Connected", "Tap CALL to enable iPhone audio.");
+      }
     });
+    if (routedToWebAudio) {
+      developerAIAudioContext?.resume?.().catch(() => {
+        developerAIRealtimeAudio.muted = false;
+      });
+    }
   };
 
   pc.onconnectionstatechange = () => {
@@ -7242,6 +7353,10 @@ function buildDeveloperAIFreeReply(message) {
 
 async function answerDeveloperAIFreeCall(message) {
   if (!developerAIIsAllowed() || developerAIFreeRequestBusy) return;
+  if (developerAIContainsSecret(message)) {
+    updateDeveloperAICallWindow("Private code detected", "I won’t save or send that code.");
+    return;
+  }
   developerAIFreeRequestBusy = true;
   // Keep the iPhone speech-recognition session alive during the reply. Repeated
   // abort/start cycles cause the system microphone start/stop chime.
@@ -7251,20 +7366,28 @@ async function answerDeveloperAIFreeCall(message) {
   if ($("developer-ai-input")) $("developer-ai-input").value = "";
   updateDeveloperAICallWindow("Thinking…", message);
   try {
-    const response = await callMyServiceEdgeFunction("developer-ai", {
-      action: "gemini_chat", messages: history.slice(-12), voice: true,
-      context: getDeveloperAISafeContext()
-    });
+    const memory = await handleDeveloperAIMemoryCommand(message, history);
+    const context = getDeveloperAISafeContext();
+    if (memory?.context) context.resumeNote = "Saved progress for " + memory.topic + ": " + memory.context;
+    const response = memory?.reply
+      ? { reply: memory.reply, ...await callMyServiceEdgeFunction("developer-ai", {
+          action: developerAIFreeProvider + "_tts", text: memory.reply }) }
+      : await callMyServiceEdgeFunction("developer-ai", {
+          action: developerAIFreeProvider + "_chat", messages: history.slice(-12), voice: true,
+          context
+        });
     const reply = cleanDeveloperAIFreeReply(response.reply);
     history.push({ role: "assistant", content: reply });
     saveDeveloperAIHistory(history);
     renderDeveloperAIChat();
     developerAILastSpokenReply = reply;
     if (developerAICallMode) {
-      updateDeveloperAICallWindow("Text reply", reply);
-      if ($("developer-ai-status")) {
-        $("developer-ai-status").textContent =
-          "Natural realtime audio is required for spoken replies.";
+      if (response.audioBase64) {
+        playDeveloperAIAudio(response.audioBase64, response.audioMimeType || "audio/mpeg");
+      } else {
+        updateDeveloperAICallWindow("Voice unavailable", reply);
+        if ($("developer-ai-status")) $("developer-ai-status").textContent =
+          "Seth returned text, but voice failed: " + String(response.voiceError || "no audio returned.");
       }
     }
   } catch (error) {
@@ -7309,7 +7432,7 @@ async function transcribeDeveloperAIFreeBlob(blob) {
     const audioBase64 = await blobToBase64(blob);
     if (!audioBase64) return;
     const response = await callMyServiceEdgeFunction("developer-ai", {
-      action: "gemini_transcribe",
+      action: developerAIFreeProvider + "_transcribe",
       audioBase64,
       mimeType: blob.type || "audio/mp4"
     });
@@ -7405,12 +7528,13 @@ async function startDeveloperAIFreeMediaCapture() {
   return true;
 }
 
-async function startDeveloperAIFreeCall() {
-  const setup = await callMyServiceEdgeFunction("developer-ai", { action: "gemini_status" });
-  if (!setup.configured) throw new Error("Google AI needs its server key before calls can start.");
+async function startDeveloperAIFreeCall(provider = "cloudflare") {
+  const setup = await callMyServiceEdgeFunction("developer-ai", { action: provider + "_status" });
+  if (!setup.configured) throw new Error(provider + " voice needs its server configuration.");
 
   developerAICallMode = true;
   developerAIFreeCallMode = true;
+  developerAIFreeProvider = provider;
   developerAISpeakerMode = false;
   unlockDeveloperAIAudio();
 
@@ -7430,6 +7554,7 @@ async function startDeveloperAIFreeCall() {
     if (mediaStarted) {
       updateDeveloperAICallWindow("Listening…", "Stable microphone ready");
       if (status) status.textContent = "Seth no-credit call connected.";
+      greetDeveloperAIFreeCall(provider);
       return;
     }
   } catch (_) {
@@ -7479,6 +7604,23 @@ async function startDeveloperAIFreeCall() {
   try { recognition.start(); } catch (_) {}
   updateDeveloperAICallWindow("Listening…", "Voice input ready");
   if (status) status.textContent = "Seth browser fallback connected.";
+  greetDeveloperAIFreeCall(provider);
+}
+
+async function greetDeveloperAIFreeCall(provider) {
+  const greeting = "Hey, thanks for calling MyService Support. I’m Seth, your advanced AI assistant. What can I help you with today?";
+  try {
+    const voice = await callMyServiceEdgeFunction("developer-ai", {
+      action: provider + "_tts", text: greeting
+    });
+    if (developerAICallMode && developerAIFreeProvider === provider && voice.audioBase64) {
+      playDeveloperAIAudio(voice.audioBase64, voice.audioMimeType || "audio/mpeg");
+    }
+  } catch (error) {
+    if (developerAICallMode && developerAIFreeProvider === provider) {
+      updateDeveloperAICallWindow("Voice unavailable", String(error?.message || "Seth could not speak."));
+    }
+  }
 }
 
 async function toggleDeveloperAICall() {
@@ -7489,19 +7631,23 @@ async function toggleDeveloperAICall() {
     return;
   }
 
-  // Natural realtime speech-to-speech only. Never fall back to the iPhone/browser
-  // speech synthesizer: if realtime is unavailable, keep the reply in text.
+  unlockDeveloperAIAudio();
+  // Use realtime first, then Cloudflare or Gemini generated speech.
   try {
     await startDeveloperAIRealtimeCall();
     return;
   } catch (realtimeError) {
-    const message = String(realtimeError?.message || "Natural realtime voice could not start.");
     stopDeveloperAICall();
+    for (const provider of ["cloudflare", "gemini"]) {
+      try {
+        await startDeveloperAIFreeCall(provider);
+        return;
+      } catch (_) {
+        stopDeveloperAICall();
+      }
+    }
     openDeveloperAICallWindow();
-    updateDeveloperAICallWindow("Natural voice unavailable", message);
-    const status = $("developer-ai-status");
-    if (status) status.textContent =
-      "Natural voice unavailable — robotic browser voice is disabled. " + message;
+    updateDeveloperAICallWindow("Voice unavailable", "Realtime, Cloudflare, and Gemini could not start. Run SELF-CHECK for details.");
   }
 }
 
@@ -7560,6 +7706,11 @@ async function sendDeveloperAIMessage(event) {
   const status = $("developer-ai-status");
   const message = String(input?.value || "").trim();
   if (!message) return;
+  if (developerAIContainsSecret(message)) {
+    if (input) input.value = "";
+    if (status) status.textContent = "Private code detected. Seth did not save or send it.";
+    return;
+  }
 
   const history = getDeveloperAIHistory();
   history.push({ role: "user", content: message });
@@ -7571,7 +7722,10 @@ async function sendDeveloperAIMessage(event) {
   if (status) status.textContent = "Seth is thinking…";
 
   try {
-    const response = await callMyServiceEdgeFunction("developer-ai", {
+    const memory = await handleDeveloperAIMemoryCommand(message, history);
+    const context = getDeveloperAISafeContext();
+    if (memory?.context) context.resumeNote = "Saved progress for " + memory.topic + ": " + memory.context;
+    const response = memory?.reply ? { reply: memory.reply } : await callMyServiceEdgeFunction("developer-ai", {
       // Use the full Developer AI brain/tool path here. Gemini remains only as
       // a no-tools fallback; the primary developer chat can inspect approved
       // repo files and use the guarded code broker after explicit confirmation.
@@ -7580,7 +7734,7 @@ async function sendDeveloperAIMessage(event) {
       voice: developerAICallMode === true,
       voiceNetwork: developerAICallMode ? developerAIVoiceModeForNetwork() : null,
       allowCodePush: developerAICodePushEnabled(),
-      context: getDeveloperAISafeContext()
+      context
     });
 
     history.push({
