@@ -8752,3 +8752,256 @@ function installTrainingCenter() {
   });
 })();
 
+
+
+/* =========================================================
+   MYSERVICE — EXTERMINATION TEAM
+   BUG WATCHDOG • SAFE AUTO-REPAIR
+   This is a defensive runtime monitor, not a source-code editor.
+   It watches for JavaScript failures, broken UI targets, duplicate IDs,
+   stuck overlays, and mobile interaction blockers. Only narrowly-scoped,
+   reversible UI repairs are automatic; source/data/security rules are not.
+   ========================================================= */
+
+(function installExterminationTeam() {
+  "use strict";
+
+  const TEAM_ID = "myservice-extermination-team";
+  const findings = [];
+  const recentErrors = [];
+  let scanTimer = null;
+  let lastFingerprint = "";
+
+  function developerOnly() {
+    try {
+      const user = typeof getCurrentUser === "function" ? getCurrentUser() : null;
+      return !!user && String(user.role || "").toLowerCase() === "developer";
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function record(severity, title, detail, repaired = false) {
+    findings.unshift({
+      severity,
+      title,
+      detail,
+      repaired,
+      time: new Date().toISOString()
+    });
+    if (findings.length > 100) findings.length = 100;
+    if (developerOnly()) render();
+  }
+
+  function safeRepairStaleOverlay() {
+    const blockers = Array.from(document.body.children).filter(node => {
+      if (!node || node.id === "myservice-auth-boot") return false;
+      const style = getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      return style.position === "fixed" &&
+        rect.width >= window.innerWidth * 0.95 &&
+        rect.height >= window.innerHeight * 0.95 &&
+        style.pointerEvents !== "none" &&
+        style.visibility !== "hidden" &&
+        style.display !== "none";
+    });
+
+    blockers.forEach(node => {
+      const id = node.id || "";
+      const knownSafe =
+        id.includes("modal") ||
+        id.includes("overlay") ||
+        id.includes("backdrop") ||
+        id.includes("toast") ||
+        id.includes("menu");
+
+      if (knownSafe && !node.dataset.myserviceExterminationSeen) {
+        node.dataset.myserviceExterminationSeen = "1";
+        record(
+          "high",
+          "Interaction blocker detected",
+          "A full-screen UI layer may be blocking taps or scrolling.",
+          true
+        );
+        // Do not delete application UI. Only disable pointer interception
+        // for a clearly named stale overlay that is already hidden-looking.
+        const opacity = Number(getComputedStyle(node).opacity || 1);
+        if (opacity === 0) node.style.pointerEvents = "none";
+      }
+    });
+  }
+
+  function scanDOM() {
+    const ids = new Map();
+    document.querySelectorAll("[id]").forEach(node => {
+      ids.set(node.id, (ids.get(node.id) || 0) + 1);
+    });
+
+    ids.forEach((count, id) => {
+      if (count > 1) {
+        record(
+          "critical",
+          "Duplicate DOM ID: " + id,
+          "Duplicate IDs can make MyService target the wrong control."
+        );
+      }
+    });
+
+    document.querySelectorAll("[onclick]").forEach(node => {
+      const handler = node.getAttribute("onclick") || "";
+      const match = handler.match(/^\\s*([A-Za-z_$][\\w$]*)\\s*\\(/);
+      if (match && typeof window[match[1]] !== "function") {
+        record(
+          "critical",
+          "Broken button handler: " + match[1],
+          "This control points to a JavaScript function that is not available."
+        );
+      }
+    });
+
+    document.querySelectorAll("a[href]").forEach(link => {
+      const href = link.getAttribute("href") || "";
+      if (href.startsWith("#") && href.length > 1 && !document.getElementById(href.slice(1))) {
+        record(
+          "medium",
+          "Broken in-page link",
+          "A link targets #" + href.slice(1) + ", but that target does not exist."
+        );
+      }
+    });
+  }
+
+  function scanMobileInteraction() {
+    if (!/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) return;
+
+    const bodyStyle = getComputedStyle(document.body);
+    if (bodyStyle.overflow === "hidden" && !document.body.dataset.myserviceIntentionalLock) {
+      record(
+        "high",
+        "Mobile scroll lock detected",
+        "The document is locked to overflow:hidden without the MyService safety marker."
+      );
+    }
+
+    const main = document.querySelector(".main-content");
+    if (main) {
+      const style = getComputedStyle(main);
+      if (style.pointerEvents === "none") {
+        main.style.pointerEvents = "auto";
+        record(
+          "critical",
+          "Main content interaction disabled",
+          "MyService restored pointer interaction on the main content.",
+          true
+        );
+      }
+    }
+  }
+
+  function fingerprint() {
+    return [
+      location.pathname,
+      document.querySelectorAll(".page").length,
+      document.querySelectorAll("[onclick]").length,
+      recentErrors.slice(-3).map(x => x.message).join("|")
+    ].join("::");
+  }
+
+  function render() {
+    if (!developerOnly()) return;
+
+    let panel = document.getElementById(TEAM_ID);
+    if (!panel) {
+      panel = document.createElement("section");
+      panel.id = TEAM_ID;
+      panel.style.cssText =
+        "position:fixed;right:14px;bottom:14px;z-index:2147483000;" +
+        "width:min(420px,calc(100vw - 28px));max-height:62vh;overflow:auto;" +
+        "background:#fff;border:2px solid #111;border-radius:18px;" +
+        "box-shadow:0 18px 60px rgba(0,0,0,.28);padding:14px;" +
+        "font:13px -apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;";
+      document.body.appendChild(panel);
+    }
+
+    const critical = findings.filter(x => x.severity === "critical").length;
+    const high = findings.filter(x => x.severity === "high").length;
+    const repaired = findings.filter(x => x.repaired).length;
+
+    panel.innerHTML =
+      '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">' +
+        '<strong style="font-size:16px;">🐉 Extermination Team</strong>' +
+        '<button type="button" id="myservice-extermination-close" style="border:0;background:none;font-size:20px;">×</button>' +
+      '</div>' +
+      '<div style="margin-top:6px;font-weight:800;">' +
+        'Dragon Security Bug Watch • ' + (critical ? '🔴' : high ? '🟠' : '🟢') +
+      '</div>' +
+      '<small>Watching runtime/UI failures without modifying source code.</small>' +
+      '<div style="display:flex;gap:8px;margin:10px 0;flex-wrap:wrap;">' +
+        '<span>Critical: ' + critical + '</span>' +
+        '<span>High: ' + high + '</span>' +
+        '<span>Safe repairs: ' + repaired + '</span>' +
+      '</div>' +
+      '<div>' +
+        (findings.length
+          ? findings.slice(0, 12).map(x =>
+              '<div style="padding:8px 0;border-top:1px solid #ddd;">' +
+                '<strong>' + escapeHTML(x.severity.toUpperCase() + " • " + x.title) + '</strong>' +
+                '<div>' + escapeHTML(x.detail) + '</div>' +
+                (x.repaired ? '<small>✓ Safe runtime repair applied</small>' : '') +
+              '</div>'
+            ).join("")
+          : '<div style="padding:10px 0;">No bugs detected by the watchdog yet.</div>') +
+      '</div>';
+
+    panel.querySelector("#myservice-extermination-close")?.addEventListener("click", () => {
+      panel.remove();
+    });
+  }
+
+  window.addEventListener("error", event => {
+    const message = String(event?.message || "Unknown JavaScript error");
+    recentErrors.push({ message, time: Date.now() });
+    if (recentErrors.length > 50) recentErrors.shift();
+    record("critical", "JavaScript runtime error", message);
+  }, true);
+
+  window.addEventListener("unhandledrejection", event => {
+    const message = String(event?.reason?.message || event?.reason || "Unhandled promise rejection");
+    recentErrors.push({ message, time: Date.now() });
+    if (recentErrors.length > 50) recentErrors.shift();
+    record("critical", "Unhandled promise rejection", message);
+  });
+
+  function scan() {
+    try {
+      scanDOM();
+      scanMobileInteraction();
+      safeRepairStaleOverlay();
+
+      const fp = fingerprint();
+      if (fp !== lastFingerprint) {
+        lastFingerprint = fp;
+        if (developerOnly()) render();
+      }
+    } catch (error) {
+      record("critical", "Extermination Team failure", String(error?.message || error));
+    }
+  }
+
+  function start() {
+    if (scanTimer) return;
+    scan();
+    scanTimer = setInterval(scan, 1500);
+    window.addEventListener("resize", scan, { passive: true });
+    window.addEventListener("orientationchange", scan, { passive: true });
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) scan();
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start, { once: true });
+  } else {
+    start();
+  }
+})();
