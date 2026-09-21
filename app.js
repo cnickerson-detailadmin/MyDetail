@@ -6561,6 +6561,33 @@ function setDeveloperAICallScrollSafe() {
   }
 }
 
+function enforceMyServiceTouchSafety() {
+  // Global invariant: normal MyService pages must always remain vertically
+  // scrollable. Seth's overlay owns only its own scrolling while it exists.
+  const callWindow = $("developer-ai-call-window");
+  document.documentElement.style.overflowX = "hidden";
+  document.body.style.overflowX = "hidden";
+  document.documentElement.style.overflowY = "auto";
+  document.body.style.overflowY = "auto";
+  document.documentElement.style.touchAction = "pan-y";
+  document.body.style.touchAction = "pan-y";
+  document.body.style.webkitOverflowScrolling = "touch";
+
+  if (callWindow) {
+    callWindow.style.overflowY = "auto";
+    callWindow.style.overflowX = "hidden";
+    callWindow.style.touchAction = "pan-y";
+    callWindow.style.webkitOverflowScrolling = "touch";
+    callWindow.style.pointerEvents = "auto";
+  }
+}
+
+window.addEventListener("pageshow", enforceMyServiceTouchSafety);
+window.addEventListener("focus", enforceMyServiceTouchSafety);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) enforceMyServiceTouchSafety();
+});
+
 function unlockDeveloperAIAudio() {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -6812,6 +6839,10 @@ function stopDeveloperAICall() {
   setDeveloperAICallScrollSafe();
 
   $("developer-ai-call-window")?.remove();
+  // Restore the page again after the overlay is physically gone. Re-run on
+  // the next frame too because iOS can recalculate touch regions after removal.
+  enforceMyServiceTouchSafety();
+  requestAnimationFrame(enforceMyServiceTouchSafety);
 
   const button = $("developer-ai-call");
   const status = $("developer-ai-status");
@@ -7251,6 +7282,7 @@ function openDeveloperAICallWindow() {
   `;
 
   document.body.appendChild(wrap);
+  enforceMyServiceTouchSafety();
   // Never let the full-screen call overlay poison page scrolling. This is
   // intentionally reapplied after insertion because iOS standalone PWAs can
   // recalculate touch handling when a fixed overlay mounts.
