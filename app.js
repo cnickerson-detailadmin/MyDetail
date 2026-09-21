@@ -5862,14 +5862,14 @@ function saveDeveloperAIHistory(messages) {
 }
 
 function developerAIIsAllowed() {
+  // Developer AI is intentionally platform-owner only. Never infer authorization
+  // from visible UI or preview state; require the authenticated database role.
   const dbDeveloper =
     String(authenticatedContext?.databaseRole || "").toLowerCase() === "developer";
-  const uiDeveloper =
-    typeof isDeveloperLogin === "function" && isDeveloperLogin();
-  const visibleDeveloperCommandCenter =
-    Boolean($("developer-command-center")) &&
-    (typeof getDeveloperView !== "function" || getDeveloperView() === "Developer");
-  return dbDeveloper || uiDeveloper || visibleDeveloperCommandCenter;
+  const activeDeveloperSession =
+    Boolean(authenticatedContext?.id) &&
+    authenticatedContext?.active !== false;
+  return dbDeveloper && activeDeveloperSession;
 }
 
 function renderDeveloperAIChat() {
