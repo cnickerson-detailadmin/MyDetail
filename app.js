@@ -7841,7 +7841,20 @@ async function transcribeDeveloperAIFreeBlob(blob) {
     const transcript = String(response?.transcript || "").trim();
     if (transcript) queueDeveloperAIUserSpeech(transcript);
   } catch (error) {
+    const failedProvider = developerAIFreeProvider;
     const message = String(error?.message || "Voice transcription failed.");
+    // Transcription is part of the live provider chain too. If the active
+    // provider is overloaded/rate-limited, recover exactly like chat/TTS.
+    if (developerAICallMode && developerAIFreeCallMode && developerAIProviderRecoverableError(error)) {
+      try {
+        const replacement = await switchDeveloperAIFreeProvider(failedProvider, message);
+        developerAICallManagerRecord("transcription-failover", failedProvider + " -> " + replacement);
+        updateDeveloperAICallWindow("🟠 TRANSCRIPTION RECOVERED", "MyService switched transcription to " + replacement + ". Keep talking.");
+        return;
+      } catch (fallbackError) {
+        developerAICallManagerSet("failure", "Transcription providers unavailable", "Keep microphone active and preserve diagnosis", String(fallbackError?.message || message).slice(0, 140));
+      }
+    }
     updateDeveloperAICallWindow("Transcription issue", message);
     const status = $("developer-ai-status");
     if (status) status.textContent = "Developer AI transcription issue — " + message;
