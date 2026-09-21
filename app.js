@@ -8613,7 +8613,7 @@ function installTrainingCenter() {
     let broken = 0;
     document.querySelectorAll("button").forEach(button => {
       const onclick = button.getAttribute("onclick") || "";
-      const matches = [...onclick.matchAll(/([A-Za-z_$][\w$]*)\\s*\\(/g)];
+      const matches = [...onclick.matchAll(/([A-Za-z_$][\w$]*)\s*\(/g)];
       matches.forEach(match => {
         const fn = match[1];
         if (fn === "alert" || fn === "confirm" || fn === "prompt") return;
