@@ -8812,13 +8812,27 @@ function installTrainingCenter() {
   }
 
   function record(severity, title, detail, repaired = false) {
-    findings.unshift({
-      severity,
-      title,
-      detail,
-      repaired,
-      time: new Date().toISOString()
-    });
+    const key = [severity, title, detail].join("::");
+    const existing = findings.find(item => item.key === key);
+
+    if (existing) {
+      existing.count = Number(existing.count || 1) + 1;
+      existing.time = new Date().toISOString();
+      existing.repaired = existing.repaired || repaired;
+      findings.splice(findings.indexOf(existing), 1);
+      findings.unshift(existing);
+    } else {
+      findings.unshift({
+        key,
+        severity,
+        title,
+        detail,
+        repaired,
+        count: 1,
+        time: new Date().toISOString()
+      });
+    }
+
     if (findings.length > 100) findings.length = 100;
     if (developerOnly()) render();
   }
@@ -8977,6 +8991,7 @@ function installTrainingCenter() {
               '<div style="padding:8px 0;border-top:1px solid #ddd;">' +
                 '<strong>' + escapeHTML(x.severity.toUpperCase() + " • " + x.title) + '</strong>' +
                 '<div>' + escapeHTML(x.detail) + '</div>' +
+                (Number(x.count || 1) > 1 ? '<small>Seen ' + Number(x.count || 1) + ' times — counted once</small>' : '') +
                 (x.repaired ? '<small>✓ Safe runtime repair applied</small>' : '') +
               '</div>'
             ).join("")
