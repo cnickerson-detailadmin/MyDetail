@@ -4141,6 +4141,17 @@ function showLoginScreen() {
 }
 
 function activateLoginScreen() {
+  // Login is rendered by replacing document.body. Remove any stale boot layer
+  // first so an old iPhone/PWA boot overlay can never sit invisibly above it.
+  document.getElementById("myservice-auth-boot")?.remove();
+
+  const loginRoot = $("testLoginButton")?.closest("div");
+  if (loginRoot) {
+    loginRoot.style.pointerEvents = "auto";
+    loginRoot.style.position = "relative";
+    loginRoot.style.zIndex = "2147483647";
+  }
+
   const button =
     $("testLoginButton");
 
