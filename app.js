@@ -6046,6 +6046,36 @@ let developerAISpeechUtterance = null;
 let developerAIFreeRequestBusy = false;
 let developerAILastSpokenReply = "";
 let developerAIPendingWebsiteChange = "";
+let developerAIQuietMode = false;
+const DEVELOPER_AI_RESUME_PHRASES = ["developer ai", "hey developer", "hey ai", "myservice ai"];
+
+function developerAIAddressed(text) {
+  const value = String(text || "").toLowerCase().trim();
+  return DEVELOPER_AI_RESUME_PHRASES.some(phrase => value.includes(phrase));
+}
+
+function setDeveloperAIQuietMode(enabled, reason = "") {
+  developerAIQuietMode = Boolean(enabled);
+  developerAISpeechBuffer = "";
+  if (developerAISpeechDebounce) clearTimeout(developerAISpeechDebounce);
+  developerAISpeechDebounce = null;
+  stopDeveloperAIAudio();
+  try { window.speechSynthesis?.cancel?.(); } catch (_) {}
+
+  const quietButton = $("developer-ai-call-quiet");
+  if (quietButton) {
+    quietButton.textContent = developerAIQuietMode ? "RESUME AI" : "HOLD UP";
+    quietButton.style.background = developerAIQuietMode ? "white" : "rgba(255,255,255,.16)";
+    quietButton.style.color = developerAIQuietMode ? "#0f5fc7" : "white";
+  }
+
+  updateDeveloperAICallWindow(
+    developerAIQuietMode ? "Quiet mode" : "Listening…",
+    developerAIQuietMode
+      ? "Customer/coworker conversation is ignored and not added to AI memory. Say “Developer AI” to resume."
+      : (reason || "Talk naturally — I’ll wait for you to finish.")
+  );
+}
 
 function setDeveloperAICallScrollSafe() {
   document.documentElement.style.overflowY = "auto";
@@ -6113,6 +6143,17 @@ function queueDeveloperAIUserSpeech(transcript) {
   const text = String(transcript || "").trim();
   if (!text) return;
 
+  const lower = text.toLowerCase();
+  if (lower === "hold up" || lower.startsWith("hold up ") || lower.includes(" hold up")) {
+    setDeveloperAIQuietMode(true);
+    return;
+  }
+
+  if (developerAIQuietMode) {
+    if (!developerAIAddressed(text)) return;
+    setDeveloperAIQuietMode(false, "I’m back with you.");
+  }
+
   developerAISpeechBuffer = [developerAISpeechBuffer, text].filter(Boolean).join(" ").trim();
   developerAIUserIsSpeaking = true;
   pauseDeveloperAIForUserSpeech();
@@ -6143,7 +6184,7 @@ function queueDeveloperAIUserSpeech(transcript) {
     } else {
       await sendDeveloperAIMessage();
     }
-  }, 1100);
+  }, 2400);
 }
 
 function stopDeveloperAIAudio() {
@@ -6194,6 +6235,7 @@ function stopDeveloperAICall() {
   developerAIUserIsSpeaking = false;
   developerAIPendingVoiceReply = null;
   developerAIFreeCallMode = false;
+  developerAIQuietMode = false;
 
   try { window.speechSynthesis?.cancel?.(); } catch (_) {}
   developerAISpeechUtterance = null;
@@ -6360,9 +6402,13 @@ function openDeveloperAICallWindow() {
     </div>
 
     <button id="developer-ai-play-reply" type="button" style="padding:12px;margin-bottom:12px;border:0;border-radius:14px;">Play reply / test audio</button>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+      <button id="developer-ai-call-quiet" type="button"
+        style="min-height:54px;border:0;border-radius:18px;background:rgba(255,255,255,.16);color:white;font-weight:850;">HOLD UP</button>
       <button id="developer-ai-call-mute" type="button"
         style="min-height:54px;border:0;border-radius:18px;background:rgba(255,255,255,.16);color:white;font-weight:850;">MUTE</button>
+      </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
       <button id="developer-ai-call-speaker" type="button"
         style="min-height:54px;border:0;border-radius:18px;background:white;color:#0f5fc7;font-weight:900;">🔊 LOUD</button>
       <button id="developer-ai-call-end" type="button"
@@ -6376,6 +6422,7 @@ function openDeveloperAICallWindow() {
     try { developerAIRecognition?.abort(); } catch (_) {}
     speakDeveloperAIFreeReply(developerAILastSpokenReply || "Audio test. Can you hear me?").catch(() => {});
   };
+  $("developer-ai-call-quiet").onclick = () => setDeveloperAIQuietMode(!developerAIQuietMode);
   $("developer-ai-call-end").onclick = () => stopDeveloperAICall();
   $("developer-ai-call-close").onclick = () => {
     stopDeveloperAICall();
