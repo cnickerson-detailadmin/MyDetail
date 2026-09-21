@@ -7504,7 +7504,8 @@ async function startDeveloperAIRealtimeCall(isReconnect = false) {
           type: "realtime",
           instructions:
             "Your name is Seth. You are the advanced AI assistant for MyService Support. " +
-            "Sound like a real guy: natural, chill, laid-back, warm, and conversational. Keep the rhythm fluid and comfortably quick. " +
+            "Sound like a calm real guy: natural, chill, laid-back, warm, and conversational, but low-key rather than cheerful. Keep the rhythm fluid and comfortably quick. " +
+            "Use a grounded, matter-of-fact delivery with minimal upward inflection. Do not sound excited, bubbly, overly friendly, salesy, or like an enthusiastic customer-service representative. " +
             "Connect words into normal phrases instead of spacing them out. Use contractions, natural sentence lengths, subtle conversational acknowledgements, and vary phrasing so repeated replies do not sound scripted. " +
             "Avoid long gaps between words, over-enunciation, dramatic pauses, assistant-demo cadence, and perfectly separated sentences. Use only short natural breathing pauses. " +
             "Keep answers concise in voice, but do not sound rushed. Reply promptly after Caleb clearly finishes speaking, including after a simple hello. " +
@@ -7927,7 +7928,12 @@ async function startDeveloperAIFreeCall(provider = "cloudflare") {
 }
 
 async function greetDeveloperAIFreeCall(provider) {
-  const greeting = "Hey, thanks for calling MyService Support. I’m Seth, your advanced AI assistant. What can I help you with today?";
+  const introKey = "myservice_seth_intro_complete_v1";
+  let firstIntroduction = false;
+  try { firstIntroduction = localStorage.getItem(introKey) !== "1"; } catch (_) {}
+  const greeting = firstIntroduction
+    ? "Hey, I’m Seth. I’ve got an overview of your MyService controls and features, and I’m your advanced AI assistant while you build this thing. Since you’re starting out in software development and business, part of my job is keeping you grounded. I’ll be direct when something isn’t realistic, when you’re getting in over your head, or when there’s a simpler way to get where you’re trying to go. When you’ve genuinely got a good idea, I’ll tell you that too. I have a broad base of software and business knowledge, but I’ll only access parts of MyService I’m specifically permitted to access, and I’ll only use that access to help with MyService. I can advise you, challenge an idea, and suggest better options, but you make the final decisions. Anyway, what’re we working on?"
+    : "Hey, it’s Seth. What’re we working on?";
   try {
     const voice = await callMyServiceEdgeFunction("developer-ai", {
       action: provider + "_tts", text: greeting
@@ -7936,6 +7942,9 @@ async function greetDeveloperAIFreeCall(provider) {
       developerAICallManagerHealth.provider = provider;
       developerAICallManagerMarkProviderReply(true);
       playDeveloperAIAudio(voice.audioBase64, voice.audioMimeType || "audio/mpeg");
+      if (firstIntroduction) {
+        try { localStorage.setItem(introKey, "1"); } catch (_) {}
+      }
       return true;
     }
     throw new Error(provider + " connected but returned no greeting audio.");
