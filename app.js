@@ -9021,8 +9021,10 @@ async function sendDeveloperAIMessage(event) {
   const input = $("developer-ai-input");
   const send = $("developer-ai-send");
   const status = $("developer-ai-status");
-  const message = String(input?.value || "").trim();
-  if (!message) return;
+  let message = String(input?.value || "").trim();
+  const hasPendingMedia = developerAIPendingMedia.length > 0;
+  if (!message && !hasPendingMedia) return;
+  if (!message && hasPendingMedia) message = "Look at the attached photo or video and tell me what you see. If it shows a MyService problem, diagnose the visible issue.";
   if (developerAIContainsSecret(message)) {
     if (input) input.value = "";
     if (status) status.textContent = "Private code detected. Seth did not save or send it.";
@@ -9098,6 +9100,8 @@ async function sendDeveloperAIMessage(event) {
     developerAIPendingMedia = [];
     const mediaInput = $("developer-ai-media-input");
     if (mediaInput) mediaInput.value = "";
+    const mediaLabel = $("developer-ai-media-label");
+    if (mediaLabel) mediaLabel.textContent = "No media selected";
     saveDeveloperAIHistory(history);
     renderDeveloperAIChat();
 
