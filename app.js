@@ -7724,9 +7724,18 @@ function openDeveloperAICallWindow() {
     this.style.background = developerMicEnabled ? "rgba(255,255,255,.16)" : "white";
     this.style.color = developerMicEnabled ? "white" : "#0f5fc7";
   };
-  $("developer-ai-call-troubleshoot").onclick = event => openDeveloperAITroubleshootMenu(event);
+  const troubleshootBtn = $("developer-ai-call-troubleshoot");
+  const detailsBtn = $("developer-ai-call-details");
 
-  $("developer-ai-call-details").onclick = function () {
+  const openTroubleshoot = event => {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    openDeveloperAITroubleshootMenu(event);
+  };
+
+  const openDetails = event => {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
     const h = developerAICallManagerSnapshot();
     updateDeveloperAICallWindow(
       h.state === "healthy" ? "🟢 CALL HEALTHY" : h.state === "failure" ? "🔴 CALL FAILURE" : "🟠 CALL DETAILS",
@@ -7734,6 +7743,11 @@ function openDeveloperAICallWindow() {
       (h.lastIncident ? " • " + h.lastIncident : "")
     );
   };
+
+  troubleshootBtn?.addEventListener("click", openTroubleshoot);
+  troubleshootBtn?.addEventListener("touchend", openTroubleshoot, { passive: false });
+  detailsBtn?.addEventListener("click", openDetails);
+  detailsBtn?.addEventListener("touchend", openDetails, { passive: false });
   $("developer-ai-call-end").onclick = () => stopDeveloperAICall();
   $("developer-ai-call-close").onclick = () => {
     stopDeveloperAICall();
