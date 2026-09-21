@@ -7940,6 +7940,12 @@ async function greetDeveloperAIFreeCall(provider) {
   const greeting = firstIntroduction
     ? "Hey, I’m Seth. I’ve got an overview of your MyService controls and features, and I’m your advanced AI assistant while you build this thing. Since you’re starting out in software development and business, part of my job is keeping you grounded. I’ll be direct when something isn’t realistic, when you’re getting in over your head, or when there’s a simpler way to get where you’re trying to go. When you’ve genuinely got a good idea, I’ll tell you that too. I have a broad base of software and business knowledge, but I’ll only access parts of MyService I’m specifically permitted to access, and I’ll only use that access to help with MyService. I can advise you, challenge an idea, and suggest better options, but you make the final decisions. Anyway, what’re we working on?"
     : "Hey, it’s Seth. What’re we working on?";
+
+  // Startup greeting must win the audio turn. Mic/VAD can report room noise as
+  // user speech while the TTS request is in flight, which previously queued the
+  // greeting forever and left the call silent until the user spoke.
+  developerAIUserIsSpeaking = false;
+  developerAIPendingVoiceReply = null;
   try {
     const voice = await callMyServiceEdgeFunction("developer-ai", {
       action: provider + "_tts", text: greeting
@@ -7947,6 +7953,7 @@ async function greetDeveloperAIFreeCall(provider) {
     if (developerAICallMode && developerAIFreeProvider === provider && voice.audioBase64) {
       developerAICallManagerHealth.provider = provider;
       developerAICallManagerMarkProviderReply(true);
+      developerAIUserIsSpeaking = false;
       playDeveloperAIAudio(voice.audioBase64, voice.audioMimeType || "audio/mpeg");
       if (firstIntroduction) {
         try { localStorage.setItem(introKey, "1"); } catch (_) {}
