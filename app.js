@@ -9223,7 +9223,7 @@ function installTrainingCenter() {
                 (x.repaired ? '<small>✓ Safe runtime repair applied</small>' : '') +
               '</div>'
             ).join("")
-          : '<div style="padding:10px 0;">No bugs detected by the watchdog yet.</div>') +
+          : '<div style="padding:10px 0;">No bugs detected by the watchdogs yet.</div>') +
       '</div>';
 
     panel.querySelector("#myservice-extermination-close")?.addEventListener("click", () => {
