@@ -2685,7 +2685,7 @@ function installDeveloperExperience() {
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px;">
           <div>
             <div class="eyebrow">PRIVATE DEVELOPER COPILOT</div>
-            <h2 style="margin:4px 0;">Developer AI</h2>
+            <h2 style="margin:4px 0;">Seth <span style="font-size:13px;opacity:.65;">• Developer AI</span></h2>
             <p style="margin:0;color:#61728c;">Business management, operations, support troubleshooting, and MyService guidance.</p>
           </div>
           <button class="outline-button" type="button" onclick="clearDeveloperAIChat()" style="border-radius:16px;">Clear</button>
@@ -5889,7 +5889,7 @@ function renderDeveloperAIChat() {
     return `
       <div style="padding:9px 13px;border-radius:18px;white-space:pre-wrap;line-height:1.4;width:100%;box-sizing:border-box;
         ${mine ? "background:#1677f2;color:#ffffff;" : "background:#ffffff;color:#24364d;border:1px solid #dbe4f0;"}">
-        <strong style="display:block;margin-bottom:3px;">${mine ? "You" : "Developer AI"}</strong>
+        <strong style="display:block;margin-bottom:3px;">${mine ? "You" : DEVELOPER_AI_NAME}</strong>
         ${escapeHTML(message.content)}
       </div>
     `;
@@ -6024,6 +6024,7 @@ function toggleDeveloperAICodePush() {
 }
 
 let developerAICallMode = false;
+const DEVELOPER_AI_NAME = "Seth";
 let developerAIRecognition = null;
 let developerAIRecognitionActive = false;
 let developerAIFreeMicStream = null;
@@ -6522,7 +6523,7 @@ function playDeveloperAIAudio(base64, mimeType = "audio/mpeg") {
 
   const status = $("developer-ai-status");
   if (status) status.textContent = "Developer AI is speaking…";
-  updateDeveloperAICallWindow("Speaking…", "Developer AI");
+  updateDeveloperAICallWindow("Speaking…", DEVELOPER_AI_NAME);
 
   // Web Audio is preferred on iPhone because CALL unlocks its audio context.
   playDeveloperAIWebAudio(base64).catch(() => {
@@ -6599,23 +6600,13 @@ function stopDeveloperAITestRecording(showSave = true) {
   developerAITestRecorder = null;
   developerAITestRecording = false;
 
-  try {
-    if (recorder.state !== "inactive") recorder.stop();
-  } catch (_) {}
-
-  try { developerAITestRecordMicSource?.disconnect?.(); } catch (_) {}
-  developerAITestRecordMicSource = null;
-
-  const btn = $("developer-ai-test-record");
-  if (btn) {
-    btn.textContent = "● RECORD TEST CALL";
-    btn.style.background = "rgba(255,255,255,.16)";
-    btn.style.color = "white";
-  }
-
+  // Safari may dispatch "stop" immediately, so attach the finalizer first.
   recorder.onstop = () => {
     const chunks = developerAITestRecordChunks.splice(0);
-    if (!chunks.length) return;
+    if (!chunks.length) {
+      updateDeveloperAICallWindow("Recording empty", "No call audio was captured. Tap record after Listening appears.");
+      return;
+    }
 
     const mimeType = recorder.mimeType || "audio/mp4";
     const blob = new Blob(chunks, { type: mimeType });
@@ -6634,10 +6625,24 @@ function stopDeveloperAITestRecording(showSave = true) {
       }
       save.href = developerAITestRecordingUrl;
       save.download = developerAITestRecordingFilename(mimeType);
-      save.textContent = "SAVE MyServiceTstDgnstcs";
+      save.textContent = "SAVE TEST CALL RECORDING";
       save.onclick = () => setTimeout(() => save.remove(), 2500);
+      updateDeveloperAICallWindow("Recording ready", "Tap SAVE TEST CALL RECORDING.");
     }
   };
+
+  try { if (recorder.state === "recording") recorder.requestData(); } catch (_) {}
+  try { if (recorder.state !== "inactive") recorder.stop(); } catch (_) {}
+
+  try { developerAITestRecordMicSource?.disconnect?.(); } catch (_) {}
+  developerAITestRecordMicSource = null;
+
+  const btn = $("developer-ai-test-record");
+  if (btn) {
+    btn.textContent = "● RECORD TEST CALL";
+    btn.style.background = "rgba(255,255,255,.16)";
+    btn.style.color = "white";
+  }
 }
 
 async function toggleDeveloperAITestRecording() {
@@ -6647,9 +6652,17 @@ async function toggleDeveloperAITestRecording() {
     return;
   }
 
-  const stream = developerAITestRecordingStream();
+  let stream = developerAITestRecordingStream();
   if (!stream || !stream.getAudioTracks?.().length) {
-    updateDeveloperAICallWindow("Recording unavailable", "Wait until the call says Listening, then tap TEST REC.");
+    updateDeveloperAICallWindow("Preparing recorder…", "Waiting for the call microphone.");
+    for (let attempt = 0; attempt < 24; attempt += 1) {
+      await new Promise(resolve => setTimeout(resolve, 125));
+      stream = developerAITestRecordingStream();
+      if (stream?.getAudioTracks?.().length) break;
+    }
+  }
+  if (!stream || !stream.getAudioTracks?.().length) {
+    updateDeveloperAICallWindow("Recording unavailable", "The call microphone did not become ready.");
     return;
   }
 
@@ -6713,7 +6726,7 @@ function openDeveloperAICallWindow() {
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
       <div>
         <div style="font-size:12px;font-weight:850;letter-spacing:1.2px;opacity:.8;">MYSERVICE</div>
-        <div style="font-size:24px;font-weight:900;">Developer AI Call</div>
+        <div style="font-size:24px;font-weight:900;">Seth • MyService Support</div>
       </div>
       <button id="developer-ai-call-close" type="button"
         style="border:0;background:rgba(255,255,255,.14);color:white;width:42px;height:42px;border-radius:50%;font-size:22px;">×</button>
@@ -6892,7 +6905,7 @@ function handleDeveloperAIRealtimeEvent(event) {
         developerAIRealtimeAudio.play().catch(() => {});
       }
     } catch (_) {}
-    updateDeveloperAICallWindow("Speaking…", "Developer AI");
+    updateDeveloperAICallWindow("Speaking…", DEVELOPER_AI_NAME);
     return;
   }
 
@@ -6998,17 +7011,17 @@ async function startDeveloperAIRealtimeCall(isReconnect = false) {
   developerAIRealtimeChannel = dc;
   dc.onmessage = handleDeveloperAIRealtimeEvent;
   dc.onopen = () => {
-    // Fast, natural turn-taking: reply as soon as a thought sounds complete.
-    // A plain greeting such as "hello" should be treated as a complete turn.
+    // Fast, natural turn-taking with a warm male voice.
     try {
       dc.send(JSON.stringify({
         type: "session.update",
         session: {
           type: "realtime",
           instructions:
-            "Sound like a real person: natural, chill, laid-back, warm, and conversational. " +
-            "Reply promptly after Caleb finishes speaking, including after a simple hello. " +
-            "Never use an announcer tone, a robotic cadence, or spoken system/status messages.",
+            "Your name is Seth. You are the advanced AI assistant for MyService Support. " +
+            "Sound like a real guy: natural, chill, laid-back, warm, and conversational. " +
+            "Use relaxed pacing and short spoken sentences. Reply promptly after Caleb finishes speaking, " +
+            "including after a simple hello. Never use an announcer tone, robotic cadence, or spoken system messages.",
           audio: {
             input: {
               turn_detection: {
@@ -7017,12 +7030,23 @@ async function startDeveloperAIRealtimeCall(isReconnect = false) {
                 create_response: true,
                 interrupt_response: true
               }
+            },
+            output: {
+              voice: "cedar"
             }
           }
         }
       }));
+      dc.send(JSON.stringify({
+        type: "response.create",
+        response: {
+          instructions:
+            "Greet the caller once in a relaxed, genuinely friendly way. Say: " +
+            "\"Hey, thanks for calling MyService Support. I’m Seth, your advanced AI assistant. What can I help you with today?\""
+        }
+      }));
     } catch (_) {}
-    updateDeveloperAICallWindow("Listening…", "Natural realtime voice connected");
+    updateDeveloperAICallWindow("Seth is here", "Natural realtime voice connected");
   };
 
   const offer = await pc.createOffer();
@@ -7437,7 +7461,7 @@ async function generateDeveloperAIImage() {
       const wrap = document.createElement("div");
       wrap.style.cssText = "padding:9px 13px;border-radius:18px;background:#fff;border:1px solid #dbe4f0;";
       wrap.innerHTML =
-        '<strong style="display:block;margin-bottom:8px;">Developer AI</strong>' +
+        '<strong style="display:block;margin-bottom:8px;">Seth</strong>' +
         '<img alt="AI-generated image" style="display:block;width:100%;border-radius:16px;" src="data:image/png;base64,' +
         response.imageBase64 + '">';
       box.appendChild(wrap);
