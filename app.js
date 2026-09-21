@@ -7777,7 +7777,7 @@ async function startDeveloperAIFreeCall(provider = "cloudflare") {
     if (mediaStarted) {
       updateDeveloperAICallWindow("Listening…", "Stable microphone ready");
       if (status) status.textContent = "Seth no-credit call connected.";
-      greetDeveloperAIFreeCall(provider);
+      await greetDeveloperAIFreeCall(provider);
       return;
     }
   } catch (_) {
@@ -7827,7 +7827,7 @@ async function startDeveloperAIFreeCall(provider = "cloudflare") {
   try { recognition.start(); } catch (_) {}
   updateDeveloperAICallWindow("Listening…", "Voice input ready");
   if (status) status.textContent = "Seth browser fallback connected.";
-  greetDeveloperAIFreeCall(provider);
+  await greetDeveloperAIFreeCall(provider);
 }
 
 async function greetDeveloperAIFreeCall(provider) {
@@ -7837,8 +7837,12 @@ async function greetDeveloperAIFreeCall(provider) {
       action: provider + "_tts", text: greeting
     });
     if (developerAICallMode && developerAIFreeProvider === provider && voice.audioBase64) {
+      developerAICallManagerHealth.provider = provider;
+      developerAICallManagerMarkProviderReply(true);
       playDeveloperAIAudio(voice.audioBase64, voice.audioMimeType || "audio/mpeg");
+      return true;
     }
+    throw new Error(provider + " connected but returned no greeting audio.");
   } catch (error) {
     if (developerAICallMode && developerAIFreeProvider === provider) {
       updateDeveloperAICallWindow("Voice unavailable", String(error?.message || "Seth could not speak."));
