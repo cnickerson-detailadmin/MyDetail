@@ -9035,6 +9035,14 @@ async function sendDeveloperAIMessage(event) {
   try {
     const memory = await handleDeveloperAIMemoryCommand(message, history);
     const context = getDeveloperAISafeContext();
+    context.reasoningProfile = {
+      mode: "deep",
+      instruction: "Act as a highly capable senior software engineer, debugger, systems architect, and business-operations analyst for MyService. Trace problems to root causes instead of stopping at symptoms. Check assumptions against available diagnostics and code context. Consider interactions, regressions, security boundaries, data isolation, iOS/PWA behavior, backend behavior, and provider failures. Prefer the smallest robust fix. Retest the full affected path after a proposed repair. Clearly distinguish verified facts from hypotheses. Never claim something is fixed until it has been verified. Never expose or retain secrets. Never weaken authorization or security to make a feature work. Be concise and direct with the developer.",
+      rootCauseFirst: true,
+      verifyBeforeClaimingFixed: true,
+      regressionAware: true,
+      securityFirst: true
+    };
     if (memory?.context) context.resumeNote = "Saved progress for " + memory.topic + ": " + memory.context;
     const media = await developerAIReadMediaAttachments();
     if (media.length) context.mediaAttachments = media;
