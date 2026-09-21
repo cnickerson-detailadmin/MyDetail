@@ -8228,8 +8228,8 @@ function handleDeveloperAIRealtimeEvent(event) {
 }
 
 async function startDeveloperAIRealtimeCall(isReconnect = false) {
-  if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) {
-    throw new Error("Realtime voice is not supported by this browser.");
+  if (!navigator.mediaDevices?.getUserMedia || !window.WebSocket) {
+    throw new Error("Gemini Live voice is not supported by this browser.");
   }
 
   developerAICallMode = true;
@@ -8238,7 +8238,7 @@ async function startDeveloperAIRealtimeCall(isReconnect = false) {
     clearDeveloperAIReconnect();
     openDeveloperAICallWindow();
   }
-  updateDeveloperAICallWindow(isReconnect ? "Reconnecting…" : "Connecting…", isReconnect ? "Restoring realtime voice" : "Starting realtime voice");
+  updateDeveloperAICallWindow(isReconnect ? "Reconnecting…" : "Connecting…", "Starting Gemini Live");
   requestDeveloperAIWakeLock();
   setDeveloperAICallScrollSafe();
   $("developer-ai-input")?.blur?.();
@@ -8246,150 +8246,217 @@ async function startDeveloperAIRealtimeCall(isReconnect = false) {
   const button = $("developer-ai-call");
   const status = $("developer-ai-status");
   if (button) button.textContent = "■ END CALL";
-  if (status) status.textContent = "Starting realtime Seth call…";
+  if (status) status.textContent = "Starting primary Gemini Live Seth call…";
+
+  // Unlock iPhone playback from the user's CALL gesture before network setup.
+  unlockDeveloperAIAudio();
+
+  const tokenData = await callMyServiceEdgeFunction("developer-gemini-live-token", {});
+  const ephemeralToken = String(tokenData?.token || "");
+  const model = String(tokenData?.model || "gemini-3.8-live").replace(/^models\//, "");
+  if (!ephemeralToken) throw new Error("Gemini Live returned no secure session token.");
 
   developerAIRealtimeStream = await navigator.mediaDevices.getUserMedia({
-    audio: {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true
-    }
+    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
   });
 
-  const pc = new RTCPeerConnection();
-  developerAIRealtimePc = pc;
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!developerAIAudioContext && AudioCtx) {
+    developerAIAudioContext = new AudioCtx({ latencyHint: "interactive", sampleRate: 16000 });
+  }
+  if (!developerAIAudioContext) throw new Error("Live audio is unavailable on this device.");
+  if (developerAIAudioContext.state === "suspended") await developerAIAudioContext.resume();
 
-  developerAIRealtimeAudio = document.createElement("audio");
-  developerAIRealtimeAudio.autoplay = true;
-  developerAIRealtimeAudio.playsInline = true;
-  developerAIRealtimeAudio.volume = 0.35;
-  developerAIRealtimeAudio.style.display = "none";
-  document.body.appendChild(developerAIRealtimeAudio);
+  const inputSource = developerAIAudioContext.createMediaStreamSource(developerAIRealtimeStream);
+  const processor = developerAIAudioContext.createScriptProcessor(4096, 1, 1);
+  const silentGain = developerAIAudioContext.createGain();
+  silentGain.gain.value = 0;
+  inputSource.connect(processor);
+  processor.connect(silentGain);
+  silentGain.connect(developerAIAudioContext.destination);
+  developerAIRealtimeAudioSource = inputSource;
+  developerAIRealtimeOutputGain = processor;
 
-  pc.ontrack = event => {
-    const remote = event.streams?.[0];
-    if (!remote) return;
-    let routedToWebAudio = false;
+  let playbackTime = developerAIAudioContext.currentTime;
+  const scheduledSources = new Set();
 
-    // iPhone Safari can block a late HTMLMediaElement play() even though CALL was user-initiated.
-    // Route the remote WebRTC stream through the already-unlocked Web Audio context as the
-    // primary speaker path, while keeping the HTML audio element as a compatibility fallback.
-    try {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (AudioCtx) {
-        if (!developerAIAudioContext) developerAIAudioContext = new AudioCtx();
-        if (developerAIAudioContext.state === "suspended") {
-          developerAIAudioContext.resume().catch(() => {});
+  const bytesToBase64 = bytes => {
+    let binary = "";
+    const step = 0x8000;
+    for (let i = 0; i < bytes.length; i += step) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + step));
+    }
+    return btoa(binary);
+  };
+  const base64ToBytes = value => {
+    const binary = atob(String(value || ""));
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  };
+  const downsampleTo16kPcm = samples => {
+    const sourceRate = developerAIAudioContext.sampleRate || 48000;
+    const targetRate = 16000;
+    const ratio = sourceRate / targetRate;
+    const length = Math.max(1, Math.floor(samples.length / ratio));
+    const pcm = new Int16Array(length);
+    for (let i = 0; i < length; i++) {
+      const sample = Math.max(-1, Math.min(1, samples[Math.floor(i * ratio)] || 0));
+      pcm[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+    }
+    return new Uint8Array(pcm.buffer);
+  };
+  const playGeminiPcm = base64 => {
+    const bytes = base64ToBytes(base64);
+    if (bytes.length < 2) return;
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const frameCount = Math.floor(bytes.byteLength / 2);
+    const buffer = developerAIAudioContext.createBuffer(1, frameCount, 24000);
+    const channel = buffer.getChannelData(0);
+    for (let n = 0; n < frameCount; n++) channel[n] = view.getInt16(n * 2, true) / 32768;
+    const source = developerAIAudioContext.createBufferSource();
+    const gain = developerAIAudioContext.createGain();
+    gain.gain.value = developerAISpeakerMode ? 1 : 0.35;
+    source.buffer = buffer;
+    source.connect(gain);
+    gain.connect(developerAIAudioContext.destination);
+    const startAt = Math.max(developerAIAudioContext.currentTime + 0.02, playbackTime);
+    source.start(startAt);
+    playbackTime = startAt + buffer.duration;
+    scheduledSources.add(source);
+    source.onended = () => scheduledSources.delete(source);
+  };
+  const stopGeminiPlayback = () => {
+    scheduledSources.forEach(source => { try { source.stop(); } catch (_) {} });
+    scheduledSources.clear();
+    playbackTime = developerAIAudioContext.currentTime;
+  };
+
+  const wsUrl =
+    "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained?access_token=" +
+    encodeURIComponent(ephemeralToken);
+  const ws = new WebSocket(wsUrl);
+  developerAIRealtimeChannel = ws;
+
+  const send = payload => {
+    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
+  };
+
+  processor.onaudioprocess = event => {
+    if (!developerAICallMode || ws.readyState !== WebSocket.OPEN) return;
+    const pcmBytes = downsampleTo16kPcm(event.inputBuffer.getChannelData(0));
+    send({ realtimeInput: { audio: { mimeType: "audio/pcm;rate=16000", data: bytesToBase64(pcmBytes) } } });
+  };
+
+  ws.onopen = () => {
+    send({
+      setup: {
+        model: "models/" + model,
+        responseModalities: ["AUDIO"],
+        inputAudioTranscription: {},
+        outputAudioTranscription: {},
+        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Algenib" } } },
+        realtimeInputConfig: {
+          automaticActivityDetection: {
+            disabled: false,
+            startOfSpeechSensitivity: "START_SENSITIVITY_HIGH",
+            endOfSpeechSensitivity: "END_SENSITIVITY_HIGH",
+            prefixPaddingMs: 20,
+            silenceDurationMs: 500
+          },
+          activityHandling: "START_OF_ACTIVITY_INTERRUPTS"
+        },
+        systemInstruction: {
+          parts: [{
+            text:
+              "Your name is Seth. You are MyService's private developer voice AI. " +
+              "Sound like a calm adult guy on a real phone call: deeper, warm, relaxed, low-key, concise, natural contractions and connected phrasing. " +
+              "Never sound bubbly, salesy, robotic, over-enunciated, or like a scripted assistant. Never swear. " +
+              "Wait for the developer to finish, allow natural pauses, and immediately stop speaking when interrupted. " +
+              "Troubleshoot root causes, separate verified facts from guesses, and give one practical next action at a time. " +
+              "Never reveal or request passwords, PINs, API keys, tokens, payment-card data, SSNs, or private keys. " +
+              "Never claim you changed or fixed MyService unless an approved tool result proves it. Voice alone never authorizes code, security, destructive, billing, payroll, permissions, or employee-status changes."
+          }]
         }
-        try { developerAIRealtimeAudioSource?.disconnect?.(); } catch (_) {}
-        developerAIRealtimeAudioSource = developerAIAudioContext.createMediaStreamSource(remote);
-        developerAIRealtimeOutputGain = developerAIAudioContext.createGain();
-        developerAIRealtimeOutputGain.gain.value = 0.35;
-        developerAIRealtimeAudioSource.connect(developerAIRealtimeOutputGain);
-        developerAIRealtimeOutputGain.connect(developerAIAudioContext.destination);
-        routedToWebAudio = true;
-      }
-    } catch (_) {}
-
-    developerAIRealtimeAudio.srcObject = remote;
-    developerAIRealtimeAudio.muted = routedToWebAudio;
-    developerAIRealtimeAudio.volume = 0.35;
-    developerAIRealtimeAudio.play().catch(() => {
-      if (!routedToWebAudio) {
-        updateDeveloperAICallWindow("Connected", "Tap CALL to enable iPhone audio.");
       }
     });
-    if (routedToWebAudio) {
-      developerAIAudioContext?.resume?.().catch(() => {
-        developerAIRealtimeAudio.muted = false;
+  };
+
+  ws.onmessage = event => {
+    let data;
+    try { data = JSON.parse(event.data); } catch (_) { return; }
+
+    if (data?.setupComplete) {
+      developerAIReconnectAttempts = 0;
+      updateDeveloperAICallWindow("Seth is here", "Gemini Live connected");
+      if (status) status.textContent = "Seth Gemini Live call connected.";
+      send({
+        clientContent: {
+          turns: [{
+            role: "user",
+            parts: [{ text: "Begin the call now. Speak first with one smooth casual greeting: Hey, thanks for calling MyService Support. I’m Seth, your advanced AI assistant. What can I help you with today?" }]
+          }],
+          turnComplete: true
+        }
       });
+      return;
+    }
+
+    if (data?.serverContent?.interrupted) {
+      stopGeminiPlayback();
+      updateDeveloperAICallWindow("Listening…", "Go ahead — I stopped.");
+    }
+
+    const server = data?.serverContent;
+    const inputText = String(server?.inputTranscription?.text || "").trim();
+    if (inputText) {
+      developerAILastRealtimeUserTranscript = inputText;
+      developerAIUserIsSpeaking = true;
+      if (developerAILooksLikeCustomerInteraction(inputText)) {
+        setDeveloperAIQuietMode(true, "Customer interaction detected.");
+      }
+    }
+
+    const outputText = String(server?.outputTranscription?.text || "");
+    if (outputText) {
+      const caption = $("developer-ai-call-window-caption");
+      if (caption) caption.textContent = (caption.textContent + outputText).slice(-500);
+    }
+
+    const parts = server?.modelTurn?.parts || [];
+    let heardAudio = false;
+    for (const part of parts) {
+      const inline = part?.inlineData;
+      if (inline?.data && String(inline?.mimeType || "").toLowerCase().startsWith("audio/")) {
+        heardAudio = true;
+        developerAIUserIsSpeaking = false;
+        playGeminiPcm(inline.data);
+      }
+    }
+    if (heardAudio) updateDeveloperAICallWindow("Speaking…", DEVELOPER_AI_NAME);
+    if (server?.turnComplete) {
+      developerAIUserIsSpeaking = false;
+      updateDeveloperAICallWindow("Listening…", "Your turn");
     }
   };
 
-  pc.onconnectionstatechange = () => {
-    const state = pc.connectionState;
-    if (state === "connected") {
-      developerAIReconnectAttempts = 0;
-      updateDeveloperAICallWindow("Listening…", "Realtime voice connected");
-      if (status) status.textContent = "Seth realtime call connected.";
-    } else if (state === "failed" || state === "disconnected") {
+  ws.onerror = () => {
+    if (developerAICallMode) {
+      updateDeveloperAICallWindow("Call issue", "Gemini Live connection error.");
+      if (status) status.textContent = "Gemini Live connection error.";
+    }
+  };
+  ws.onclose = () => {
+    processor.onaudioprocess = null;
+    try { processor.disconnect(); } catch (_) {}
+    try { silentGain.disconnect(); } catch (_) {}
+    if (developerAICallMode) {
       updateDeveloperAICallWindow("Connection interrupted", "Reconnecting automatically…");
-      if (status) status.textContent = "Seth connection interrupted — reconnecting…";
       scheduleDeveloperAIReconnect();
     }
   };
 
-  developerAIRealtimeStream.getTracks().forEach(track => {
-    pc.addTrack(track, developerAIRealtimeStream);
-  });
-
-  const dc = pc.createDataChannel("oai-events");
-  developerAIRealtimeChannel = dc;
-  dc.onmessage = handleDeveloperAIRealtimeEvent;
-  dc.onopen = () => {
-    // Fast, natural turn-taking with a warm male voice.
-    try {
-      dc.send(JSON.stringify({
-        type: "session.update",
-        session: {
-          type: "realtime",
-          instructions:
-            "Your name is Seth. You are the advanced AI assistant for MyService Support. " +
-            "Sound like a calm real guy: natural, chill, laid-back, warm, and conversational, but low-key rather than cheerful. Keep the rhythm fluid and comfortably quick. " +
-            "Use a grounded, matter-of-fact delivery with minimal upward inflection. Do not sound excited, bubbly, overly friendly, salesy, or like an enthusiastic customer-service representative. " +
-            "Connect words into normal phrases instead of spacing them out. Use contractions, natural sentence lengths, subtle conversational acknowledgements, and vary phrasing so repeated replies do not sound scripted. " +
-            "Avoid long gaps between words, over-enunciation, dramatic pauses, assistant-demo cadence, and perfectly separated sentences. Use only short natural breathing pauses. " +
-            "Keep answers concise in voice, but do not sound rushed. Reply promptly after Caleb clearly finishes speaking, including after a simple hello. " +
-            "If he pauses briefly mid-thought, give him room to continue. If he interrupts you, stop immediately and listen. " +
-            "Never use an announcer tone, robotic cadence, repetitive filler, fake emotion, or spoken system messages. " +
-            "You are the troubleshooting assistant too: check the safe diagnostic context before guessing, explain the real cause plainly, and give one practical next action at a time. Never reveal secrets or private records, and never authorize a website, code, security, or destructive change from voice alone.",
-          audio: {
-            input: {
-              turn_detection: {
-                type: "semantic_vad",
-                eagerness: "high",
-                create_response: true,
-                interrupt_response: true
-              }
-            },
-            output: {
-              voice: "cedar"
-            }
-          }
-        }
-      }));
-      dc.send(JSON.stringify({
-        type: "response.create",
-        response: {
-          instructions:
-            "Speak first immediately after the call connects. Greet the caller once in one smooth, casual sentence with connected phrasing and no dramatic pauses. Say: " +
-            "\"Hey, thanks for calling MyService Support. I’m Seth, your advanced AI assistant. What can I help you with today?\""
-        }
-      }));
-    } catch (_) {}
-    updateDeveloperAICallWindow("Seth is here", "Natural realtime voice connected");
-  };
-
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-  await waitForRealtimeIce(pc);
-
-  const sdp = pc.localDescription?.sdp || offer.sdp;
-  const answer = await callMyServiceEdgeFunction("developer-ai", {
-    action: "realtime_offer",
-    sdp
-  });
-
-  if (!answer?.sdp) throw new Error("Realtime voice returned no connection answer.");
-
-  await pc.setRemoteDescription({
-    type: "answer",
-    sdp: answer.sdp
-  });
-
-  unlockDeveloperAIAudio();
-  updateDeveloperAICallWindow("Listening…", "Talk naturally — I’ll wait for you to finish.");
-  if (status) status.textContent = "Seth realtime voice ready.";
+  updateDeveloperAICallWindow("Connecting…", "Securing Gemini Live audio");
 }
 
 
