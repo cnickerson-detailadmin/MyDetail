@@ -6940,12 +6940,28 @@ document.addEventListener("visibilitychange", () => {
 
 function setDeveloperAIAudioSessionType(type) {
   try {
-    if (navigator.audioSession && "type" in navigator.audioSession) {
-      navigator.audioSession.type = type;
-      return true;
+    const session = navigator.audioSession;
+    if (!session || !("type" in session)) return false;
+
+    // Some iPhone/WebKit builds expose audioSession.type as read-only.
+    // Only assign when the property is actually writable or has a setter.
+    let target = session;
+    let descriptor = null;
+    while (target && !descriptor) {
+      descriptor = Object.getOwnPropertyDescriptor(target, "type");
+      target = Object.getPrototypeOf(target);
     }
-  } catch (_) {}
-  return false;
+    if (descriptor && descriptor.writable !== true && typeof descriptor.set !== "function") {
+      developerAICallManagerRecord?.("audio-session-readonly", "iOS exposes navigator.audioSession.type as read-only; using system audio routing.");
+      return false;
+    }
+
+    session.type = type;
+    return session.type === type;
+  } catch (error) {
+    developerAICallManagerRecord?.("audio-session-type-skipped", String(error?.message || error).slice(0, 120));
+    return false;
+  }
 }
 
 function unlockDeveloperAIAudio() {
