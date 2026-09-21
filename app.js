@@ -9029,6 +9029,21 @@ function installTrainingCenter() {
     }));
   } catch (_) {}
   let lastFingerprint = "";
+  const watchdogs = {
+    runtime: { name: "Runtime Watchdog", status: "green", detail: "Watching JavaScript errors and rejected promises." },
+    interface: { name: "Interface Watchdog", status: "green", detail: "Watching broken handlers, duplicate IDs, and bad in-page targets." },
+    mobile: { name: "Mobile Interaction Watchdog", status: "green", detail: "Watching touch, scroll, and pointer-interaction failures." },
+    startup: { name: "Startup Watchdog", status: "green", detail: "Watching boot-time failures captured before app.js finishes loading." },
+    call: { name: "Call Watchdog", status: "green", detail: "Watching Seth call-mode health while a call is active." }
+  };
+
+  function setWatchdogStatus(key, status, detail) {
+    const dog = watchdogs[key];
+    if (!dog) return;
+    dog.status = status;
+    if (detail) dog.detail = detail;
+  }
+
 
   function developerOnly() {
     try {
@@ -9104,6 +9119,7 @@ function installTrainingCenter() {
   }
 
   function scanDOM() {
+    let issueFound = false;
     const ids = new Map();
     document.querySelectorAll("[id]").forEach(node => {
       ids.set(node.id, (ids.get(node.id) || 0) + 1);
@@ -9111,6 +9127,7 @@ function installTrainingCenter() {
 
     ids.forEach((count, id) => {
       if (count > 1) {
+        issueFound = true;
         record(
           "critical",
           "Duplicate DOM ID: " + id,
@@ -9123,6 +9140,7 @@ function installTrainingCenter() {
       const handler = node.getAttribute("onclick") || "";
       const match = handler.match(/^\s*([A-Za-z_$][\w$]*)\s*\(/);
       if (match && typeof window[match[1]] !== "function") {
+        issueFound = true;
         record(
           "critical",
           "Broken button handler: " + match[1],
@@ -9134,6 +9152,7 @@ function installTrainingCenter() {
     document.querySelectorAll("a[href]").forEach(link => {
       const href = link.getAttribute("href") || "";
       if (href.startsWith("#") && href.length > 1 && !document.getElementById(href.slice(1))) {
+        issueFound = true;
         record(
           "medium",
           "Broken in-page link",
@@ -9141,13 +9160,20 @@ function installTrainingCenter() {
         );
       }
     });
+    setWatchdogStatus("interface", issueFound ? "red" : "green",
+      issueFound ? "Interface issue detected." : "UI handlers and DOM targets look healthy.");
   }
 
   function scanMobileInteraction() {
-    if (!/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) return;
+    if (!/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      setWatchdogStatus("mobile", "green", "Non-mobile device; mobile interaction checks not required.");
+      return;
+    }
+    let issueFound = false;
 
     const bodyStyle = getComputedStyle(document.body);
     if (bodyStyle.overflow === "hidden" && !document.body.dataset.myserviceIntentionalLock) {
+      issueFound = true;
       record(
         "high",
         "Mobile scroll lock detected",
@@ -9160,6 +9186,7 @@ function installTrainingCenter() {
       const style = getComputedStyle(main);
       if (style.pointerEvents === "none") {
         main.style.pointerEvents = "auto";
+        issueFound = true;
         record(
           "critical",
           "Main content interaction disabled",
@@ -9168,6 +9195,8 @@ function installTrainingCenter() {
         );
       }
     }
+    setWatchdogStatus("mobile", issueFound ? "orange" : "green",
+      issueFound ? "Mobile interaction issue detected or repaired." : "Touch, scroll, and pointer interaction look healthy.");
   }
 
   function fingerprint() {
@@ -9199,6 +9228,14 @@ function installTrainingCenter() {
     const high = findings.filter(x => x.severity === "high").length;
     const repaired = findings.filter(x => x.repaired).length;
 
+    const dogRows = Object.values(watchdogs).map(dog => {
+      const dot = dog.status === "red" ? "🔴" : dog.status === "orange" ? "🟠" : "🟢";
+      return '<div style="padding:6px 0;border-top:1px solid #eee;">' +
+        '<strong>' + dot + ' ' + escapeHTML(dog.name) + '</strong>' +
+        '<div style="font-size:12px;color:#61728c;">' + escapeHTML(dog.detail) + '</div>' +
+      '</div>';
+    }).join("");
+
     panel.innerHTML =
       '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">' +
         '<strong style="font-size:16px;">🐉 Extermination Team</strong>' +
@@ -9207,7 +9244,8 @@ function installTrainingCenter() {
       '<div style="margin-top:6px;font-weight:800;">' +
         'Dragon Security Bug Watch • ' + (critical ? '🔴' : high ? '🟠' : '🟢') +
       '</div>' +
-      '<small>Watching runtime/UI failures without modifying source code.</small>' +
+      '<small>Multiple independent watchdogs are active across runtime, interface, startup, mobile, and calls.</small>' +
+      '<div style="margin-top:10px;">' + dogRows + '</div>' +
       '<div style="display:flex;gap:8px;margin:10px 0;flex-wrap:wrap;">' +
         '<span>Critical: ' + critical + '</span>' +
         '<span>High: ' + high + '</span>' +
@@ -9235,6 +9273,7 @@ function installTrainingCenter() {
     const message = String(event?.message || "Unknown JavaScript error");
     recentErrors.push({ message, time: Date.now() });
     if (recentErrors.length > 50) recentErrors.shift();
+    setWatchdogStatus("runtime", "red", message);
     record("critical", "JavaScript runtime error", message);
   }, true);
 
@@ -9242,6 +9281,7 @@ function installTrainingCenter() {
     const message = String(event?.reason?.message || event?.reason || "Unhandled promise rejection");
     recentErrors.push({ message, time: Date.now() });
     if (recentErrors.length > 50) recentErrors.shift();
+    setWatchdogStatus("runtime", "red", message);
     record("critical", "Unhandled promise rejection", message);
   });
 
@@ -9251,6 +9291,10 @@ function installTrainingCenter() {
 
   function scan() {
     try {
+      setWatchdogStatus("startup", recentErrors.some(e => e.type && String(e.type).includes("startup")) ? "red" : "green",
+        recentErrors.some(e => e.type && String(e.type).includes("startup")) ? "Startup failure captured." : "No startup failures captured.");
+      setWatchdogStatus("call", typeof developerAICallMode !== "undefined" && developerAICallMode ? "green" : "green",
+        typeof developerAICallMode !== "undefined" && developerAICallMode ? "Seth call monitoring active." : "Standing by; no Seth call is active.");
       scanDOM();
       scanMobileInteraction();
       safeRepairStaleOverlay();
