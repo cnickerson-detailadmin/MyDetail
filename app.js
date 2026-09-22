@@ -6764,6 +6764,10 @@ let developerAITestRecordChunks = [];
 let developerAITestRecordMicSource = null;
 let developerAITestRecording = false;
 let developerAITestRecordingUrl = "";
+let developerAIChatGPTShareEnabled = false;
+let developerAITestLastRecordingBlob = null;
+let developerAITestLastRecordingMimeType = "";
+
 const DEVELOPER_AI_RESUME_PHRASES = ["developer ai", "hey developer", "hey ai", "myservice ai"];
 
 const DEVELOPER_AI_SITE_WORDS = [
@@ -7579,6 +7583,108 @@ function developerAITestRecordingStream() {
   return developerAIRealtimeStream || developerAIFreeMicStream || null;
 }
 
+function developerAIChatGPTShareSummary() {
+  const health = developerAICallManagerSnapshot();
+  const safeAudit = (developerAICallManagerAudit || []).slice(0, 30).map(item => ({
+    time: item.time,
+    kind: item.kind,
+    detail: String(item.detail || "")
+      .replace(/sk-[A-Za-z0-9_-]+/g, "[REDACTED]")
+      .replace(/AIza[A-Za-z0-9_-]+/g, "[REDACTED]")
+      .slice(0, 220)
+  }));
+  return [
+    "MyService Seth call diagnostics",
+    "Provider: " + health.provider,
+    "Connection: " + health.connection,
+    "Microphone: " + health.mic,
+    "Playback: " + health.playback,
+    "Pipeline stage: " + developerAIPipelineStage,
+    "Last incident: " + (health.lastIncident || "none"),
+    "Auto recoveries: " + developerAIAutoRecoveryCount,
+    "",
+    "Recent diagnostics:",
+    ...safeAudit.map(item => item.time + " • " + item.kind + " • " + item.detail),
+    "",
+    "Please analyze the attached Seth call recording and these diagnostics. Focus on call audio, interruptions, silence, provider failures, playback problems, and the smallest safe MyService fix."
+  ].join("\n");
+}
+
+async function shareDeveloperAICallForChatGPT() {
+  const blob = developerAITestLastRecordingBlob;
+  if (!blob) {
+    updateDeveloperAICallWindow("Nothing to share", "Record the Seth call first.");
+    return;
+  }
+
+  const mimeType = developerAITestLastRecordingMimeType || blob.type || "audio/mp4";
+  const file = new File([blob], developerAITestRecordingFilename(mimeType), { type: mimeType });
+  const summary = developerAIChatGPTShareSummary();
+
+  if (navigator.share) {
+    try {
+      const payload = { title: "MyService Seth call", text: summary, files: [file] };
+      if (!navigator.canShare || navigator.canShare({ files: [file] })) {
+        await navigator.share(payload);
+        return;
+      }
+    } catch (error) {
+      if (String(error?.name || "") === "AbortError") return;
+    }
+  }
+
+  try { await navigator.clipboard?.writeText?.(summary); } catch (_) {}
+  const save = document.createElement("a");
+  save.href = URL.createObjectURL(blob);
+  save.download = developerAITestRecordingFilename(mimeType);
+  save.click();
+  setTimeout(() => URL.revokeObjectURL(save.href), 3000);
+  updateDeveloperAICallWindow("Call package ready", "Recording saved. Diagnostics were copied when your browser allowed it; attach both to ChatGPT.");
+}
+
+function renderDeveloperAIChatGPTShareButton() {
+  $("developer-ai-share-chatgpt-ready")?.remove();
+  if (!developerAIChatGPTShareEnabled || !developerAITestLastRecordingBlob) return;
+
+  const button = document.createElement("button");
+  button.id = "developer-ai-share-chatgpt-ready";
+  button.type = "button";
+  button.textContent = "SHARE CALL WITH CHATGPT";
+  button.style.cssText = "position:fixed;left:18px;right:18px;bottom:max(84px,calc(env(safe-area-inset-bottom) + 84px));z-index:2147483647;padding:14px 16px;border:0;border-radius:16px;background:#fff;color:#0f2344;text-align:center;font-weight:900;box-shadow:0 10px 30px rgba(0,0,0,.32);";
+  button.onclick = () => shareDeveloperAICallForChatGPT();
+  document.body.appendChild(button);
+}
+
+function toggleDeveloperAIChatGPTShare() {
+  developerAIChatGPTShareEnabled = !developerAIChatGPTShareEnabled;
+  const btn = $("developer-ai-call-share-chatgpt");
+  if (btn) {
+    btn.textContent = developerAIChatGPTShareEnabled ? "CHATGPT SHARE: ON" : "CHATGPT SHARE: OFF";
+    btn.style.background = developerAIChatGPTShareEnabled ? "white" : "rgba(255,255,255,.16)";
+    btn.style.color = developerAIChatGPTShareEnabled ? "#0f5fc7" : "white";
+  }
+
+  if (developerAIChatGPTShareEnabled) {
+    const approved = window.confirm(
+      "Prepare this Seth call for ChatGPT analysis?\n\nMyService will record the call locally. When you stop the recording, tap SHARE CALL WITH CHATGPT and choose ChatGPT in the iPhone share sheet. This does not silently stream your microphone or screen."
+    );
+    if (!approved) {
+      developerAIChatGPTShareEnabled = false;
+      if (btn) {
+        btn.textContent = "CHATGPT SHARE: OFF";
+        btn.style.background = "rgba(255,255,255,.16)";
+        btn.style.color = "white";
+      }
+      return;
+    }
+    if (!developerAITestRecording) {
+      toggleDeveloperAITestRecording(true).catch(() => {
+        updateDeveloperAICallWindow("Recording unavailable", "ChatGPT sharing needs a Seth call recording first.");
+      });
+    }
+  }
+}
+
 function developerAITestRecordingFilename(mimeType = "audio/mp4") {
   const d = new Date();
   const pad = n => String(n).padStart(2, "0");
@@ -7608,6 +7714,9 @@ function stopDeveloperAITestRecording(showSave = true) {
 
     const mimeType = recorder.mimeType || "audio/mp4";
     const blob = new Blob(chunks, { type: mimeType });
+    developerAITestLastRecordingBlob = blob;
+    developerAITestLastRecordingMimeType = mimeType;
+
     if (developerAITestRecordingUrl) {
       try { URL.revokeObjectURL(developerAITestRecordingUrl); } catch (_) {}
     }
@@ -7626,6 +7735,8 @@ function stopDeveloperAITestRecording(showSave = true) {
       save.textContent = "SAVE SETH CALL RECORDING";
       save.onclick = () => setTimeout(() => save.remove(), 2500);
       updateDeveloperAICallWindow("Recording ready", "Tap SAVE SETH CALL RECORDING.");
+      renderDeveloperAIChatGPTShareButton();
+
     }
   };
 
@@ -7647,17 +7758,19 @@ function stopDeveloperAITestRecording(showSave = true) {
   if (label) label.textContent = "Record call • local only";
 }
 
-async function toggleDeveloperAITestRecording() {
+async function toggleDeveloperAITestRecording(skipConfirm = false) {
   if (developerAITestRecording) {
     stopDeveloperAITestRecording(true);
     updateDeveloperAICallWindow("Listening…", "Test recording stopped — save button ready.");
     return;
   }
 
-  const approved = window.confirm(
-    "Start recording this Seth call?\n\nThe recording stays on this device until you save it. Tell anyone else on the call before recording."
-  );
-  if (!approved) return;
+  if (!skipConfirm) {
+    const approved = window.confirm(
+      "Start recording this Seth call?\n\nThe recording stays on this device until you save it. Tell anyone else on the call before recording."
+    );
+    if (!approved) return;
+  }
 
   let stream = developerAITestRecordingStream();
   if (!stream || !stream.getAudioTracks?.().length) {
@@ -7985,6 +8098,8 @@ function openDeveloperAICallWindow() {
         style="min-height:54px;border:0;border-radius:18px;background:rgba(255,255,255,.16);color:white;font-weight:850;">CALL DETAILS</button>
       <button id="developer-ai-call-troubleshoot" type="button" onclick="event.preventDefault();event.stopPropagation();window.__myserviceTroubleshootSeth?.(event);"
         style="grid-column:1 / -1;min-height:54px;border:0;border-radius:18px;background:rgba(255,255,255,.22);color:white;font-weight:900;">🛠 TROUBLESHOOT SETH</button>
+      <button id="developer-ai-call-share-chatgpt" type="button"
+        style="grid-column:1 / -1;min-height:54px;border:1px solid rgba(255,255,255,.35);border-radius:18px;background:rgba(255,255,255,.16);color:white;font-weight:900;">CHATGPT SHARE: OFF</button>
       </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
       <button id="developer-ai-call-speaker" type="button"
@@ -8008,6 +8123,7 @@ function openDeveloperAICallWindow() {
       updateDeveloperAICallWindow("Recording unavailable", "Could not start the local test recording.");
     });
   };
+  $("developer-ai-call-share-chatgpt").onclick = () => toggleDeveloperAIChatGPTShare();
   $("developer-ai-call-quiet").onclick = () => setDeveloperAIQuietMode(!developerAIQuietMode);
   let developerMicEnabled = true;
   $("developer-ai-call-mic").onclick = function () {
