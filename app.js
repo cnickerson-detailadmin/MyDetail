@@ -6974,6 +6974,12 @@ let developerAITestRecordMicSource = null;
 let developerAITestRecording = false;
 let developerAITestRecordingUrl = "";
 let developerAIChatGPTShareEnabled = false;
+const DEVELOPER_AI_CHATGPT_AUTO_SHARE_KEY = "myservice_seth_chatgpt_auto_share_v1";
+let developerAIChatGPTAutoShareEnabled = (() => {
+  try { return localStorage.getItem(DEVELOPER_AI_CHATGPT_AUTO_SHARE_KEY) === "1"; }
+  catch (_) { return false; }
+})();
+let developerAIChatGPTAutoSharePending = false;
 let developerAITestLastRecordingBlob = null;
 let developerAITestLastRecordingMimeType = "";
 let developerAIChatGPTLastCallSummary = "";
@@ -7488,7 +7494,9 @@ function stopDeveloperAICall() {
     clearInterval(window.__myserviceCallExterminationTimer);
     window.__myserviceCallExterminationTimer = null;
   }
-  if (developerAIChatGPTShareEnabled) developerAIChatGPTLastCallSummary = developerAIChatGPTShareSummary();
+  if (developerAIChatGPTShareEnabled || developerAIChatGPTAutoShareEnabled) {
+    developerAIChatGPTLastCallSummary = developerAIChatGPTShareSummary();
+  }
   if (developerAITestRecording) stopDeveloperAITestRecording(true);
   developerAICallMode = false;
   stopDeveloperAICallManager();
@@ -7821,11 +7829,11 @@ function developerAIChatGPTShareSummary() {
   ].join("\n");
 }
 
-async function shareDeveloperAICallForChatGPT() {
+async function shareDeveloperAICallForChatGPT(options = {}) {
   const blob = developerAITestLastRecordingBlob;
   if (!blob) {
     updateDeveloperAICallWindow("Nothing to share", "Record the Seth call first.");
-    return;
+    return false;
   }
 
   const mimeType = developerAITestLastRecordingMimeType || blob.type || "audio/mp4";
@@ -7837,10 +7845,11 @@ async function shareDeveloperAICallForChatGPT() {
       const payload = { title: "MyService Seth call", text: summary, files: [file] };
       if (!navigator.canShare || navigator.canShare({ files: [file] })) {
         await navigator.share(payload);
-        return;
+        developerAIChatGPTAutoSharePending = false;
+        return true;
       }
     } catch (error) {
-      if (String(error?.name || "") === "AbortError") return;
+      if (String(error?.name || "") === "AbortError") return false;
     }
   }
 
@@ -7850,8 +7859,79 @@ async function shareDeveloperAICallForChatGPT() {
   save.download = developerAITestRecordingFilename(mimeType);
   save.click();
   setTimeout(() => URL.revokeObjectURL(save.href), 3000);
-  updateDeveloperAICallWindow("Call package ready", "Recording saved. Diagnostics were copied when your browser allowed it; attach both to ChatGPT.");
+  developerAIChatGPTAutoSharePending = true;
+  updateDeveloperAICallWindow(
+    "Call package ready",
+    developerAIChatGPTAutoShareEnabled
+      ? "Auto Share prepared everything. iOS blocked silent delivery to another app, so one SEND tap is required for the ChatGPT handoff."
+      : "Recording saved. Diagnostics were copied when your browser allowed it; attach both to ChatGPT."
+  );
+  return false;
 }
+
+function renderDeveloperAIChatGPTAutoShareButton() {
+  $("developer-ai-auto-share-ready")?.remove();
+  if (!developerAIChatGPTAutoShareEnabled || !developerAIChatGPTAutoSharePending || !developerAITestLastRecordingBlob) return;
+
+  const button = document.createElement("button");
+  button.id = "developer-ai-auto-share-ready";
+  button.type = "button";
+  button.textContent = "SEND AUTO-SHARE PACKAGE TO CHATGPT";
+  button.style.cssText = "position:fixed;left:18px;right:18px;bottom:max(18px,env(safe-area-inset-bottom));z-index:2147483647;padding:15px 16px;border:0;border-radius:16px;background:#fff;color:#0f2344;text-align:center;font-weight:950;box-shadow:0 10px 30px rgba(0,0,0,.32);";
+  button.onclick = async () => {
+    const sent = await shareDeveloperAICallForChatGPT({ auto:true });
+    if (sent) button.remove();
+  };
+  document.body.appendChild(button);
+}
+
+function refreshDeveloperAIChatGPTAutoShareUI() {
+  const btn = $("developer-ai-call-auto-share-chatgpt");
+  if (!btn) return;
+  btn.textContent = developerAIChatGPTAutoShareEnabled ? "CHATGPT AUTO SHARE: ON" : "CHATGPT AUTO SHARE: OFF";
+  btn.style.background = developerAIChatGPTAutoShareEnabled ? "white" : "rgba(255,255,255,.16)";
+  btn.style.color = developerAIChatGPTAutoShareEnabled ? "#0f5fc7" : "white";
+}
+
+async function toggleDeveloperAIChatGPTAutoShare() {
+  if (!developerAIChatGPTAutoShareEnabled) {
+    const approved = window.confirm(
+      "Turn on Seth ChatGPT Auto Share?\n\nMyService will automatically record Seth calls and prepare the approved call audio + redacted diagnostics for ChatGPT. iPhone/iOS may still require one final SEND tap because websites cannot silently deliver files into another app or this exact ChatGPT conversation."
+    );
+    if (!approved) return;
+    developerAIChatGPTAutoShareEnabled = true;
+    try { localStorage.setItem(DEVELOPER_AI_CHATGPT_AUTO_SHARE_KEY, "1"); } catch (_) {}
+    developerAIChatGPTShareEnabled = true;
+    developerAIChatGPTAutoSharePending = false;
+    refreshDeveloperAIChatGPTAutoShareUI();
+    if (!developerAITestRecording && developerAICallMode) {
+      await toggleDeveloperAITestRecording(true).catch(() => {});
+    }
+    updateDeveloperAICallWindow("AUTO SHARE ON", "This and future Seth calls will auto-record and prepare the ChatGPT troubleshooting package.");
+    return;
+  }
+
+  developerAIChatGPTAutoShareEnabled = false;
+  developerAIChatGPTAutoSharePending = false;
+  try { localStorage.removeItem(DEVELOPER_AI_CHATGPT_AUTO_SHARE_KEY); } catch (_) {}
+  refreshDeveloperAIChatGPTAutoShareUI();
+  $("developer-ai-auto-share-ready")?.remove();
+  updateDeveloperAICallWindow("AUTO SHARE OFF", "Future Seth calls will not automatically prepare a ChatGPT package.");
+}
+
+async function startDeveloperAIChatGPTAutoShareRecording() {
+  if (!developerAIChatGPTAutoShareEnabled || developerAITestRecording) return;
+  developerAIChatGPTShareEnabled = true;
+  developerAIChatGPTAutoSharePending = false;
+  for (let attempt = 0; attempt < 16; attempt += 1) {
+    const stream = developerAITestRecordingStream();
+    if (stream?.getAudioTracks?.().length) break;
+    await new Promise(resolve => setTimeout(resolve, 150));
+  }
+  if (!developerAICallMode || developerAITestRecording) return;
+  await toggleDeveloperAITestRecording(true).catch(() => {});
+}
+
 
 function renderDeveloperAIChatGPTShareButton() {
   $("developer-ai-share-chatgpt-ready")?.remove();
@@ -7945,8 +8025,17 @@ function stopDeveloperAITestRecording(showSave = true) {
       save.download = developerAITestRecordingFilename(mimeType);
       save.textContent = "SAVE SETH CALL RECORDING";
       save.onclick = () => setTimeout(() => save.remove(), 2500);
-      updateDeveloperAICallWindow("Recording ready", "Tap SAVE SETH CALL RECORDING.");
+      updateDeveloperAICallWindow(
+        "Recording ready",
+        developerAIChatGPTAutoShareEnabled
+          ? "Auto Share prepared the Seth call package."
+          : "Tap SAVE SETH CALL RECORDING."
+      );
       renderDeveloperAIChatGPTShareButton();
+      if (developerAIChatGPTAutoShareEnabled) {
+        developerAIChatGPTAutoSharePending = true;
+        renderDeveloperAIChatGPTAutoShareButton();
+      }
 
     }
   };
@@ -8313,6 +8402,8 @@ function openDeveloperAICallWindow() {
         style="grid-column:1 / -1;min-height:54px;border:0;border-radius:18px;background:rgba(255,255,255,.22);color:white;font-weight:900;">🛠 TROUBLESHOOT SETH</button>
       <button id="developer-ai-call-share-chatgpt" type="button"
         style="grid-column:1 / -1;min-height:54px;border:1px solid rgba(255,255,255,.35);border-radius:18px;background:rgba(255,255,255,.16);color:white;font-weight:900;">CHATGPT SHARE: OFF</button>
+      <button id="developer-ai-call-auto-share-chatgpt" type="button"
+        style="grid-column:1 / -1;min-height:54px;border:1px solid rgba(255,255,255,.45);border-radius:18px;background:rgba(255,255,255,.16);color:white;font-weight:950;">CHATGPT AUTO SHARE: OFF</button>
       </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
       <button id="developer-ai-call-speaker" type="button"
@@ -8337,6 +8428,11 @@ function openDeveloperAICallWindow() {
     });
   };
   $("developer-ai-call-share-chatgpt").onclick = () => toggleDeveloperAIChatGPTShare();
+  $("developer-ai-call-auto-share-chatgpt").onclick = () => toggleDeveloperAIChatGPTAutoShare();
+  refreshDeveloperAIChatGPTAutoShareUI();
+  if (developerAIChatGPTAutoShareEnabled) {
+    setTimeout(() => startDeveloperAIChatGPTAutoShareRecording(), 250);
+  }
   $("developer-ai-call-quiet").onclick = () => setDeveloperAIQuietMode(!developerAIQuietMode);
   let developerMicEnabled = true;
   $("developer-ai-call-mic").onclick = function () {
