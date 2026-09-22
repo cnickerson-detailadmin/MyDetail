@@ -51,7 +51,7 @@ jobs:
         run: |
           set -euo pipefail
           if grep -RInE '(SUPABASE_SERVICE_ROLE_KEY|sb_secret_[A-Za-z0-9_-]+)' \
-            --exclude-dir=.git --exclude='*.md' .; then
+            --exclude-dir=.git --exclude-dir=.github --exclude='*.md' .; then
             echo "Potential server-side Supabase secret committed to the repository."
             exit 1
           fi
