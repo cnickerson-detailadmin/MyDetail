@@ -1,0 +1,57 @@
+name: MyService Feature Safety Gate
+
+on:
+  push:
+    branches: [feature/seth-chatgpt-call-share]
+
+permissions:
+  contents: read
+
+jobs:
+  regression-gate:
+    name: Regression Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify required production files
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s index.html
+          test -s app.js
+          test -s styles.css
+          test -s manifest.json
+          test -s service-worker.js
+
+      - name: JavaScript syntax check
+        run: node --check app.js
+
+      - name: Block merge-conflict markers
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE '^(<<<<<<<|=======|>>>>>>>)' --exclude-dir=.git .; then
+            echo "Merge-conflict markers found."
+            exit 1
+          fi
+
+      - name: Verify HTML references production app
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'app.js' index.html
+          grep -q 'styles.css' index.html
+
+      - name: Guard against exposed server secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE '(SUPABASE_SERVICE_ROLE_KEY|sb_secret_[A-Za-z0-9_-]+)'             --exclude-dir=.git --exclude-dir=.github --exclude='*.md' .; then
+            echo "Potential server-side Supabase secret committed to the repository."
+            exit 1
+          fi
+
+      - name: Safety gate passed
+        run: echo "MyService feature regression checks passed."
