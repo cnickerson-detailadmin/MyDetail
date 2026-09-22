@@ -6748,6 +6748,140 @@ function developerAICallManagerSnapshot() {
   developerAICallManagerHealth.updatedAt = Date.now();
   return { ...developerAICallManagerHealth };
 }
+
+function getDeveloperAIPhoneDiagnosis() {
+  const h = developerAICallManagerSnapshot();
+  const audioState = String(developerAIAudioContext?.state || "unavailable");
+  const stage = String(developerAIPipelineStage || "unknown");
+  const error = String(developerAIPipelineLastError || h.lastIncident || "").slice(0, 220);
+  const micLive = h.mic === "live";
+  const providerProblem =
+    /provider|gemini|groq|setup|greeting|tts|backend|websocket/i.test(stage + " " + error) &&
+    !/playback|decoder|audio route|output/i.test(stage + " " + error);
+  const playbackProblem =
+    h.playback === "audio-received" ||
+    h.playback === "failed" ||
+    /playback|decoder|audio route|output|play\(\)|blocked/i.test(stage + " " + error);
+  const backgroundProblem = document.hidden === true;
+  const offline = navigator.onLine === false;
+  const bluetoothExposed = typeof HTMLMediaElement !== "undefined" &&
+    typeof HTMLMediaElement.prototype?.setSinkId === "function";
+
+  const findings = [];
+  const add = (kind, cause, fix) => findings.push({ kind, cause, fix });
+
+  if (micLive) {
+    add(
+      "DETECTED",
+      "Your iPhone microphone stream is live in MyService.",
+      "Do not troubleshoot microphone permission first. Focus on Seth provider, playback, and Bluetooth/output routing."
+    );
+  } else {
+    add(
+      "NEEDS CHECK",
+      "MyService cannot verify a live microphone stream right now.",
+      "On iOS 26–27: Settings → Apps → Safari → Microphone → Allow. If MyService is open in Safari, also use Safari → Page Menu → Website Settings → Microphone → Allow."
+    );
+  }
+
+  if (providerProblem) {
+    add(
+      "DETECTED",
+      "The Seth AI/provider path is failing before audio playback.",
+      "This is a MyService/provider problem, not an iPhone microphone setting. Retry after the provider/backend error is repaired; do not change iPhone mic settings unless the mic check above also fails."
+    );
+  }
+
+  if (playbackProblem) {
+    add(
+      "LIKELY",
+      "Seth audio reached the phone or the playback layer failed, but you may not hear it.",
+      "On iOS 26–27: open Control Center → tap the Playback Destination/AirPlay control in the audio card → select your AirPods or intended Bluetooth device. Then return to MyService and tap CALL again so iOS re-arms browser audio."
+    );
+  }
+
+  if (audioState === "suspended") {
+    add(
+      "DETECTED",
+      "The browser audio engine is suspended.",
+      "Return to the Seth call screen and tap CALL once. MyService will try to resume AudioContext from that user tap. Keep the app foregrounded while testing."
+    );
+  }
+
+  if (backgroundProblem) {
+    add(
+      "DETECTED",
+      "MyService is currently backgrounded.",
+      "Keep MyService open in the foreground while testing Seth. iOS can suspend microphone/audio work when a web app is backgrounded or the screen locks."
+    );
+  }
+
+  if (offline) {
+    add(
+      "DETECTED",
+      "The iPhone reports no network connection.",
+      "Reconnect Wi‑Fi or cellular data, then reopen Seth and retry the call."
+    );
+  }
+
+  if (!bluetoothExposed) {
+    add(
+      "IOS LIMIT",
+      "Safari/MyService may not be allowed to name or directly force the Bluetooth output device.",
+      "Use iPhone Control Center to choose the playback destination. MyService can verify playback state, but iOS may keep the final route private."
+    );
+  }
+
+  if (!findings.some(x => x.kind === "DETECTED" && x.cause.includes("provider")) &&
+      !playbackProblem && micLive && audioState === "running" && !offline) {
+    add(
+      "NEXT CHECK",
+      "Core browser audio and microphone signals look healthy.",
+      "Use CALL DETAILS and RUN FULL SELF-CHECK. If Seth is still silent, the next priority is provider response → audio decode → Bluetooth/output route, in that order."
+    );
+  }
+
+  return {
+    device: "iPhone / iOS 26–27 troubleshooting",
+    stage,
+    provider: h.provider,
+    mic: h.mic,
+    playback: h.playback,
+    audioState,
+    findings
+  };
+}
+
+function showDeveloperAIPhoneDiagnosis() {
+  const callWindow = $("developer-ai-call-window");
+  if (!callWindow) return;
+
+  $("developer-ai-iphone-diagnosis")?.remove();
+  const result = getDeveloperAIPhoneDiagnosis();
+  const panel = document.createElement("div");
+  panel.id = "developer-ai-iphone-diagnosis";
+  panel.style.cssText = "position:fixed;left:14px;right:14px;top:max(14px,env(safe-area-inset-top));bottom:max(14px,env(safe-area-inset-bottom));z-index:2147483647;background:white;color:#0f2344;border-radius:22px;padding:16px;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.45);text-align:left;-webkit-overflow-scrolling:touch;";
+  panel.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;position:sticky;top:0;background:white;padding-bottom:10px;">' +
+      '<div><div style="font-size:12px;font-weight:900;letter-spacing:.8px;color:#5d6f87;">IPHONE 16 • IOS 26–27</div><div style="font-size:22px;font-weight:950;">Seth Phone Diagnosis</div></div>' +
+      '<button id="developer-ai-iphone-diagnosis-close" type="button" style="border:0;background:#eaf1fa;width:42px;height:42px;border-radius:50%;font-size:22px;">×</button>' +
+    '</div>' +
+    '<div style="font-size:13px;color:#5d6f87;margin:4px 0 12px;">Stage: ' + escapeHTML(result.stage) +
+      ' • Provider: ' + escapeHTML(result.provider) +
+      ' • Mic: ' + escapeHTML(result.mic) +
+      ' • Playback: ' + escapeHTML(result.playback) +
+      ' • Audio engine: ' + escapeHTML(result.audioState) + '</div>' +
+    result.findings.map(item =>
+      '<div style="padding:13px 14px;border:1px solid #dbe4f0;border-radius:16px;margin:9px 0;background:#f8fbff;">' +
+        '<div style="font-size:11px;font-weight:950;letter-spacing:.7px;color:#0f5fc7;">' + escapeHTML(item.kind) + '</div>' +
+        '<div style="font-weight:900;margin:4px 0 7px;">' + escapeHTML(item.cause) + '</div>' +
+        '<div style="font-size:14px;line-height:1.45;">' + escapeHTML(item.fix) + '</div>' +
+      '</div>'
+    ).join("");
+
+  callWindow.appendChild(panel);
+  $("developer-ai-iphone-diagnosis-close").onclick = () => panel.remove();
+}
 let developerAICallManagerPlaybackFailures = 0;
 let developerAICallManagerLastHealthyAt = 0;
 let developerAILastSpokenReply = "";
@@ -8013,6 +8147,7 @@ function openDeveloperAITroubleshootMenu(event) {
     <button id="developer-ai-fix-robotic" type="button" style="width:100%;min-height:52px;margin:5px 0;border:1px solid #d7e2f0;border-radius:16px;background:#f8fbff;font-weight:850;">AI TOO ROBOTIC</button>
     <button id="developer-ai-fix-full-check" type="button" style="width:100%;min-height:52px;margin:5px 0;border:1px solid #d7e2f0;border-radius:16px;background:#f8fbff;font-weight:850;">RUN FULL SELF-CHECK</button>
     <button id="developer-ai-fix-deep-code" type="button" style="width:100%;min-height:52px;margin:5px 0;border:1px solid #d7e2f0;border-radius:16px;background:#eef6ff;font-weight:900;">DEEP AI CODE CHECK</button>
+    <button id="developer-ai-fix-iphone" type="button" style="width:100%;min-height:52px;margin:5px 0;border:1px solid #b8d6fb;border-radius:16px;background:#eaf4ff;font-weight:900;">📱 IPHONE 16 / IOS 26–27 FIXES</button>
     <button id="developer-ai-fix-close" type="button" style="width:100%;min-height:48px;margin-top:7px;border:0;border-radius:16px;background:#eaf1fa;font-weight:850;">CLOSE</button>
   `;
 
@@ -8040,6 +8175,7 @@ function openDeveloperAITroubleshootMenu(event) {
   $("developer-ai-fix-robotic").onclick = async () => { clearInterval(watchdog); menu.remove(); await runDeveloperAICallTroubleshooter("too-robotic"); };
   $("developer-ai-fix-full-check").onclick = async () => { clearInterval(watchdog); menu.remove(); await runSethSelfCheck(); };
   $("developer-ai-fix-deep-code").onclick = async () => { clearInterval(watchdog); menu.remove(); await runSethDeepAICodeCheck(); };
+  $("developer-ai-fix-iphone").onclick = () => { clearInterval(watchdog); menu.remove(); showDeveloperAIPhoneDiagnosis(); };
   $("developer-ai-fix-close").onclick = () => { clearInterval(watchdog); menu.remove(); };
 }
 
@@ -8142,7 +8278,8 @@ function openDeveloperAICallWindow() {
     updateDeveloperAICallWindow(
       h.state === "healthy" ? "🟢 CALL HEALTHY" : h.state === "failure" ? "🔴 CALL FAILURE" : "🟠 CALL DETAILS",
       "Stage: " + developerAIPipelineStage + " • Auto-fixes: " + developerAIAutoRecoveryCount + " • Provider: " + h.provider + " • Mic: " + h.mic + " • Connection: " + h.connection + " • Playback: " + h.playback +
-      (h.lastIncident ? " • " + h.lastIncident : "")
+      (h.lastIncident ? " • " + h.lastIncident : "") +
+      (h.mic === "live" ? " • iPhone mic is live; check provider/playback before mic settings." : "")
     );
   };
 
@@ -8162,7 +8299,8 @@ function openDeveloperAICallWindow() {
     updateDeveloperAICallWindow(
       h.state === "healthy" ? "🟢 CALL HEALTHY" : h.state === "failure" ? "🔴 CALL FAILURE" : "🟠 CALL DETAILS",
       "Stage: " + developerAIPipelineStage + " • Auto-fixes: " + developerAIAutoRecoveryCount + " • Provider: " + h.provider + " • Mic: " + h.mic + " • Connection: " + h.connection + " • Playback: " + h.playback +
-      (h.lastIncident ? " • " + h.lastIncident : "")
+      (h.lastIncident ? " • " + h.lastIncident : "") +
+      (h.mic === "live" ? " • iPhone mic is live; check provider/playback before mic settings." : "")
     );
   };
 
