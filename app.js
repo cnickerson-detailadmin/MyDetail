@@ -8108,37 +8108,88 @@ function renderDeveloperAIChatGPTShareButton() {
   document.body.appendChild(button);
 }
 
-function startDeveloperAIChatGPTTroubleshooter() {
-  // This is intentionally NOT a second voice call. Seth keeps the only mic/audio
-  // session; ChatGPT troubleshooting receives sanitized call diagnostics only.
-  developerAIChatGPTShareEnabled = true;
+let developerAIChatGPTTroubleshootTimer = null;
+let developerAIChatGPTTroubleshootBusy = false;
 
+function developerAIChatGPTDiagnosticPayload() {
+  const snap = developerAICallManagerSnapshot();
+  const recentAudit = (Array.isArray(developerAICallManager?.audit) ? developerAICallManager.audit : [])
+    .slice(-12)
+    .map(item => ({
+      event: String(item?.event || "").slice(0, 100),
+      detail: String(item?.detail || "").replace(/sk-[A-Za-z0-9_-]+/g, "[redacted]").replace(/AIza[A-Za-z0-9_-]+/g, "[redacted]").slice(0, 240)
+    }));
+  return {
+    state: snap.state,
+    mic: snap.mic,
+    provider: snap.provider,
+    playback: snap.playback,
+    lastIncident: snap.lastIncident || "",
+    autoRecoveries: snap.autoRecoveries || 0,
+    recentAudit
+  };
+}
+
+async function sendDeveloperAIChatGPTTroubleshootPulse() {
+  if (!developerAIChatGPTShareEnabled || developerAIChatGPTTroubleshootBusy) return;
+  developerAIChatGPTTroubleshootBusy = true;
+  try {
+    const result = await callMyServiceEdgeFunction("developer-ai", {
+      action: "chatgpt_troubleshoot",
+      diagnostic: developerAIChatGPTDiagnosticPayload(),
+      transcript: []
+    });
+    if (!developerAIChatGPTShareEnabled) return;
+    const diagnosis = String(result?.diagnosis || "").trim();
+    const instruction = String(result?.instructionForSeth || "").trim();
+    const proposedFix = String(result?.proposedFix || "").trim();
+    developerAICallManagerRecord("chatgpt-troubleshooter-result", diagnosis || "Analysis received.");
+
+    if (result?.approvalRequired === true && proposedFix) {
+      updateDeveloperAICallWindow("🟠 ChatGPT found a fix", proposedFix + " — approval required before any persistent change.");
+    } else if (diagnosis || instruction) {
+      updateDeveloperAICallWindow("🟢 ChatGPT Troubleshooter", (diagnosis + (instruction ? " • Seth: " + instruction : "")).slice(0, 700));
+    }
+
+    // Only safe, temporary call recovery is automatic. No code/config/data writes.
+    const runtime = (diagnosis + " " + instruction).toLowerCase();
+    if (/provider failover|switch provider/.test(runtime)) {
+      try { await developerAIFailOverProvider?.("ChatGPT read-only troubleshooter"); } catch (_) {}
+    } else if (/audio[- ]path reset|reset audio|playback.*reset/.test(runtime)) {
+      try { unlockDeveloperAIAudio(); } catch (_) {}
+    }
+  } catch (error) {
+    if (developerAIChatGPTShareEnabled) {
+      updateDeveloperAICallWindow("🟠 ChatGPT Troubleshooter", String(error?.message || "Troubleshooter unavailable.").slice(0, 300));
+    }
+  } finally {
+    developerAIChatGPTTroubleshootBusy = false;
+  }
+}
+
+function startDeveloperAIChatGPTTroubleshooter() {
+  developerAIChatGPTShareEnabled = true;
   const btn = $("developer-ai-call-share-chatgpt");
   if (btn) {
     btn.textContent = "CHATGPT TROUBLESHOOT: ON";
     btn.style.background = "white";
     btn.style.color = "#0f5fc7";
   }
-
-  const summary = developerAIChatGPTShareSummary();
-  developerAIChatGPTLastCallSummary = summary;
-  developerAICallManagerRecord("chatgpt-troubleshooter-started", "Sanitized Seth call diagnostics enabled; no second microphone session.");
-
-  updateDeveloperAICallWindow(
-    "🟢 ChatGPT Troubleshooter",
-    "Seth keeps the only call. MyService is collecting sanitized call diagnostics in real time — no second microphone or screen-share session."
-  );
-
-  // Keep the existing automatic call scanner/recovery active. This path is
-  // read-only: it never invokes code push, auth, RLS, permissions, or deploys.
+  developerAICallManagerRecord("chatgpt-troubleshooter-started", "Automatic sanitized diagnostic delivery enabled; Seth remains the only microphone session.");
+  updateDeveloperAICallWindow("🟢 ChatGPT Troubleshooter", "Connected. Seth remains the only call; sanitized diagnostics are being sent automatically.");
   try { runSethSelfCheck(); } catch (_) {}
+  clearInterval(developerAIChatGPTTroubleshootTimer);
+  sendDeveloperAIChatGPTTroubleshootPulse();
+  developerAIChatGPTTroubleshootTimer = setInterval(sendDeveloperAIChatGPTTroubleshootPulse, 5000);
 }
 
 function stopDeveloperAIChatGPTTroubleshooter() {
   developerAIChatGPTShareEnabled = false;
+  clearInterval(developerAIChatGPTTroubleshootTimer);
+  developerAIChatGPTTroubleshootTimer = null;
+  developerAIChatGPTTroubleshootBusy = false;
   developerAIChatGPTLastCallSummary = developerAIChatGPTShareSummary();
-  developerAICallManagerRecord("chatgpt-troubleshooter-stopped", "Sanitized diagnostic collection stopped.");
-
+  developerAICallManagerRecord("chatgpt-troubleshooter-stopped", "Automatic diagnostic delivery stopped.");
   const btn = $("developer-ai-call-share-chatgpt");
   if (btn) {
     btn.textContent = "CHATGPT TROUBLESHOOT";
