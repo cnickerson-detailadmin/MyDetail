@@ -7115,6 +7115,7 @@ function developerAICallManagerRecord(kind, detail = "") {
   });
   developerAICallManagerAudit = developerAICallManagerAudit.slice(0, 40);
   recordDeveloperAIImprovementMetric(kind, safeDetail);
+  developerAIChatGPTCaptureEvent?.(kind, safeDetail);
 }
 
 function developerAICallManagerSet(stateName, incident = "", action = "", result = "") {
@@ -7611,6 +7612,7 @@ function queueDeveloperAIUserSpeech(transcript) {
   developerAISpeechDebounce = setTimeout(async () => {
     const message = developerAISpeechBuffer.trim();
     developerAISpeechBuffer = "";
+    developerAIChatGPTCaptureTurn("user", message);
     developerAIUserIsSpeaking = false;
 
     if (!message || !developerAICallMode) {
@@ -7730,7 +7732,10 @@ function stopDeveloperAICall() {
     clearInterval(window.__myserviceCallExterminationTimer);
     window.__myserviceCallExterminationTimer = null;
   }
-  if (developerAIChatGPTShareEnabled) developerAIChatGPTLastCallSummary = developerAIChatGPTShareSummary();
+  if (developerAIChatGPTShareEnabled) {
+    developerAIChatGPTLastCallSummary = developerAIChatGPTShareSummary();
+    stopDeveloperAIChatGPTTroubleshooter(true);
+  }
   if (developerAITestRecording) stopDeveloperAITestRecording(true);
   developerAICallMode = false;
   stopDeveloperAICallManager();
@@ -8110,6 +8115,53 @@ function renderDeveloperAIChatGPTShareButton() {
 
 let developerAIChatGPTTroubleshootTimer = null;
 let developerAIChatGPTTroubleshootBusy = false;
+let developerAIChatGPTTroubleshootSession = null;
+let developerAIChatGPTTroubleshootDebounce = null;
+
+function developerAIChatGPTRedact(value) {
+  return String(value || "")
+    .replace(/\bcfut_[A-Za-z0-9_-]{8,}\b/g, "[REDACTED]")
+    .replace(/\bsk-[A-Za-z0-9_-]{16,}\b/g, "[REDACTED]")
+    .replace(/\bAIza[A-Za-z0-9_-]{12,}\b/g, "[REDACTED]")
+    .replace(/\bBearer\s+[A-Za-z0-9._-]{16,}\b/gi, "Bearer [REDACTED]")
+    .replace(/\b(?:password|passcode|api[_ -]?key|access[_ -]?token|pin|company[_ -]?code)\s*(?:is|[:=])\s*[^\s,;]{4,}/gi, "[REDACTED]")
+    .slice(0, 1600);
+}
+
+function developerAIChatGPTCaptureTurn(role, content) {
+  if (!developerAIChatGPTShareEnabled || !developerAIChatGPTTroubleshootSession) return;
+  const safe = developerAIChatGPTRedact(content).trim();
+  if (!safe) return;
+  developerAIChatGPTTroubleshootSession.transcript.push({
+    role: role === "assistant" ? "assistant" : "user",
+    content: safe,
+    time: new Date().toISOString()
+  });
+  developerAIChatGPTTroubleshootSession.transcript =
+    developerAIChatGPTTroubleshootSession.transcript.slice(-40);
+  scheduleDeveloperAIChatGPTTroubleshootPulse();
+}
+
+function developerAIChatGPTCaptureEvent(kind, detail) {
+  if (!developerAIChatGPTShareEnabled || !developerAIChatGPTTroubleshootSession) return;
+  developerAIChatGPTTroubleshootSession.events.push({
+    time: new Date().toISOString(),
+    kind: String(kind || "event").slice(0, 80),
+    detail: developerAIChatGPTRedact(detail).slice(0, 500)
+  });
+  developerAIChatGPTTroubleshootSession.events =
+    developerAIChatGPTTroubleshootSession.events.slice(-80);
+  scheduleDeveloperAIChatGPTTroubleshootPulse();
+}
+
+function scheduleDeveloperAIChatGPTTroubleshootPulse(delay = 900) {
+  if (!developerAIChatGPTShareEnabled) return;
+  clearTimeout(developerAIChatGPTTroubleshootDebounce);
+  developerAIChatGPTTroubleshootDebounce = setTimeout(
+    () => sendDeveloperAIChatGPTTroubleshootPulse(),
+    delay
+  );
+}
 
 function developerAIChatGPTDiagnosticPayload() {
   const snap = developerAICallManagerSnapshot();
@@ -8130,33 +8182,72 @@ function developerAIChatGPTDiagnosticPayload() {
   };
 }
 
-async function sendDeveloperAIChatGPTTroubleshootPulse() {
-  if (!developerAIChatGPTShareEnabled || developerAIChatGPTTroubleshootBusy) return;
+async function sendDeveloperAIChatGPTTroubleshootPulse(finalPulse = false) {
+  if (!developerAIChatGPTShareEnabled || developerAIChatGPTTroubleshootBusy || !developerAIChatGPTTroubleshootSession) return;
   developerAIChatGPTTroubleshootBusy = true;
+  const session = developerAIChatGPTTroubleshootSession;
+  const transcript = session.transcript.slice(-40);
+  const events = session.events.slice(-80);
+  session.sequence += 1;
   try {
     const result = await callMyServiceEdgeFunction("developer-ai", {
       action: "chatgpt_troubleshoot",
+      sessionId: session.id,
+      sequence: session.sequence,
+      startedAt: session.startedAt,
+      ended: finalPulse === true,
       diagnostic: developerAIChatGPTDiagnosticPayload(),
-      transcript: []
+      transcript,
+      events,
+      priorDiagnosis: String(session.lastDiagnosis || "").slice(0, 1000)
     });
-    if (!developerAIChatGPTShareEnabled) return;
+    if (!developerAIChatGPTShareEnabled && !finalPulse) return;
     const diagnosis = String(result?.diagnosis || "").trim();
     const instruction = String(result?.instructionForSeth || "").trim();
     const proposedFix = String(result?.proposedFix || "").trim();
+    const understoodIssue = String(result?.understoodIssue || "").trim();
+    if (diagnosis) session.lastDiagnosis = diagnosis;
     developerAICallManagerRecord("chatgpt-troubleshooter-result", diagnosis || "Analysis received.");
 
-    if (result?.approvalRequired === true && proposedFix) {
-      updateDeveloperAICallWindow("🟠 ChatGPT found a fix", proposedFix + " — approval required before any persistent change.");
-    } else if (diagnosis || instruction) {
-      updateDeveloperAICallWindow("🟢 ChatGPT Troubleshooter", (diagnosis + (instruction ? " • Seth: " + instruction : "")).slice(0, 700));
+    const spoken = [understoodIssue ? "I understand the issue as " + understoodIssue : "", diagnosis, instruction]
+      .filter(Boolean).join(" ");
+    if (spoken && developerAICallMode && !developerAIUserIsSpeaking) {
+      updateDeveloperAICallWindow("🟢 LIVE TROUBLESHOOTING", spoken.slice(0, 700));
+      try {
+        const voice = await callMyServiceEdgeFunction("developer-ai", {
+          action: developerAIFreeProvider + "_tts",
+          text: spoken.slice(0, 700),
+          voiceRepairMode: developerAIVoiceRepairMode
+        });
+        if (voice?.audioBase64) playDeveloperAIAudio(voice.audioBase64, voice.audioMimeType || "audio/mpeg", spoken);
+        else speakDeveloperAIBrowserFallback(spoken);
+      } catch (_) {
+        speakDeveloperAIBrowserFallback(spoken);
+      }
     }
 
-    // Only safe, temporary call recovery is automatic. No code/config/data writes.
+    if (result?.approvalRequired === true && proposedFix) {
+      updateDeveloperAICallWindow("🟠 Persistent fix needs approval", proposedFix + " — no persistent change was made.");
+    }
+
+    // Strict runtime-only repair whitelist. Model text can never execute arbitrary code.
     const runtime = (diagnosis + " " + instruction).toLowerCase();
-    if (/provider failover|switch provider/.test(runtime)) {
-      try { await developerAIFailOverProvider?.("ChatGPT read-only troubleshooter"); } catch (_) {}
-    } else if (/audio[- ]path reset|reset audio|playback.*reset/.test(runtime)) {
-      try { unlockDeveloperAIAudio(); } catch (_) {}
+    if (/provider failover|switch provider|provider connection/.test(runtime)) {
+      try { await developerAIFailOverProvider?.("Scoped live troubleshooter"); } catch (_) {}
+    }
+    if (/audio[- ]path reset|reset (?:the )?audio|playback path|audio output|output route/.test(runtime)) {
+      try { unlockDeveloperAIAudio(); await developerAIAudioContext?.resume?.(); } catch (_) {}
+    }
+    if (/microphone.*(?:stalled|not live|recover|reset)/.test(runtime)) {
+      try {
+        if (developerAIFreeCallMode) {
+          stopDeveloperAIFreeMediaCapture();
+          await startDeveloperAIFreeMediaCapture();
+        }
+      } catch (_) {}
+    }
+    if (/reconnect|connection.*(?:dropped|failed|stalled)/.test(runtime)) {
+      try { scheduleDeveloperAIReconnect?.("Scoped live troubleshooter"); } catch (_) {}
     }
   } catch (error) {
     if (developerAIChatGPTShareEnabled) {
@@ -8169,34 +8260,49 @@ async function sendDeveloperAIChatGPTTroubleshootPulse() {
 
 function startDeveloperAIChatGPTTroubleshooter() {
   developerAIChatGPTShareEnabled = true;
+  developerAIChatGPTTroubleshootSession = {
+    id: "seth-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8),
+    startedAt: new Date().toISOString(),
+    sequence: 0,
+    transcript: [],
+    events: [],
+    lastDiagnosis: ""
+  };
   const btn = $("developer-ai-call-share-chatgpt");
   if (btn) {
-    btn.textContent = "CHATGPT TROUBLESHOOT: ON";
+    btn.textContent = "CHATGPT + SETH TROUBLESHOOT: ON";
     btn.style.background = "white";
     btn.style.color = "#0f5fc7";
   }
-  developerAICallManagerRecord("chatgpt-troubleshooter-started", "Automatic sanitized diagnostic delivery enabled; Seth remains the only microphone session.");
-  updateDeveloperAICallWindow("🟢 ChatGPT Troubleshooter", "Connected. Seth remains the only call; sanitized diagnostics are being sent automatically.");
+  developerAICallManagerRecord("chatgpt-troubleshooter-started", "Full-call sanitized transcript and call diagnostics enabled. No second microphone session.");
+  updateDeveloperAICallWindow("🟢 LIVE TROUBLESHOOTING", "Seth + ChatGPT are checking this call together. Keep talking normally.");
   try { runSethSelfCheck(); } catch (_) {}
   clearInterval(developerAIChatGPTTroubleshootTimer);
   sendDeveloperAIChatGPTTroubleshootPulse();
-  developerAIChatGPTTroubleshootTimer = setInterval(sendDeveloperAIChatGPTTroubleshootPulse, 5000);
+  developerAIChatGPTTroubleshootTimer = setInterval(sendDeveloperAIChatGPTTroubleshootPulse, 7000);
 }
 
-function stopDeveloperAIChatGPTTroubleshooter() {
+function stopDeveloperAIChatGPTTroubleshooter(callEnding = false) {
+  if (!developerAIChatGPTShareEnabled) return;
+  if (callEnding) {
+    try { sendDeveloperAIChatGPTTroubleshootPulse(true); } catch (_) {}
+  }
   developerAIChatGPTShareEnabled = false;
   clearInterval(developerAIChatGPTTroubleshootTimer);
+  clearTimeout(developerAIChatGPTTroubleshootDebounce);
   developerAIChatGPTTroubleshootTimer = null;
+  developerAIChatGPTTroubleshootDebounce = null;
   developerAIChatGPTTroubleshootBusy = false;
   developerAIChatGPTLastCallSummary = developerAIChatGPTShareSummary();
-  developerAICallManagerRecord("chatgpt-troubleshooter-stopped", "Automatic diagnostic delivery stopped.");
+  developerAICallManagerRecord("chatgpt-troubleshooter-stopped", "Full-call troubleshooting stopped.");
+  developerAIChatGPTTroubleshootSession = null;
   const btn = $("developer-ai-call-share-chatgpt");
   if (btn) {
     btn.textContent = "CHATGPT TROUBLESHOOT";
     btn.style.background = "rgba(255,255,255,.16)";
     btn.style.color = "white";
   }
-  updateDeveloperAICallWindow("Listening…", "ChatGPT troubleshooting stopped. Seth call remains active.");
+  if (!callEnding) updateDeveloperAICallWindow("Listening…", "ChatGPT troubleshooting stopped. Seth call remains active.");
 }
 
 function toggleDeveloperAIChatGPTShare() {
@@ -9253,6 +9359,7 @@ async function answerDeveloperAIFreeCall(message) {
     saveDeveloperAIHistory(history);
     renderDeveloperAIChat();
     developerAILastSpokenReply = reply;
+    developerAIChatGPTCaptureTurn("assistant", reply);
     if (developerAICallMode) {
       developerAICallManagerMarkProviderReply(!!response.audioBase64);
       if (response.audioBase64) {
