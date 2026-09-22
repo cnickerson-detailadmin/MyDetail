@@ -6566,6 +6566,212 @@ let developerAIPipelineStage = "idle";
 let developerAIPipelineLastError = "";
 let developerAIPipelineStageAt = 0;
 
+const DEVELOPER_AI_IMPROVEMENT_KEY = "myservice_seth_improvement_metrics_v1";
+let developerAIImprovementMetrics = (() => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(DEVELOPER_AI_IMPROVEMENT_KEY) || "{}");
+    return {
+      incidents: Number(saved.incidents || 0),
+      recoveriesAttempted: Number(saved.recoveriesAttempted || 0),
+      recoveriesVerified: Number(saved.recoveriesVerified || 0),
+      playbackVerified: Number(saved.playbackVerified || 0),
+      providerFailures: Number(saved.providerFailures || 0),
+      playbackFailures: Number(saved.playbackFailures || 0),
+      microphoneFailures: Number(saved.microphoneFailures || 0),
+      networkFailures: Number(saved.networkFailures || 0),
+      improvementsFound: Number(saved.improvementsFound || 0),
+      lastImprovement: String(saved.lastImprovement || ""),
+      lastUpdatedAt: Number(saved.lastUpdatedAt || 0)
+    };
+  } catch (_) {
+    return {
+      incidents: 0, recoveriesAttempted: 0, recoveriesVerified: 0,
+      playbackVerified: 0, providerFailures: 0, playbackFailures: 0,
+      microphoneFailures: 0, networkFailures: 0, improvementsFound: 0,
+      lastImprovement: "", lastUpdatedAt: 0
+    };
+  }
+})();
+
+function saveDeveloperAIImprovementMetrics() {
+  developerAIImprovementMetrics.lastUpdatedAt = Date.now();
+  try {
+    localStorage.setItem(DEVELOPER_AI_IMPROVEMENT_KEY, JSON.stringify(developerAIImprovementMetrics));
+  } catch (_) {}
+}
+
+function recordDeveloperAIImprovementMetric(kind, detail = "") {
+  const k = String(kind || "").toLowerCase();
+  if (/failure|failed|error|blocked|interrupted|degraded/.test(k)) {
+    developerAIImprovementMetrics.incidents += 1;
+  }
+  if (/provider|gemini|groq|tts|backend|websocket/.test(k) && /failure|failed|error/.test(k + " " + detail)) {
+    developerAIImprovementMetrics.providerFailures += 1;
+  }
+  if (/playback|audio|decoder/.test(k) && /failure|failed|blocked|error/.test(k + " " + detail)) {
+    developerAIImprovementMetrics.playbackFailures += 1;
+  }
+  if (/microphone|mic/.test(k) && /failure|failed|dead|unavailable/.test(k + " " + detail)) {
+    developerAIImprovementMetrics.microphoneFailures += 1;
+  }
+  if (/network|offline/.test(k + " " + detail)) {
+    developerAIImprovementMetrics.networkFailures += 1;
+  }
+  saveDeveloperAIImprovementMetrics();
+}
+
+function getDeveloperAIImprovementSnapshot() {
+  const m = { ...developerAIImprovementMetrics };
+  const recoveryRate = m.recoveriesAttempted
+    ? Math.round((m.recoveriesVerified / m.recoveriesAttempted) * 100)
+    : null;
+  const incidentMix = [
+    ["Provider", m.providerFailures],
+    ["Playback", m.playbackFailures],
+    ["Microphone", m.microphoneFailures],
+    ["Network", m.networkFailures]
+  ].sort((a,b) => b[1] - a[1]);
+  const top = incidentMix[0]?.[1] ? incidentMix[0][0] : "None yet";
+  return {
+    ...m,
+    recoveryRate,
+    topFailureLayer: top
+  };
+}
+
+function findDeveloperAICallImprovement() {
+  const m = getDeveloperAIImprovementSnapshot();
+  const h = developerAICallManagerSnapshot();
+  let improvement = "";
+  if (m.playbackFailures >= Math.max(2, m.providerFailures)) {
+    improvement = "Prioritize iPhone playback/output-route verification before changing microphone settings.";
+  } else if (m.providerFailures >= 2) {
+    improvement = "Probe the active provider before opening the microphone path, then fail over immediately if the provider is unhealthy.";
+  } else if (m.microphoneFailures >= 2) {
+    improvement = "Verify the microphone track is live before starting provider work, and restart only the microphone layer when it is actually dead.";
+  } else if (h.playback === "audio-received" && h.lastPlaybackStartAt < h.lastProviderReplyAt) {
+    improvement = "Provider audio arrived without verified playback; focus recovery on decoder/output routing, not the microphone.";
+  } else {
+    improvement = "Keep collecting verified call-stage events; no repeating failure pattern is strong enough yet to justify a code change.";
+  }
+  if (improvement !== developerAIImprovementMetrics.lastImprovement) {
+    developerAIImprovementMetrics.improvementsFound += 1;
+    developerAIImprovementMetrics.lastImprovement = improvement;
+    saveDeveloperAIImprovementMetrics();
+  }
+  return improvement;
+}
+
+async function runSethAdvancedTroubleshooter() {
+  if (!developerAIIsAllowed()) return;
+
+  const h0 = developerAICallManagerSnapshot();
+  const checks = [];
+  const add = (layer, status, detail, action = "") =>
+    checks.push({ layer, status, detail: String(detail || ""), action: String(action || "") });
+
+  updateDeveloperAICallWindow("⚡ ADVANCED DIAGNOSIS", "Tracing provider → microphone → browser audio → playback → iPhone route…");
+
+  const micStream = developerAIFreeMicStream || developerAIRealtimeStream;
+  const micLive = !!micStream?.getAudioTracks?.().some(t => t.readyState === "live" && t.enabled !== false);
+  add("Microphone", micLive ? "verified" : "attention",
+      micLive ? "Live audio track detected." : "No live enabled audio track detected.",
+      micLive ? "Do not change mic settings first." : "Restart only the microphone layer.");
+
+  const audioStateBefore = String(developerAIAudioContext?.state || "unavailable");
+  if (developerAIAudioContext?.state === "suspended") {
+    try { await developerAIAudioContext.resume(); } catch (_) {}
+  }
+  const audioStateAfter = String(developerAIAudioContext?.state || "unavailable");
+  add("Browser audio", audioStateAfter === "running" ? "verified" : "attention",
+      "AudioContext: " + audioStateBefore + " → " + audioStateAfter,
+      audioStateAfter === "running" ? "Audio engine is running." : "Requires a fresh user tap or browser retry.");
+
+  if (navigator.onLine === false) {
+    add("Network", "failed", "Device reports offline.", "Reconnect Wi‑Fi/cellular before provider testing.");
+  } else {
+    add("Network", "verified", "Device reports online.", "No network-setting change needed.");
+  }
+
+  const activeProvider = developerAIFreeProvider || (developerAIRealtimePc ? "gemini-live" : "unknown");
+  let providerProbe = "not-run";
+  if (developerAIFreeProvider) {
+    try {
+      const probe = await callMyServiceEdgeFunction("developer-ai", {
+        action: developerAIFreeProvider + "_tts",
+        text: "Seth advanced diagnostic voice probe.",
+        voiceRepairMode: developerAIVoiceRepairMode
+      });
+      if (probe?.audioBase64) {
+        providerProbe = "verified";
+        developerAICallManagerMarkProviderReply(true);
+        add("Provider", "verified", activeProvider + " returned playable audio.", "Next verify local playback.");
+        developerAIUserIsSpeaking = false;
+        playDeveloperAIAudio(probe.audioBase64, probe.audioMimeType || "audio/mpeg", "Seth diagnostic voice probe.");
+      } else {
+        providerProbe = "failed";
+        add("Provider", "failed", activeProvider + " returned no playable audio.", "Try approved provider failover.");
+      }
+    } catch (error) {
+      providerProbe = "failed";
+      add("Provider", "failed", String(error?.message || "Provider probe failed.").slice(0,180), "Try approved provider failover.");
+    }
+  } else {
+    add("Provider", "attention", "No free-provider session is active.", "Use the active realtime connection or restart the call.");
+  }
+
+  const h1 = developerAICallManagerSnapshot();
+  const playbackVerified =
+    h1.playback === "playing" ||
+    h1.lastPlaybackStartAt >= h1.lastProviderReplyAt && h1.lastPlaybackStartAt > 0;
+  add("Playback", playbackVerified ? "verified" : (providerProbe === "verified" ? "attention" : "waiting"),
+      playbackVerified ? "Audible playback start was verified by MyService." :
+      providerProbe === "verified" ? "Provider audio arrived but playback is not yet verified." :
+      "Playback cannot be verified until provider audio is available.",
+      playbackVerified ? "No playback repair needed." :
+      "Check decoder/output route; do not blame the microphone while its track is live.");
+
+  let autoFixed = false;
+  if ((!micLive || audioStateAfter !== "running" || providerProbe === "failed" || !playbackVerified) && developerAICallMode) {
+    developerAIImprovementMetrics.recoveriesAttempted += 1;
+    saveDeveloperAIImprovementMetrics();
+    autoFixed = await autoRecoverDeveloperAICall("Advanced troubleshooting cycle").catch(() => false);
+    if (autoFixed) {
+      developerAIImprovementMetrics.recoveriesVerified += 1;
+      saveDeveloperAIImprovementMetrics();
+    }
+  }
+
+  const improvement = findDeveloperAICallImprovement();
+  const finalHealth = developerAICallManagerSnapshot();
+  const statusLabel = autoFixed || finalHealth.state === "healthy"
+    ? "🟢 FIXED / VERIFIED"
+    : "🟠 NEEDS APPROVAL OR MANUAL CHECK";
+
+  const lines = checks.map(x =>
+    (x.status === "verified" ? "✓ " : x.status === "failed" ? "✕ " : "⚠ ") +
+    x.layer + " — " + x.detail + (x.action ? " • " + x.action : "")
+  );
+
+  const report = [
+    statusLabel,
+    ...lines,
+    "",
+    "Improvement engine: " + improvement,
+    "Recovery rate: " + (getDeveloperAIImprovementSnapshot().recoveryRate === null ? "not enough data" : getDeveloperAIImprovementSnapshot().recoveryRate + "%"),
+    "Top observed failure layer: " + getDeveloperAIImprovementSnapshot().topFailureLayer,
+    "",
+    "Safe runtime repairs can happen automatically. Source-code, security, auth, or production configuration changes still require developer approval and safety-gate checks."
+  ].join("\n");
+
+  const history = getDeveloperAIHistory();
+  history.push({ role:"assistant", content: report });
+  saveDeveloperAIHistory(history);
+  renderDeveloperAIChat();
+  updateDeveloperAICallWindow(statusLabel, improvement);
+  return { checks, autoFixed, improvement, metrics: getDeveloperAIImprovementSnapshot() };
+}
+
 function setDeveloperAIPipelineStage(stage, detail = "") {
   developerAIPipelineStage = String(stage || "unknown");
   developerAIPipelineLastError = String(detail || "").slice(0, 220);
@@ -6666,6 +6872,7 @@ function developerAICallManagerRecord(kind, detail = "") {
     detail: safeDetail
   });
   developerAICallManagerAudit = developerAICallManagerAudit.slice(0, 40);
+  recordDeveloperAIImprovementMetric(kind, safeDetail);
 }
 
 function developerAICallManagerSet(stateName, incident = "", action = "", result = "") {
@@ -6737,6 +6944,8 @@ function developerAICallManagerMarkProviderReply(hasAudio) {
 function developerAICallManagerMarkPlaybackStarted() {
   developerAICallManagerHealth.lastPlaybackStartAt = Date.now();
   developerAICallManagerHealth.playback = "playing";
+  developerAIImprovementMetrics.playbackVerified += 1;
+  saveDeveloperAIImprovementMetrics();
   developerAICallManagerSet("healthy", "End-to-end audio playback verified", "None", "Voice pipeline healthy");
 }
 
@@ -8013,6 +8222,7 @@ function openDeveloperAITroubleshootMenu(event) {
     <button id="developer-ai-fix-robotic" type="button" style="width:100%;min-height:52px;margin:5px 0;border:1px solid #d7e2f0;border-radius:16px;background:#f8fbff;font-weight:850;">AI TOO ROBOTIC</button>
     <button id="developer-ai-fix-full-check" type="button" style="width:100%;min-height:52px;margin:5px 0;border:1px solid #d7e2f0;border-radius:16px;background:#f8fbff;font-weight:850;">RUN FULL SELF-CHECK</button>
     <button id="developer-ai-fix-deep-code" type="button" style="width:100%;min-height:52px;margin:5px 0;border:1px solid #d7e2f0;border-radius:16px;background:#eef6ff;font-weight:900;">DEEP AI CODE CHECK</button>
+    <button id="developer-ai-fix-advanced" type="button" style="width:100%;min-height:56px;margin:5px 0;border:1px solid #8cbcf7;border-radius:16px;background:#e8f3ff;font-weight:950;">⚡ ADVANCED AUTO-DIAGNOSE + IMPROVE</button>
     <button id="developer-ai-fix-close" type="button" style="width:100%;min-height:48px;margin-top:7px;border:0;border-radius:16px;background:#eaf1fa;font-weight:850;">CLOSE</button>
   `;
 
@@ -8040,6 +8250,7 @@ function openDeveloperAITroubleshootMenu(event) {
   $("developer-ai-fix-robotic").onclick = async () => { clearInterval(watchdog); menu.remove(); await runDeveloperAICallTroubleshooter("too-robotic"); };
   $("developer-ai-fix-full-check").onclick = async () => { clearInterval(watchdog); menu.remove(); await runSethSelfCheck(); };
   $("developer-ai-fix-deep-code").onclick = async () => { clearInterval(watchdog); menu.remove(); await runSethDeepAICodeCheck(); };
+  $("developer-ai-fix-advanced").onclick = async () => { clearInterval(watchdog); menu.remove(); await runSethAdvancedTroubleshooter(); };
   $("developer-ai-fix-close").onclick = () => { clearInterval(watchdog); menu.remove(); };
 }
 
