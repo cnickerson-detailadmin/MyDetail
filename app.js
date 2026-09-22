@@ -8248,8 +8248,17 @@ async function startDeveloperAIRealtimeCall(isReconnect = false) {
   if (button) button.textContent = "■ END CALL";
   if (status) status.textContent = "Starting primary Gemini Live Seth call…";
 
-  // Unlock iPhone playback from the user's CALL gesture before network setup.
+  // iOS/Safari requires the playback AudioContext to be created/resumed
+  // while the CALL tap still has user activation. Do this before any await.
   unlockDeveloperAIAudio();
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!developerAIAudioContext && AudioCtx) {
+    developerAIAudioContext = new AudioCtx({ latencyHint: "interactive" });
+  }
+  if (!developerAIAudioContext) throw new Error("Live audio is unavailable on this device.");
+  try {
+    if (developerAIAudioContext.state === "suspended") await developerAIAudioContext.resume();
+  } catch (_) {}
 
   const tokenData = await callMyServiceEdgeFunction("developer-gemini-live-token", {});
   const ephemeralToken = String(tokenData?.token || "");
@@ -8260,11 +8269,7 @@ async function startDeveloperAIRealtimeCall(isReconnect = false) {
     audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
   });
 
-  const AudioCtx = window.AudioContext || window.webkitAudioContext;
-  if (!developerAIAudioContext && AudioCtx) {
-    developerAIAudioContext = new AudioCtx({ latencyHint: "interactive", sampleRate: 16000 });
-  }
-  if (!developerAIAudioContext) throw new Error("Live audio is unavailable on this device.");
+  // The same unlocked context handles mic capture and 24 kHz Gemini playback.
   if (developerAIAudioContext.state === "suspended") await developerAIAudioContext.resume();
 
   const inputSource = developerAIAudioContext.createMediaStreamSource(developerAIRealtimeStream);
