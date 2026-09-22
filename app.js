@@ -2794,6 +2794,113 @@ document.addEventListener("visibilitychange", function () {
   }
 });
 
+
+async function getMyServiceEmergencyLockdownStatus() {
+  const accessToken = getStoredAuthItem(ACCESS_TOKEN_KEY);
+  if (!accessToken) return false;
+  const response = await fetch(SUPABASE_URL + "/rest/v1/rpc/security_lockdown_status", {
+    method: "POST",
+    headers: {
+      "apikey": SUPABASE_KEY,
+      "Authorization": "Bearer " + accessToken,
+      "Content-Type": "application/json"
+    },
+    body: "{}"
+  });
+  if (!response.ok) return false;
+  return (await response.json()) === true;
+}
+
+async function refreshMyServiceEmergencySecurityUI() {
+  const status = $("developer-security-lockdown-status");
+  const button = $("developer-security-lockdown-open");
+  if (!status) return;
+  const locked = await getMyServiceEmergencyLockdownStatus().catch(() => false);
+  status.textContent = locked
+    ? "🔒 LOCKDOWN ACTIVE • Customer/company data access and automated code writes are restricted."
+    : "🟢 READY • Emergency lockdown is standing by.";
+  status.style.color = locked ? "#b42318" : "#16794a";
+  if (button) {
+    button.textContent = locked ? "🔒 LOCKDOWN ACTIVE" : "🛡️ EMERGENCY LOCKDOWN";
+    button.disabled = locked;
+  }
+}
+
+function openMyServiceEmergencyLockdownPrompt() {
+  if (!developerAIIsAllowed()) return;
+  $("myservice-emergency-lockdown-prompt")?.remove();
+
+  const overlay = document.createElement("div");
+  overlay.id = "myservice-emergency-lockdown-prompt";
+  overlay.dataset.myserviceTemporaryOverlay = "true";
+  overlay.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:rgba(4,12,24,.82);display:flex;align-items:center;justify-content:center;padding:18px;box-sizing:border-box;";
+  overlay.innerHTML = `
+    <section style="width:100%;max-width:520px;background:#fff;border-radius:24px;padding:22px;box-sizing:border-box;color:#0d2345;box-shadow:0 24px 80px rgba(0,0,0,.45);">
+      <div style="font-size:12px;font-weight:950;letter-spacing:1px;color:#b42318;">MYSERVICE EMERGENCY SECURITY</div>
+      <h2 style="font-size:23px;line-height:1.15;margin:8px 0 10px;">
+        DESTROY ALL MALICIOUS SOFTWARE/SPYWARE AND RETURN TO PREVIOUS STATE, LOCKDOWN WEBSITE
+      </h2>
+      <p style="margin:0 0 12px;color:#536783;line-height:1.45;">
+        Emergency lockdown blocks customer/company-data access and automated code writes while keeping your authenticated Developer/Seth troubleshooting path available.
+      </p>
+      <p style="margin:0 0 18px;color:#7a4a00;font-size:13px;line-height:1.4;">
+        MyService can quarantine the website and prepare rollback to a trusted build. A website cannot directly delete spyware or malware from iOS itself.
+      </p>
+      <button id="myservice-emergency-lockdown-confirm" type="button"
+        style="width:100%;min-height:68px;border:0;border-radius:18px;background:#16a34a;color:white;font-size:21px;font-weight:950;box-shadow:0 10px 30px rgba(22,163,74,.28);">
+        YESS — LOCKDOWN WEBSITE
+      </button>
+      <button id="myservice-emergency-lockdown-cancel" type="button"
+        style="display:block;margin:11px auto 0;border:0;background:transparent;color:#b42318;font-size:10px;font-weight:750;opacity:.72;">
+        MY SERVICE WANTS TO GET COMPROMISED
+      </button>
+      <div id="myservice-emergency-lockdown-progress" style="margin-top:12px;font-size:13px;font-weight:800;color:#536783;"></div>
+    </section>
+  `;
+  document.body.appendChild(overlay);
+
+  $("myservice-emergency-lockdown-cancel").onclick = () => overlay.remove();
+  $("myservice-emergency-lockdown-confirm").onclick = async function () {
+    this.disabled = true;
+    const progress = $("myservice-emergency-lockdown-progress");
+    if (progress) progress.textContent = "Locking company data and code-write paths…";
+
+    const accessToken = getStoredAuthItem(ACCESS_TOKEN_KEY);
+    if (!accessToken) {
+      if (progress) progress.textContent = "Developer session required.";
+      this.disabled = false;
+      return;
+    }
+
+    try {
+      const response = await fetch(SUPABASE_URL + "/rest/v1/rpc/set_security_lockdown", {
+        method: "POST",
+        headers: {
+          "apikey": SUPABASE_KEY,
+          "Authorization": "Bearer " + accessToken,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          p_enabled: true,
+          p_reason: "Developer emergency lockdown: suspected malicious software, spyware, unauthorized code change, or compromise.",
+          p_last_known_good_sha: null
+        })
+      });
+      const ok = response.ok && (await response.json()) === true;
+      if (!ok) throw new Error("Lockdown authorization failed.");
+
+      if (progress) progress.textContent = "🔒 LOCKDOWN ACTIVE • Company data and automated code writes are restricted.";
+      setTimeout(() => {
+        overlay.remove();
+        refreshMyServiceEmergencySecurityUI().catch(() => {});
+      }, 900);
+    } catch (error) {
+      if (progress) progress.textContent = "Lockdown could not be verified. No success was claimed.";
+      this.disabled = false;
+    }
+  };
+}
+
 function developerAlertMarkup(alert) {
   return `
     <article style="padding:16px;border:1px solid #dbe4ef;border-left:6px solid ${alert.color};border-radius:14px;background:#fff;">
@@ -2909,6 +3016,21 @@ function installDeveloperExperience() {
         </div>
       </section>
 
+      <section id="developer-emergency-security-card" class="card" style="padding:18px;border:2px solid rgba(22,163,74,.22);background:#f7fff9;">
+        <div class="eyebrow">EMERGENCY SECURITY • DEVELOPER ONLY</div>
+        <h2 style="margin:4px 0 6px;">Website + Company Data Lockdown</h2>
+        <p id="developer-security-lockdown-status" style="margin:0 0 12px;color:#536783;font-weight:800;">
+          Checking security state…
+        </p>
+        <p style="margin:0 0 14px;color:#61728c;line-height:1.45;">
+          One control to restrict customer/company data and block automated code writes if compromise is suspected. Seth remains available for authenticated Developer troubleshooting.
+        </p>
+        <button id="developer-security-lockdown-open" type="button" onclick="openMyServiceEmergencyLockdownPrompt()"
+          style="width:100%;min-height:56px;border:0;border-radius:16px;background:#1677f2;color:#fff;font-weight:950;font-size:16px;">
+          🛡️ EMERGENCY LOCKDOWN
+        </button>
+      </section>
+
       <section id="developer-ai-card" class="card" style="padding:14px;border:1px solid rgba(22,119,242,.18);background:#f7f9fc;border-radius:22px;">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px;">
           <div>
@@ -3015,6 +3137,7 @@ function installDeveloperExperience() {
       child.hidden = true;
     });
     dashboard.insertBefore(home, dashboard.firstChild);
+    setTimeout(() => refreshMyServiceEmergencySecurityUI().catch(() => {}), 0);
     loadDeveloperRecommendation();
   }
 }
