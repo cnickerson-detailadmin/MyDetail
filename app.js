@@ -8108,36 +8108,53 @@ function renderDeveloperAIChatGPTShareButton() {
   document.body.appendChild(button);
 }
 
-function toggleDeveloperAIChatGPTShare() {
-  developerAIChatGPTShareEnabled = !developerAIChatGPTShareEnabled;
+function startDeveloperAIChatGPTTroubleshooter() {
+  // This is intentionally NOT a second voice call. Seth keeps the only mic/audio
+  // session; ChatGPT troubleshooting receives sanitized call diagnostics only.
+  developerAIChatGPTShareEnabled = true;
+
   const btn = $("developer-ai-call-share-chatgpt");
   if (btn) {
-    btn.textContent = developerAIChatGPTShareEnabled ? "CHATGPT SHARE: ON" : "CHATGPT SHARE: OFF";
-    btn.style.background = developerAIChatGPTShareEnabled ? "white" : "rgba(255,255,255,.16)";
-    btn.style.color = developerAIChatGPTShareEnabled ? "#0f5fc7" : "white";
+    btn.textContent = "CHATGPT TROUBLESHOOT: ON";
+    btn.style.background = "white";
+    btn.style.color = "#0f5fc7";
   }
 
-  if (developerAIChatGPTShareEnabled) {
-    const approved = window.confirm(
-      "Prepare this Seth call for ChatGPT analysis?\n\nMyService will record the call locally. When you stop the recording, tap SHARE CALL WITH CHATGPT and choose ChatGPT in the iPhone share sheet. This does not silently stream your microphone or screen."
-    );
-    if (!approved) {
-      developerAIChatGPTShareEnabled = false;
-      if (btn) {
-        btn.textContent = "CHATGPT SHARE: OFF";
-        btn.style.background = "rgba(255,255,255,.16)";
-        btn.style.color = "white";
-      }
-      return;
-    }
-    if (!developerAITestRecording) {
-      toggleDeveloperAITestRecording(true).catch(() => {
-        updateDeveloperAICallWindow("Recording unavailable", "ChatGPT sharing needs a Seth call recording first.");
-      });
-    }
-  }
+  const summary = developerAIChatGPTShareSummary();
+  developerAIChatGPTLastCallSummary = summary;
+  developerAICallManagerRecord("chatgpt-troubleshooter-started", "Sanitized Seth call diagnostics enabled; no second microphone session.");
+
+  updateDeveloperAICallWindow(
+    "🟢 ChatGPT Troubleshooter",
+    "Seth keeps the only call. MyService is collecting sanitized call diagnostics in real time — no second microphone or screen-share session."
+  );
+
+  // Keep the existing automatic call scanner/recovery active. This path is
+  // read-only: it never invokes code push, auth, RLS, permissions, or deploys.
+  try { runSethSelfCheck(); } catch (_) {}
 }
 
+function stopDeveloperAIChatGPTTroubleshooter() {
+  developerAIChatGPTShareEnabled = false;
+  developerAIChatGPTLastCallSummary = developerAIChatGPTShareSummary();
+  developerAICallManagerRecord("chatgpt-troubleshooter-stopped", "Sanitized diagnostic collection stopped.");
+
+  const btn = $("developer-ai-call-share-chatgpt");
+  if (btn) {
+    btn.textContent = "CHATGPT TROUBLESHOOT";
+    btn.style.background = "rgba(255,255,255,.16)";
+    btn.style.color = "white";
+  }
+  updateDeveloperAICallWindow("Listening…", "ChatGPT troubleshooting stopped. Seth call remains active.");
+}
+
+function toggleDeveloperAIChatGPTShare() {
+  if (developerAIChatGPTShareEnabled) {
+    stopDeveloperAIChatGPTTroubleshooter();
+    return;
+  }
+  startDeveloperAIChatGPTTroubleshooter();
+}
 function developerAITestRecordingFilename(mimeType = "audio/mp4") {
   const d = new Date();
   const pad = n => String(n).padStart(2, "0");
@@ -8554,7 +8571,7 @@ function openDeveloperAICallWindow() {
       <button id="developer-ai-call-troubleshoot" type="button" onclick="event.preventDefault();event.stopPropagation();window.__myserviceTroubleshootSeth?.(event);"
         style="grid-column:1 / -1;min-height:54px;border:0;border-radius:18px;background:rgba(255,255,255,.22);color:white;font-weight:900;">🛠 TROUBLESHOOT SETH</button>
       <button id="developer-ai-call-share-chatgpt" type="button"
-        style="grid-column:1 / -1;min-height:54px;border:1px solid rgba(255,255,255,.35);border-radius:18px;background:rgba(255,255,255,.16);color:white;font-weight:900;">CHATGPT SHARE: OFF</button>
+        style="grid-column:1 / -1;min-height:54px;border:1px solid rgba(255,255,255,.35);border-radius:18px;background:rgba(255,255,255,.16);color:white;font-weight:900;">CHATGPT TROUBLESHOOT</button>
       </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
       <button id="developer-ai-call-speaker" type="button"
