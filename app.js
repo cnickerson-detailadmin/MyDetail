@@ -8165,10 +8165,13 @@ function scheduleDeveloperAIChatGPTTroubleshootPulse(delay = 900) {
 
 function developerAIChatGPTDiagnosticPayload() {
   const snap = developerAICallManagerSnapshot();
-  const recentAudit = (Array.isArray(developerAICallManager?.audit) ? developerAICallManager.audit : [])
-    .slice(-12)
+  // The call manager stores its audit trail in developerAICallManagerAudit.
+  // Do not reference a nonexistent developerAICallManager object: Safari throws
+  // a ReferenceError even with optional chaining when the identifier is undeclared.
+  const recentAudit = (Array.isArray(developerAICallManagerAudit) ? developerAICallManagerAudit : [])
+    .slice(0, 12)
     .map(item => ({
-      event: String(item?.event || "").slice(0, 100),
+      event: String(item?.kind || "").slice(0, 100),
       detail: String(item?.detail || "").replace(/sk-[A-Za-z0-9_-]+/g, "[redacted]").replace(/AIza[A-Za-z0-9_-]+/g, "[redacted]").slice(0, 240)
     }));
   return {
