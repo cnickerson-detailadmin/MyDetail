@@ -4467,6 +4467,119 @@ function withAuthStartupTimeout(promise, ms = 8000) {
   ]);
 }
 
+const APPROVED_WEB_DEVICE_TOKEN_KEY = "myservice_approved_web_device_v1";
+
+function showApprovedAccessUnavailableScreen() {
+  document.getElementById("myservice-auth-boot")?.remove();
+  document.body.innerHTML = `
+    <main style="
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:28px;
+      box-sizing:border-box;
+      background:#fff;
+      color:#202124;
+      font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Arial,sans-serif;
+    ">
+      <section style="width:100%;max-width:520px;">
+        <div style="font-size:54px;line-height:1;margin-bottom:18px;">⌁</div>
+        <h1 style="font-size:28px;line-height:1.15;margin:0 0 12px;font-weight:700;">This webpage is not available</h1>
+        <p style="font-size:16px;line-height:1.5;margin:0;color:#5f6368;">
+          The page may have been moved, removed, or is temporarily unavailable.
+        </p>
+      </section>
+    </main>
+  `;
+}
+
+function getApprovedWebDeviceToken() {
+  try { return localStorage.getItem(APPROVED_WEB_DEVICE_TOKEN_KEY) || ""; }
+  catch (_) { return ""; }
+}
+
+function setApprovedWebDeviceToken(value) {
+  try { localStorage.setItem(APPROVED_WEB_DEVICE_TOKEN_KEY, value); }
+  catch (_) {}
+}
+
+function createApprovedWebDeviceToken() {
+  const bytes = new Uint8Array(32);
+  globalThis.crypto.getRandomValues(bytes);
+  return Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function sha256Hex(value) {
+  if (!globalThis.crypto?.subtle) throw new Error("Secure device hashing unavailable.");
+  const encoded = new TextEncoder().encode(String(value || ""));
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", encoded);
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function verifyApprovedWebDeviceToken(token) {
+  if (!token) return false;
+  const deviceHash = await sha256Hex(token);
+  const response = await fetch(SUPABASE_URL + "/rest/v1/rpc/verify_web_device", {
+    method: "POST",
+    headers: {
+      "apikey": SUPABASE_KEY,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ p_device_hash: deviceHash })
+  });
+  if (!response.ok) return false;
+  return (await response.json()) === true;
+}
+
+async function registerCurrentApprovedWebDevice(token, loggedIn) {
+  if (!token || String(loggedIn?.databaseRole || "").toLowerCase() !== "developer") return false;
+  const accessToken = getStoredAuthItem(ACCESS_TOKEN_KEY);
+  if (!accessToken) return false;
+
+  const deviceHash = await sha256Hex(token);
+  const response = await fetch(SUPABASE_URL + "/rest/v1/rpc/register_current_web_device", {
+    method: "POST",
+    headers: {
+      "apikey": SUPABASE_KEY,
+      "Authorization": "Bearer " + accessToken,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      p_device_hash: deviceHash,
+      p_label: "MyService approved web device"
+    })
+  });
+
+  if (!response.ok) return false;
+  return (await response.json()) === true;
+}
+
+async function ensureApprovedWebAccess(loggedIn) {
+  let token = getApprovedWebDeviceToken();
+
+  if (token && await verifyApprovedWebDeviceToken(token)) {
+    return true;
+  }
+
+  // One-time safe bootstrap: only an already-authenticated active Developer
+  // session can enroll this browser as an approved MyService device.
+  if (
+    loggedIn &&
+    String(loggedIn.databaseRole || "").toLowerCase() === "developer" &&
+    loggedIn.active !== false
+  ) {
+    token = token || createApprovedWebDeviceToken();
+    const registered = await registerCurrentApprovedWebDevice(token, loggedIn);
+    if (registered) {
+      setApprovedWebDeviceToken(token);
+      return await verifyApprovedWebDeviceToken(token);
+    }
+  }
+
+  return false;
+}
+
 document.addEventListener(
   "DOMContentLoaded",
   async function () {
@@ -4479,6 +4592,12 @@ document.addEventListener(
       }
 
       const loggedIn = await withAuthStartupTimeout(restoreAuthenticatedContext());
+      const approvedWebAccess = await withAuthStartupTimeout(ensureApprovedWebAccess(loggedIn), 5000);
+
+      if (!approvedWebAccess) {
+        showApprovedAccessUnavailableScreen();
+        return;
+      }
 
       if (!loggedIn) {
         [
