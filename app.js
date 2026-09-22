@@ -8477,7 +8477,9 @@ async function startDeveloperAIRealtimeCall(isReconnect = false) {
     send({
       setup: {
         model: "models/" + model,
-        responseModalities: ["AUDIO"],
+        generationConfig: {
+          responseModalities: ["AUDIO"]
+        },
         systemInstruction: {
           parts: [{
             text:
