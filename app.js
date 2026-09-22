@@ -6767,6 +6767,7 @@ let developerAITestRecordingUrl = "";
 let developerAIChatGPTShareEnabled = false;
 let developerAITestLastRecordingBlob = null;
 let developerAITestLastRecordingMimeType = "";
+let developerAIChatGPTLastCallSummary = "";
 
 const DEVELOPER_AI_RESUME_PHRASES = ["developer ai", "hey developer", "hey ai", "myservice ai"];
 
@@ -7278,6 +7279,7 @@ function stopDeveloperAICall() {
     clearInterval(window.__myserviceCallExterminationTimer);
     window.__myserviceCallExterminationTimer = null;
   }
+  if (developerAIChatGPTShareEnabled) developerAIChatGPTLastCallSummary = developerAIChatGPTShareSummary();
   if (developerAITestRecording) stopDeveloperAITestRecording(true);
   developerAICallMode = false;
   stopDeveloperAICallManager();
@@ -7619,7 +7621,7 @@ async function shareDeveloperAICallForChatGPT() {
 
   const mimeType = developerAITestLastRecordingMimeType || blob.type || "audio/mp4";
   const file = new File([blob], developerAITestRecordingFilename(mimeType), { type: mimeType });
-  const summary = developerAIChatGPTShareSummary();
+  const summary = developerAIChatGPTLastCallSummary || developerAIChatGPTShareSummary();
 
   if (navigator.share) {
     try {
