@@ -4230,6 +4230,12 @@ function getLoggedInTestUser() {
   return authenticatedContext;
 }
 
+function maskPhoneForDisplay(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (digits.length < 2) return "";
+  return digits[0] + "x".repeat(digits.length - 2) + digits[digits.length - 1];
+}
+
 function getLoginHelpPhoneMarkup() {
   const enabled = state.settings?.displayLoginHelpPhone === true;
   const phone = String(state.settings?.loginHelpPhone || "").trim();
@@ -4238,7 +4244,7 @@ function getLoginHelpPhoneMarkup() {
 
   return `
     <div style="margin-top:6px;font-weight:700;">
-      Call/Text: ${escapeHTML(phone)}
+      Call/Text: ${escapeHTML(maskPhoneForDisplay(phone))}
     </div>
   `;
 }
