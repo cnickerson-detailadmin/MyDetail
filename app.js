@@ -10115,31 +10115,10 @@ async function installMyServiceApp() {
 
 
 /* =========================================================
-   MYSERVICE MOBILE INSTALL REDIRECT
-   Mobile browsers go to the install screen unless the PWA
-   is already running in standalone mode.
+   MYSERVICE OPTIONAL INSTALL
+   Browser sign-in is supported on mobile and desktop.
+   Installing the PWA is optional, never a login requirement.
    ========================================================= */
-(function () {
-  const isStandalone =
-    window.matchMedia("(display-mode: standalone)").matches ||
-    window.navigator.standalone === true;
-
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-
-  // Remove any old desktop-access bypass saved by earlier builds.
-  if (isMobile) {
-    localStorage.removeItem("myservice_desktop_access");
-  }
-
-  if (
-    isMobile &&
-    !isStandalone &&
-    !location.pathname.endsWith("/install.html")
-  ) {
-    location.replace(new URL("./install.html", location.href).href);
-  }
-})();
-
 
 /* =========================================================
    ONBOARDING + TRAINING CENTER (NO PAYROLL)
